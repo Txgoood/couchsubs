@@ -202,15 +202,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             registered = await services.RegisterAsync(host, accountId, value);
         }
-        catch (RegistrationException error) when (error.Failure == RegistrationFailure.WrongAccount)
+        catch (RegistrationException error)
         {
-            throw Error(AppError.WrongAccount);
-        }
-        catch (RegistrationException)
-        {
-            // PS5 "lütfen bekleyin" deyip menüye dönüyorsa yanıtı çoğunlukla güvenlik duvarı engellemiştir.
-            await OfferFirewallAsync();
-            throw Error(AppError.RegistrationFailed);
+            // PS5 kendi kodunu bildirdiyse yanıt bize ulaşmıştır, güvenlik duvarı sebep değildir.
+            if (error.Reason is null && error.Failure != RegistrationFailure.WrongAccount) await OfferFirewallAsync();
+            throw RegistrationError(error);
         }
         catch (Exception error) when (error is not AppException)
         {
@@ -221,6 +217,22 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         console = registered;
         store.Save(StoreKeys.Console, registered);
         Changed(nameof(Console), nameof(CanAdvance));
+    }
+
+    /// <summary>Kullanıcıya gösterilen hata; destek bildirimleri teşhis edilebilsin diye PS5'in kodu da yazılır.</summary>
+    private AppException RegistrationError(RegistrationException error)
+    {
+        var kind = error.Failure switch
+        {
+            RegistrationFailure.WrongAccount => AppError.WrongAccount,
+            RegistrationFailure.NoAnswer => AppError.ConsoleNoAnswer,
+            RegistrationFailure.InUse => AppError.ConsoleInUse,
+            RegistrationFailure.ConsoleCrashed => AppError.ConsoleCrashed,
+            RegistrationFailure.VersionMismatch => AppError.ConsoleVersion,
+            _ => AppError.RegistrationFailed,
+        };
+        var message = AppException.Describe(kind, text);
+        return new AppException(kind, string.IsNullOrEmpty(error.Detail) ? message : $"{message} ({error.Detail})");
     }
 
     public Task<IReadOnlyList<LgTv>> DiscoverTvsAsync() => services.DiscoverTvsAsync();
@@ -739,6 +751,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
             var stream = services.MakeStream(console, accountId);
             stream.StateChanged += state => post(() => SessionStateChanged(state));
+            stream.ConsoleMoved += moved => post(() => ConsoleMoved(moved));
             stream.FrameReceived += HandleFrame;
             stream.Start();
             session = stream;
@@ -914,6 +927,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             : !translation.IsSupported(settings.SourceLanguage, settings.TargetLanguage) ? TranslatorStatus.Unsupported
             : translation.IsInstalled(settings.SourceLanguage, settings.TargetLanguage) ? TranslatorStatus.Ready
             : TranslatorStatus.NeedsDownload;
+    }
+
+    /// <summary>PS5'in adresi değişti: sonraki açılışlar yeni adresle başlasın.</summary>
+    private void ConsoleMoved(RegisteredConsole moved)
+    {
+        if (console is null) return;
+        console = moved;
+        store.Save(StoreKeys.Console, moved);
+        Changed(nameof(Console));
     }
 
     private void SessionStateChanged(SessionState state)

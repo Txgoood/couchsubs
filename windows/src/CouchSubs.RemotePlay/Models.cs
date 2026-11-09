@@ -60,11 +60,23 @@ public enum RegistrationFailure
     Canceled,
     /// <summary>PS5 hesabı tanımadı: kod, uygulamada giriş yapılan hesabın PS5 kullanıcısından alınmamış.</summary>
     WrongAccount,
+    /// <summary>PS5 arama paketine yanıt vermedi: kod PS5'e hiç ulaşmadı (kapalı, başka ağda ya da Uzaktan Oynatma kapalı).</summary>
+    NoAnswer,
+    InUse,
+    /// <summary>PS5'in Uzaktan Oynatma hizmeti hata verdi.</summary>
+    ConsoleCrashed,
+    /// <summary>PS5'in sistem sürümü libchiaki'nin bildiği sürümlerden farklı.</summary>
+    VersionMismatch,
 }
 
-public sealed class RegistrationException(RegistrationFailure failure) : Exception($"PS5 registration failed: {failure}")
+/// <param name="reason">PS5'in bildirdiği RP-Application-Reason (ör. 0x80108b09); PS5 yanıt vermediyse null.</param>
+/// <param name="detail">Kullanıcıya ve günlüğe yazılan teknik ayrıntı (PS5'in kodu ya da libchiaki'nin hata satırı).</param>
+public sealed class RegistrationException(RegistrationFailure failure, uint? reason = null, string? detail = null)
+    : Exception($"PS5 registration failed: {failure} {detail}")
 {
     public RegistrationFailure Failure { get; } = failure;
+    public uint? Reason { get; } = reason;
+    public string? Detail { get; } = detail;
 }
 
 /// <summary>PS5'e Remote Play bağlantısı (gerçekte StreamSession). Ses kapalıdır, kol girdisi gönderilmez.</summary>
@@ -73,6 +85,8 @@ public interface IStreamSession : IDisposable
     /// <summary>Çözülmüş kare (en çok saniyede 15). Oturumun kendi iş parçacığında çağrılır.</summary>
     event Action<Frame>? FrameReceived;
     event Action<SessionState>? StateChanged;
+    /// <summary>PS5 ağda yeni bir adreste bulununca çağrılır; yeni adres kaydedilmelidir.</summary>
+    event Action<RegisteredConsole>? ConsoleMoved;
     void Start();
     /// <summary>Bloklamaz: oturum arka planda kapatılır.</summary>
     void Stop();

@@ -100,6 +100,37 @@ public class RegistrationReasonTests
     }
 
     [Fact]
+    public void KnownReasonsAndMissingSearchAnswerAreDistinguished()
+    {
+        Assert.Equal(RegistrationFailure.InUse, Registration.FailureFrom(0x80108b10));
+        Assert.Equal(RegistrationFailure.VersionMismatch, Registration.FailureFrom(0x80108b11));
+        Assert.Equal(RegistrationFailure.ConsoleCrashed, Registration.FailureFrom(0x80108b15));
+        Assert.Equal(RegistrationFailure.NoAnswer, Registration.FailureFrom(null, ["Regist timed out waiting for search response", "Regist search failed"]));
+        // PS5 kod bildirdiyse arama aşaması geçilmiştir.
+        Assert.Equal(RegistrationFailure.Failed, Registration.FailureFrom(0x80108b09, ["Regist timed out waiting for search response"]));
+    }
+
+    [Fact]
+    public void DetailPrefersThePs5Reason()
+    {
+        Assert.Equal("0x80108b09 (Regist Failed)", Registration.DetailFrom(
+            ["Regist received HTTP code 403", "Reported Application Reason: 0x80108b09 (Regist Failed)", "Regist eventually failed"]));
+        Assert.Equal("Regist received HTTP code 500", Registration.DetailFrom(["Regist received HTTP code 500", "Regist eventually failed"]));
+        Assert.Null(Registration.DetailFrom([]));
+    }
+
+    [Fact]
+    public void MovedConsoleIsPickedOnlyWhenCertain()
+    {
+        var a = new ConsoleInfo("192.168.1.20", "PS5-A", true);
+        var b = new ConsoleInfo("192.168.1.21", "PS5-B", true);
+        Assert.Equal(a, ConsoleDiscovery.PickMoved([a], "other name"));
+        Assert.Equal(b, ConsoleDiscovery.PickMoved([a, b], "PS5-B"));
+        Assert.Null(ConsoleDiscovery.PickMoved([a, b], "other name"));
+        Assert.Null(ConsoleDiscovery.PickMoved([], "PS5-A"));
+    }
+
+    [Fact]
     public async Task AccountIdMustBeEightBytes()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Registration.RegisterAsync("192.168.1.2", new byte[4], 12345678));

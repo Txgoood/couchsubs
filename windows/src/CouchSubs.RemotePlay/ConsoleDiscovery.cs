@@ -23,6 +23,15 @@ public static class ConsoleDiscovery
                                      TaskCreationOptions.LongRunning, TaskScheduler.Default).WaitAsync(ct);
     }
 
+    /// <summary>Taramada bulunanlar arasından kayıtlı PS5'i seçer: tek PS5 varsa odur, birden çoksa adı tek eşleşen.
+    /// Emin olunamıyorsa null (yanlış konsola bağlanmaya çalışmaktansa adres değiştirilmez).</summary>
+    internal static ConsoleInfo? PickMoved(IReadOnlyList<ConsoleInfo> found, string name)
+    {
+        if (found.Count == 1) return found[0];
+        var named = found.Where(c => c.Name == name).ToList();
+        return named.Count == 1 ? named[0] : null;
+    }
+
     /// <summary>Kayıtlı PS5'i dinlenme modundan uyandırır.</summary>
     public static void Wake(RegisteredConsole console)
     {

@@ -81,8 +81,15 @@ public sealed class StreamSession : IStreamSession
     public event Action<Frame>? FrameReceived;
     /// <summary>Oturum kuyruğunun iş parçacığında çağrılır.</summary>
     public event Action<SessionState>? StateChanged;
+    /// <summary>Oturum kuyruğunun iş parçacığında çağrılır.</summary>
+    public event Action<RegisteredConsole>? ConsoleMoved;
 
-    private readonly RegisteredConsole console;
+    /// <summary>Tüm ağı taramak pahalı; PS5 kapalıyken her yeniden denemede yapılmaz.</summary>
+    private static readonly TimeSpan RelocateInterval = TimeSpan.FromSeconds(30);
+
+    /// <summary>Yalnız kuyrukta değişir (PS5'in adresi değişirse).</summary>
+    private RegisteredConsole console;
+    private DateTime nextRelocate = DateTime.MinValue;
     private readonly byte[] accountId;
     private readonly SerialQueue queue = new("CouchSubs stream session");
     private readonly FrameDelivery delivery;
@@ -179,7 +186,7 @@ public sealed class StreamSession : IStreamSession
         Emit(SessionState.Connecting);
 
         // PS5 uyuyorsa uyandır; uyanmayı kuyruğu bloklamadan, aralıklı kontrollerle bekle.
-        var info = ConsoleDiscovery.Discover(console.Host, TimeSpan.FromSeconds(2)).FirstOrDefault();
+        var info = ConsoleDiscovery.Discover(console.Host, TimeSpan.FromSeconds(2)).FirstOrDefault() ?? Relocate();
         if (info is { IsAwake: false })
         {
             try { ConsoleDiscovery.Wake(console); }
@@ -188,6 +195,20 @@ public sealed class StreamSession : IStreamSession
             return;
         }
         OpenSession(current);
+    }
+
+    /// <summary>Kayıtlı adreste PS5 yoksa (modem adresini değiştirmiş olabilir) ağda arar; bulursa adresi günceller.</summary>
+    private ConsoleInfo? Relocate()
+    {
+        if (DateTime.UtcNow < nextRelocate) return null;
+        nextRelocate = DateTime.UtcNow + RelocateInterval;
+        var moved = ConsoleDiscovery.PickMoved(ConsoleDiscovery.Discover(null, TimeSpan.FromSeconds(3)), console.Name);
+        if (moved is null || moved.Host == console.Host) return null;
+        RemotePlayLog.Write(1, $"PS5 yeni adreste: {console.Host} -> {moved.Host}");
+        console = console.WithHost(moved.Host);
+        try { ConsoleMoved?.Invoke(console); }
+        catch (Exception error) { RemotePlayLog.Write(0, $"ConsoleMoved handler: {error}"); }
+        return moved;
     }
 
     private void WaitForWake(int current, DateTime deadline)

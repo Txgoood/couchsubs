@@ -192,7 +192,7 @@ public enum StatusTone { Idle, Warning, Good }
 
 public enum OnboardingStep { Welcome, SecondAccount, PsnLogin, Console, Tv, Translation, Test, Done }
 
-public enum AppError { InvalidPin, InvalidLogin, MissingAccount, WrongAccount, RegistrationFailed }
+public enum AppError { InvalidPin, InvalidLogin, MissingAccount, WrongAccount, RegistrationFailed, ConsoleNoAnswer, ConsoleInUse, ConsoleCrashed, ConsoleVersion }
 
 /// <summary>Kullanıcıya gösterilecek, ne yapması gerektiğini söyleyen hata.</summary>
 public sealed class AppException(AppError error, string message) : Exception(message)
@@ -205,6 +205,10 @@ public sealed class AppException(AppError error, string message) : Exception(mes
         AppError.InvalidLogin => "Sign-in did not complete. Please try again.",
         AppError.MissingAccount => "Sign in to PlayStation Network first.",
         AppError.WrongAccount => "The PS5 did not recognise this account. Get the code from the PS5 user signed in with the account you used in CouchSubs, or sign in again with that user's account.",
+        AppError.ConsoleNoAnswer => "The PS5 did not answer. Make sure it is on (not in rest mode), on the same network as this computer, and that Remote Play is turned on, then try again.",
+        AppError.ConsoleInUse => "Remote Play is in use on another device. Close it there and enter a new code.",
+        AppError.ConsoleCrashed => "The PS5 Remote Play service stopped unexpectedly. Restart the PS5 and enter a new code.",
+        AppError.ConsoleVersion => "This PS5 system version is not supported yet. Update CouchSubs and try again.",
         _ => "The PS5 refused the code. Open Pair Device again on the PS5 and enter the new code.",
     }];
 }

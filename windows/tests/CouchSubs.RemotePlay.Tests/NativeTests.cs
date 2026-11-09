@@ -20,7 +20,7 @@ public class NativeTests
     public async Task RegistrationWithUnreachableConsoleFails()
     {
         var error = await Assert.ThrowsAsync<RegistrationException>(() => Registration.RegisterAsync("127.0.0.1", new byte[8], 12345678));
-        Assert.Equal(RegistrationFailure.Failed, error.Failure);
+        Assert.Equal(RegistrationFailure.NoAnswer, error.Failure);
     }
 
     /// <summary>Bağlanamayan bir adreste yeniden deneme beklerken durdurup bırakmak çökmemeli ve bloklamamalı.</summary>

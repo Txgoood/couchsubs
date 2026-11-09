@@ -2097,6 +2097,22 @@
         }
       }
     },
+    "Remote Play is in use on another device. Close it there and enter a new code.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play is in use on another device. Close it there and enter a new code."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uzaktan Oynatma başka bir cihazda kullanılıyor. Orada kapatıp yeni kodu girin."
+          }
+        }
+      }
+    },
     "Reset area": {
       "localizations": {
         "en": {
@@ -2769,6 +2785,38 @@
         }
       }
     },
+    "The PS5 Remote Play service stopped unexpectedly. Restart the PS5 and enter a new code.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PS5 Remote Play service stopped unexpectedly. Restart the PS5 and enter a new code."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5'in Uzaktan Oynatma hizmeti beklenmedik şekilde durdu. PS5'i yeniden başlatıp yeni kodu girin."
+          }
+        }
+      }
+    },
+    "The PS5 did not answer. Make sure it is on (not in rest mode), on the same network as this computer, and that Remote Play is turned on, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PS5 did not answer. Make sure it is on (not in rest mode), on the same network as this computer, and that Remote Play is turned on, then try again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5 yanıt vermedi. Açık olduğundan (dinlenme modunda olmadığından), bu bilgisayarla aynı ağda bulunduğundan ve Uzaktan Oynatma'nın açık olduğundan emin olup yeniden deneyin."
+          }
+        }
+      }
+    },
     "The PS5 did not recognise this account. Get the code from the PS5 user signed in with the account you used in CouchSubs, or sign in again with that user's account.": {
       "localizations": {
         "en": {
@@ -3181,6 +3229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu Mac"
+          }
+        }
+      }
+    },
+    "This PS5 system version is not supported yet. Update CouchSubs and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This PS5 system version is not supported yet. Update CouchSubs and try again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu PS5 sistem sürümü henüz desteklenmiyor. CouchSubs'ı güncelleyip yeniden deneyin."
           }
         }
       }

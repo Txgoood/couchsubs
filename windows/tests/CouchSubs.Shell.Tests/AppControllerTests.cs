@@ -34,6 +34,8 @@ internal sealed class FakeStream : IStreamSession
 {
     public event Action<Frame>? FrameReceived;
     public event Action<SessionState>? StateChanged;
+    public event Action<RegisteredConsole>? ConsoleMoved;
+    public void EmitMoved(RegisteredConsole moved) => ConsoleMoved?.Invoke(moved);
     public bool Started { get; private set; }
     public void Start() => Started = true;
     public void Stop() => Started = false;
@@ -274,6 +276,30 @@ public class AppControllerTests
         Assert.Equal(AppError.RegistrationFailed, error.Error);
     }
 
+    [Theory]
+    [InlineData(RegistrationFailure.NoAnswer, AppError.ConsoleNoAnswer)]
+    [InlineData(RegistrationFailure.InUse, AppError.ConsoleInUse)]
+    [InlineData(RegistrationFailure.ConsoleCrashed, AppError.ConsoleCrashed)]
+    [InlineData(RegistrationFailure.VersionMismatch, AppError.ConsoleVersion)]
+    public async Task RegistrationFailureMapsToItsOwnMessage(RegistrationFailure failure, AppError expected)
+    {
+        var services = new FakeServices { RegisterError = new RegistrationException(failure) };
+        var controller = Make(services);
+        await controller.CompletePsnLoginAsync(new Uri("https://x/?code=x"));
+        var error = await Assert.ThrowsAsync<AppException>(() => controller.RegisterAsync("192.168.1.253", "12345678"));
+        Assert.Equal(expected, error.Error);
+    }
+
+    [Fact]
+    public async Task RegistrationErrorShowsThePs5Code()
+    {
+        var services = new FakeServices { RegisterError = new RegistrationException(RegistrationFailure.Failed, 0x80108b09, "0x80108b09 (Regist Failed)") };
+        var controller = Make(services);
+        await controller.CompletePsnLoginAsync(new Uri("https://x/?code=x"));
+        var error = await Assert.ThrowsAsync<AppException>(() => controller.RegisterAsync("192.168.1.253", "12345678"));
+        Assert.Contains("0x80108b09 (Regist Failed)", error.Message);
+    }
+
     [Fact]
     public async Task PinMustBeEightDigits()
     {
@@ -381,6 +407,17 @@ public class AppControllerRunTests
         Assert.True(sleep.Active);
         controller.Stop();
         Assert.False(sleep.Active);
+        controller.Dispose();
+    }
+
+    [Fact]
+    public async Task MovedConsoleAddressIsKept()
+    {
+        var (controller, services, _) = Ready();
+        await controller.StartAsync();
+        var moved = controller.Console!.WithHost("192.168.1.77");
+        services.Streams[0].EmitMoved(moved);
+        Assert.Equal("192.168.1.77", controller.Console!.Host);
         controller.Dispose();
     }
 
