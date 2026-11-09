@@ -25,10 +25,12 @@ html, body {
   bottom: 7%;
   text-align: center;
   z-index: 10;
-  transition: opacity 0.2s;
+  /* Yazı kendi katmanında kalır, opaklık geçişi yoktur: geçiş bitince HDMI katmanının altında kalma ihtimali kapanır. */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
-#subtitle.hidden { opacity: 0; }
+#subtitle.hidden { visibility: hidden; }
 
 /* "Üstünü örtsün" yerleşiminde oyundaki İngilizce altyazıyı kapatan zemin. */
 #subtitle-cover {

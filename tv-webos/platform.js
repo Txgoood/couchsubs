@@ -16,7 +16,12 @@
         register.onservicecallback = function (message) {
           var request;
           try { request = JSON.parse(message); } catch (e) { return; }
-          if (!request || request.timestamp === undefined) return;
+          if (!request) return;
+          // Panelin tanı satırı için: servis izin vermediyse sebebi, verdiyse ertelenen istek sayısı.
+          if (request.returnValue === false) window.__screenSaverStatus = 'denied: ' + (request.errorText || request.errorCode);
+          if (request.timestamp === undefined) return;
+          window.__screenSaverCount = (window.__screenSaverCount || 0) + 1;
+          window.__screenSaverStatus = 'deferred ' + window.__screenSaverCount;
           var reply = new PalmServiceBridge();
           reply.call('luna://com.webos.service.tvpower/power/responseScreenSaverRequest',
             JSON.stringify({ clientName: CLIENT, ack: false, timestamp: request.timestamp }));

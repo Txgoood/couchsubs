@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.6';
+  var APP_VERSION = '0.9.7';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -34,7 +34,42 @@
   var hideTimer = null;
   var panelTimer = null;
 
+  // Bilgisayarın "temizle" olayı satırı bundan erken kaldırmaz: oyundaki satır çeviri gelirken kalkmışsa yazı TV'de
+  // bir an görünüp kayboluyordu. Süre, bilgisayarın okuma süresi kuralıyla aynıdır; üst sınırı daha kısadır.
+  var HOLD_MAX_MS = 5000;
+  var holdUntil = 0;
+  // Bağlantı bir an koptuğunda yazı silinmez; ancak bu süre içinde geri gelmezse silinir.
+  var DROP_HIDE_MS = 6000;
+  var dropTimer = null;
+
+  // Panelde görünen tanı bilgisi: "yazı TV'ye gelmiyor" bildirimlerinde sebebi buradan okuruz.
+  var diag = { subtitles: 0, clears: 0, drops: 0, backgrounded: 0, lastHide: '-', place: '-', error: '' };
+
   function $(id) { return document.getElementById(id); }
+
+  function renderDiag() {
+    var el = $('st-diag');
+    if (!el) return;
+    el.textContent = 'sub ' + diag.subtitles + ' · clear ' + diag.clears + ' · drop ' + diag.drops +
+      ' · bg ' + diag.backgrounded + ' · hide ' + diag.lastHide + ' · ' + diag.place +
+      (window.__screenSaverStatus ? ' · saver ' + window.__screenSaverStatus : '') +
+      (diag.error ? ' · err ' + diag.error : '');
+  }
+
+  function noteError(message) {
+    diag.error = String(message).slice(0, 120);
+    renderDiag();
+  }
+
+  window.onerror = function (message, source, line) {
+    noteError(message + ' @' + line);
+    return false;
+  };
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) diag.backgrounded++;
+    renderDiag();
+  });
 
   function load(key) {
     try { return window.localStorage.getItem('couchsubs.' + key); } catch (e) { return null; }
@@ -117,6 +152,7 @@
     // da ikinci çeviri gibi duruyordu. Yeni satır eskisinin yerine geçer.
     hidePrevious();
     shownAt = Date.now();
+    holdUntil = shownAt + Math.min(HOLD_MAX_MS, 2000 + text.length * 60);
     currentBox = validBox(box);
     $('subtitle-text').textContent = text;
     $('subtitle-text').style.whiteSpace = paragraphs ? 'pre-line' : '';
@@ -124,16 +160,43 @@
     $('subtitle').className = '';
     layout();
     setStatus('st-last', text.length > 40 ? text.slice(0, 40) + '…' : text);
+    notePlace();
     clearTimeout(hideTimer);
-    var ms = duration || Math.min(8000, 2000 + text.length * 60);
-    hideTimer = setTimeout(hideSubtitle, ms);
+    // Geçersiz ya da çok kısa süre yazıyı gösterir göstermez kaldırmasın.
+    var ms = duration > 0 ? Math.max(1000, duration) : Math.min(8000, 2000 + text.length * 60);
+    hideTimer = setTimeout(function () { hideSubtitle('timer'); }, ms);
   }
 
-  function hideSubtitle() {
+  // Yazının ekrandaki gerçek yeri ve görünürlüğü (tanı için).
+  function notePlace() {
+    var el = $('subtitle-text');
+    var rect = el.getBoundingClientRect();
+    var height = document.documentElement.clientHeight || window.innerHeight || 0;
+    diag.place = 'y ' + Math.round(rect.top) + '-' + Math.round(rect.bottom) + '/' + height + ' ' +
+      window.getComputedStyle($('subtitle')).visibility + ' f' + window.getComputedStyle(el).fontSize;
+    renderDiag();
+  }
+
+  // reason: yazıyı neyin kaldırdığı; panelde görünen süreyle birlikte sebebi gösterir.
+  function hideSubtitle(reason) {
     clearTimeout(hideTimer);
+    if ($('subtitle').className !== 'hidden') {
+      diag.lastHide = (reason || '?') + ' ' + (Date.now() - shownAt) + 'ms';
+      renderDiag();
+    }
     $('subtitle').className = 'hidden';
     $('subtitle-cover').className = 'hidden';
     hidePrevious();
+  }
+
+  // Bilgisayardan gelen "temizle": yazı okunacak kadar görünmediyse kalan süre dolunca kaldırılır.
+  function onClear() {
+    diag.clears++;
+    renderDiag();
+    var left = holdUntil - Date.now();
+    if (left <= 0 || $('subtitle').className === 'hidden') return hideSubtitle('clear');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function () { hideSubtitle('clear-held'); }, left);
   }
 
   function showPrevious(text) {
@@ -158,6 +221,8 @@
 
   function showScreen(items, duration) {
     var host = $('screen');
+    // "Ekran çevriliyor…" yazısı sonuçların üstünde kalmasın.
+    hideSubtitle('screen');
     host.innerHTML = '';
     host.className = '';
     var width = window.innerWidth || 1920;
@@ -301,8 +366,17 @@
   function onEvent(name, handler) {
     eventSource.addEventListener(name, function (e) {
       var data;
-      try { data = JSON.parse(e.data); } catch (err) { return; }
-      handler(data);
+      try {
+        data = JSON.parse(e.data);
+      } catch (err) {
+        noteError(name + ': bad json');
+        return;
+      }
+      try {
+        handler(data);
+      } catch (err) {
+        noteError(name + ': ' + err.message);
+      }
     });
   }
 
@@ -320,18 +394,31 @@
     eventSource = new EventSource(address + '/events');
     eventSource.onopen = function () {
       clearTimeout(scanTimer);
+      clearTimeout(dropTimer);
+      dropTimer = null;
       setStatus('st-conn', t('connected'), 'ok');
     };
     eventSource.onerror = function () {
-      // Uygulamayla bağlantı koptuysa eski altyazı ekranda asılı kalmasın.
-      hideSubtitle();
-      hideScreen();
+      // Bağlantı kısa süre içinde geri gelmezse eski altyazı ekranda asılı kalmasın. Bir anlık kopma yazıyı silmez.
+      diag.drops++;
+      renderDiag();
+      if (dropTimer === null) {
+        dropTimer = setTimeout(function () {
+          dropTimer = null;
+          hideSubtitle('drop');
+          hideScreen();
+        }, DROP_HIDE_MS);
+      }
       setStatus('st-conn', t('reconnecting'), 'bad');
       // Bilgisayarın adresi değişmiş olabilir.
       scheduleScan();
     };
-    onEvent('subtitle', function (data) { if (data.text) showSubtitle(data.text, data.duration, data.box, data.paragraphs === true); });
-    onEvent('clear', hideSubtitle);
+    onEvent('subtitle', function (data) {
+      diag.subtitles++;
+      renderDiag();
+      if (data.text) showSubtitle(data.text, data.duration, data.box, data.paragraphs === true);
+    });
+    onEvent('clear', onClear);
     onEvent('screen', function (data) { showScreen(data.items, data.duration); });
     onEvent('screen-clear', hideScreen);
     onEvent('style', applyStyle);
@@ -468,7 +555,7 @@
   function stopDemo() {
     clearTimeout(demoTimer);
     demoTimer = null;
-    hideSubtitle();
+    hideSubtitle('demo');
     $('demo-badge').className = 'hidden';
     // Uygulamaya bağlı değilse bekleme ekranına dönülür.
     if (!server) $('waiting').className = '';
@@ -571,6 +658,7 @@
   if (!savedPort) autoSelectConsole();
 
   $('app-version').textContent = APP_VERSION;
+  renderDiag();
   var initial = parseParams(platform.launchParams());
   var address = initial.server || load('server') || config.server;
   applyParams(initial);
