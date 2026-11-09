@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copies upstream published binary artifacts to a clearly attributed archival release.
+# Does not change or trigger any action on the upstream repository.
+name: Archive upstream CouchSubs release
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Upstream tag to archive (empty = latest)"
+        required: false
+        type: string
+  push:
+    paths:
+      - .github/workflows/archive-upstream-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout independent fork
+        uses: actions/checkout@v4
+
+      - name: Resolve upstream release
+        id: info
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            TAG="$REQUESTED_TAG"
+          else
+            TAG="$(gh api repos/yorulmazsinan/couchsubs/releases/latest --jq .tag_name)"
+          fi
+          gh api "repos/yorulmazsinan/couchsubs/releases/tags/$TAG" --jq .tag_name >/dev/null
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "archive_tag=upstream-$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download all original upstream release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.info.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p archive
+          gh release download "$TAG" -R yorulmazsinan/couchsubs -D archive
+          test -n "$(find archive -maxdepth 1 -type f -print -quit)"
+          (cd archive && sha256sum * > ARCHIVE-SHA256SUMS.txt)
+          ls -lah archive
+
+      - name: Publish clearly labeled archive in fork
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.info.outputs.tag }}
+          ARCHIVE_TAG: ${{ steps.info.outputs.archive_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$ARCHIVE_TAG" >/dev/null 2>&1; then
+            echo "Archive already exists; will not overwrite it."
+            exit 0
+          fi
+          cat > archive-notes.md <<EOF
+          # Upstream release archive
+
+          This is an unchanged archival copy of published assets from
+          https://github.com/yorulmazsinan/couchsubs/releases/tag/$TAG
+
+          **These are NOT independently built or tested binaries of this fork.**
+          The fork's custom development and builds should use separate release tags.
+
+          Original project: yorulmazsinan/couchsubs
+          Licensing and third-party notices: consult the repository.
+          EOF
+          gh release create "$ARCHIVE_TAG" archive/* \
+            --title "Original CouchSubs $TAG (archive)" \
+            --notes-file archive-notes.md \
+            --latest=false
