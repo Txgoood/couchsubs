@@ -612,8 +612,17 @@
     showPanel(true);
   }
 
+  // Sihirli kumandada işaretçi görünürken Tamam tuşu keydown yerine tıklama gönderir; tuş sonrası gelen tıklama sayılmaz.
+  var lastOkKey = 0;
+  document.addEventListener('click', function () {
+    if (Date.now() - lastOkKey < 400) return;
+    if ($('waiting').className !== 'hidden') startDemo();
+    else if (!demoRunning()) togglePanel();
+  });
+
   document.addEventListener('keydown', function (e) {
     var code = e.keyCode;
+    if (code === KEY.OK) lastOkKey = Date.now();
     if (code === 48) { // 0: elle seçimi unut, konsolu yeniden ara
       save('hdmi', '');
       autoSelectConsole(function () {

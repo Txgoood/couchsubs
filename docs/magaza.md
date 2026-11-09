@@ -33,6 +33,12 @@ konsolları için", sonunda da Sony ile bağlantısızlık notu yer alır.
    - UX Scenario (pptx)
 4. İnceleme genelde 1–3 ay sürer.
 
+Durum (2026-11-09): Enmera satıcı hesabı açıldı, HDMI sorusu Q&A'dan soruldu ve `com.couchsubs.tv` QA'ya gönderildi.
+LG 1.0.0'dan küçük sürüm kabul etmiyor; gönderilen paket beta.21 TV koduyla aynı, yalnız `appinfo.json` sürümü 1.0.0.
+Yalnız 1920×1080 paket verildi, bu yüzden Full HD modellerde yayınlanmaz. Self-Checklist 22 Pass, 31 N/A.
+Simge kare ve düz renk olmalı, Tile Color simgenin arka planıyla aynı (`#1E2024`). Art arda 5 ret ya da 3. turda aynı
+sorun 3 ay başvuru yasağı getirir.
+
 Mağaza onayı gelmezse kurulum geliştirici moduyla yapılır. Bu modun oturumu en çok 1000 saat sürer ve
 süre dolmadan uzatılmalıdır, yoksa kurulan uygulama silinir. Bu uzatmayı Mac ve Windows
 uygulamalarının kendiliğinden yapması planlanıyor (henüz yok).
@@ -55,3 +61,6 @@ uygulamalarının kendiliğinden yapması planlanıyor (henüz yok).
    - App UI Description (pptx)
    - Her dil için başlık ve açıklama
 5. İnceleme genelde 1–4 ay sürer.
+
+Durum (2026-11-09): Seller Office üyeliği açıldı (`info@enmera.com.tr`), Türkiye içerik yöneticisinin e-postası 1:1 Q&A'dan
+istendi. Görseller `store/samsung/` altında; App UI Description olarak `ux-scenario.pptx` Samsung'a uyarlanmalı.
