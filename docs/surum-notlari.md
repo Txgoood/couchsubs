@@ -4,7 +4,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **LG TV'de "TV uygulaması kurulamadı" hatası düzeltildi.** CouchSubs kurulumu TV'de bitmeden bağlantıyı kapatıyordu; bazı LG'lerde kurulum yarıda kalıyor ve hata yanlışlıkla boş alanı gösteriyordu. Artık LG'nin kendi aracı gibi kurulumun bitmesini bekliyor; başarısız olursa TV'nin bildirdiği sebebi gösteriyor (bildiren: [yag_ats](https://x.com/yag_ats)).
+- **TV'de altyazının bir an görünüp kaybolması için düzeltme (TV uygulaması 0.9.7).** Altyazı, oyundaki yazı kaybolur kaybolmaz ya da bağlantı bir anlığına koptuğunda hemen siliniyordu; artık okuma süresi kadar ekranda kalıyor. Sorun sürüyorsa TV panelindeki yeni Tanı satırının fotoğrafını gönderin.
+- **Windows'ta PS5'in IP adresi değişince bağlantı kurulamaması düzeltildi.** CouchSubs PS5'i ağda yeniden bulup yeni adresi kaydediyor.
+- **Windows'ta PS5 eşleştirme hatalarında gerçek sebep görünüyor.** Hata iletisinde PS5'in kodu yazıyor; PS5 yanıt vermezse arama yeniden deneniyor.
+- **Windows dublajında Türkçe ses motoru kapanırsa son hata satırı gösteriliyor.**
+
+**beta.20'de gelenler:** LG TV'de "TV uygulaması kurulamadı" hatasının düzeltilmesi (bildiren: [yag_ats](https://x.com/yag_ats)).
 
 **beta.19'da gelenler:** Samsung ve Android TV'de görünmeyen altyazının düzeltilmesi (TV uygulaması 0.9.6), Windows Güvenlik Duvarı izni, GTA V ve renkli zeminlerde daha düzgün çeviri (Windows), ortalı altyazının kutusunun ortada durması (Mac ve Windows).
 
