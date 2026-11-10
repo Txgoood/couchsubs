@@ -47,7 +47,7 @@
                 <StackPanel>
                     <c:StatusRow Title="PS5" Value="{Binding Ps5StatusText}" Tone="{Binding Ps5Tone}" />
                     <Separator />
-                    <c:StatusRow Title="TV" Value="{Binding TvStatusText}" Tone="{Binding TvTone}" />
+                    <c:StatusRow Title="Altyazı çıkışı" Value="{Binding TvStatusText}" Tone="{Binding TvTone}" />
                 </StackPanel>
             </c:Card>
 
