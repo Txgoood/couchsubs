@@ -124,7 +124,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public string Ps5StatusText => StatusText(sessionState, isRunning, text);
     public StatusTone Ps5Tone => Ps5ToneFor(sessionState, isRunning);
     public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText)]); }
-    public StatusTone TvTone => TvToneFor(tvClients, isRunning);
+    public StatusTone TvTone => settings.PcMonitorMode ? (isRunning ? StatusTone.Good : StatusTone.Idle) : TvToneFor(tvClients, isRunning);
     public string TvStatusText => settings.PcMonitorMode ? "İkinci monitör (Windows)" : tvClients > 0 ? text["Connected"] : text["Waiting for the TV app"];
     public string LastSource { get => lastSource; private set => Set(ref lastSource, value); }
     public string LastTranslation { get => lastTranslation; private set => Set(ref lastTranslation, value); }
@@ -1136,7 +1136,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var ps5Trouble = isRunning && sessionState.Phase != SessionPhase.Streaming && sessionState.Reason?.Kind is not
             (DisconnectKind.ConsoleAsleep or DisconnectKind.InUse or DisconnectKind.Refused or DisconnectKind.LoginPasscode);
         ps5TroubleSince = ps5Trouble ? ps5TroubleSince ?? now : null;
-        tvWaitingSince = isRunning && tvClients == 0 ? tvWaitingSince ?? now : null;
+        tvWaitingSince = isRunning && !settings.PcMonitorMode && tvClients == 0 ? tvWaitingSince ?? now : null;
     }
 
     // --- Uygulama güncellemesi ---
