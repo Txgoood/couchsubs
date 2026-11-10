@@ -73,6 +73,12 @@ public partial class TvStep : UserControl
         Tvs.IsEnabled = true;
     }
 
+    private void OnPcMode(object sender, RoutedEventArgs e)
+    {
+        Controller.SelectPcMonitorMode();
+        Controller.Advance();
+    }
+
     private async void OnSearch(object sender, RoutedEventArgs e) => await SearchAsync();
 
     private async void OnAndroidTv(object sender, RoutedEventArgs e) => await PairAsync(new LgTv("Android TV", "", TvBrand.AndroidTv));
