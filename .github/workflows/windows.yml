@@ -268,7 +268,7 @@ jobs:
             echo "Bu sürüm zaten yayımlanmış; üzerine yazılmıyor."
             exit 0
           fi
-          gh release create "$TAG" installer/* -R "$GITHUB_REPOSITORY" \\
-            --target "$GITHUB_SHA" --prerelease \\
+          gh release create "$TAG" installer/* -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
             --title "CouchSubs TR v1.0.0 (Build #001)" \\
             --notes "TV bağlantısız PS5 → MSI OCR/çeviri → Dell ikinci ekran modu. Orijinal yorulmazsinan/couchsubs projesinden bağımsız fork derlemesi. Yalnız Windows; henüz gerçek PS5/Dell donanımı üzerinde doğrulanmadı."
