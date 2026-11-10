@@ -24,6 +24,8 @@ public static class StoreKeys
 /// <summary>Kalıcı ayarlar (şifreli depo değil, sıradan ayar dosyası).</summary>
 public sealed record UserSettings
 {
+    /// <summary>TV eşleştirmesi olmadan canlı Türkçe altyazıyı Windows'un ikinci ekranında göster.</summary>
+    public bool PcMonitorMode { get; init; }
     public CropRegion Region { get; init; } = new();
     /// <summary>Ek bölge 1 (ör. sağ üstteki görev paneli); null ise kapalı. Num 1 tuşuyla bir kez okunup çevrilir.</summary>
     public CropRegion? ExtraRegion1 { get; init; }
