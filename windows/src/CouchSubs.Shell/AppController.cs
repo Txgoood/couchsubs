@@ -89,7 +89,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         console = store.Load<RegisteredConsole>(StoreKeys.Console);
         tv = store.Load<LgTv>(StoreKeys.Tv);
         settings = settingsStore.Load();
-        var ready = accountId is not null && console is not null && tv is not null && store.Load<string>(StoreKeys.TvKey) is not null;
+        var ready = accountId is not null && console is not null && (settings.PcMonitorMode || (tv is not null && store.Load<string>(StoreKeys.TvKey) is not null));
         step = ready ? OnboardingStep.Done : OnboardingStep.Welcome;
         server.ClientsChanged += OnClientsChanged;
     }
@@ -110,6 +110,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public bool HasAccount => accountId is not null;
     public RegisteredConsole? Console => console;
     public LgTv? Tv => tv;
+    public bool PcMonitorMode => settings.PcMonitorMode;
+
+    /// <summary>TV gerektirmeyen ikinci monitör çıkışı; tercih ayarlarda saklanır.</summary>
+    public void SelectPcMonitorMode()
+    {
+        Settings = settings with { PcMonitorMode = true };
+        Changed(nameof(PcMonitorMode), nameof(CanAdvance), nameof(TvStatusText));
+    }
     public bool IsRunning { get => isRunning; private set => Set(ref isRunning, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(TvTone)]); }
     public bool IsStarting { get => isStarting; private set => Set(ref isStarting, value); }
     public SessionState SessionState { get => sessionState; private set => Set(ref sessionState, value, [nameof(Ps5StatusText), nameof(Ps5Tone)]); }
@@ -117,7 +125,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public StatusTone Ps5Tone => Ps5ToneFor(sessionState, isRunning);
     public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText)]); }
     public StatusTone TvTone => TvToneFor(tvClients, isRunning);
-    public string TvStatusText => tvClients > 0 ? text["Connected"] : text["Waiting for the TV app"];
+    public string TvStatusText => settings.PcMonitorMode ? "İkinci monitör (Windows)" : tvClients > 0 ? text["Connected"] : text["Waiting for the TV app"];
     public string LastSource { get => lastSource; private set => Set(ref lastSource, value); }
     public string LastTranslation { get => lastTranslation; private set => Set(ref lastTranslation, value); }
     public TranslatorStatus TranslatorStatus { get => translatorStatus; private set => Set(ref translatorStatus, value); }
@@ -164,7 +172,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         OnboardingStep.Welcome or OnboardingStep.SecondAccount or OnboardingStep.Test => true,
         OnboardingStep.PsnLogin => accountId is not null,
         OnboardingStep.Console => console is not null,
-        OnboardingStep.Tv => tv is not null && store.Load<string>(StoreKeys.TvKey) is not null,
+        OnboardingStep.Tv => settings.PcMonitorMode || (tv is not null && store.Load<string>(StoreKeys.TvKey) is not null),
         OnboardingStep.Translation => ModelInstalled,
         _ => false,
     };
@@ -544,6 +552,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var region = settings.Region;
         var box = lastSubtitleBox ?? new TextBox(0.3, region.Bottom - 0.1, 0.7, region.Bottom - 0.03);
         server.SendSubtitle(text["This is a test subtitle. Can you see it on top of the game?"], 8000, box);
+        if (settings.PcMonitorMode) post(() => MonitorSubtitleReady?.Invoke("CouchSubs TR: Dell monitöründe Türkçe altyazı testi başarılı.", 8000));
     }
 
     /// <summary>
@@ -571,6 +580,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     /// <summary>Çeviri bilgisayarda da gösterilecekse (metin, kalma süresi ms) ile çağrılır.</summary>
     public event Action<string, int>? PcResultReady;
+    /// <summary>Canlı çevirilerin TV olmadan ikinci ekranda gösterilmesi.</summary>
+    public event Action<string, int>? MonitorSubtitleReady;
 
     /// <summary>
     /// 1, 2 ya da 3 numaralı ek bölgeyi şimdi bir kez okuyup çevirir; sonuç ayardaki yere (TV, bilgisayar ya da ikisi) gider
@@ -738,7 +749,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task StartAsync()
     {
         // Düğmeye iki kez basılması ya da beklerken tekrar çağrılması ikinci bir oturum açmaz.
-        if (isRunning || isStarting || console is null || accountId is null || tv is null) return;
+        if (isRunning || isStarting || console is null || accountId is null || (!settings.PcMonitorMode && tv is null)) return;
         IsStarting = true;
         try
         {
@@ -758,11 +769,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
             // TV uygulamasını başlat ve açık tut; TV kapalıysa açıldığında bağlanır.
             var running = server;
-            var tvKeeper = services.MakeKeeper(tv, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(tv) },
-                () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)));
-            tvKeeper.Start(TimeSpan.FromSeconds(5));
-            keeper = tvKeeper;
-            _ = RefreshTvAppAsync();
+            if (!settings.PcMonitorMode && tv is not null)
+            {
+                var tvKeeper = services.MakeKeeper(tv, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(tv) },
+                    () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)));
+                tvKeeper.Start(TimeSpan.FromSeconds(5));
+                keeper = tvKeeper;
+                _ = RefreshTvAppAsync();
+            }
 
             sleep.Begin();
             IsRunning = true;
@@ -858,6 +872,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 LastSource = source;
                 LastTranslation = translation;
+                if (settings.PcMonitorMode) MonitorSubtitleReady?.Invoke(translation, SubtitlePipeline.ReadingTime(translation));
                 if (box is not null) lastSubtitleBox = box;
             });
         };
