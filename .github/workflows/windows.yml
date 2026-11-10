@@ -163,6 +163,8 @@ jobs:
           path: android-apk
 
       - name: TV paketleri
+        # TR ikinci monitör derlemesinde TV uygulaması gerekmiyor.
+        if: github.ref != 'refs/heads/feat/windows-monitor-mode'
         shell: bash
         run: |
           npm install -g @webos-tools/cli
