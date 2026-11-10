@@ -32,9 +32,12 @@ public partial class ShellWindow : Window
         };
         // Bilgisayarda gösterilecek çeviriler küçük, üstte duran bir kutuda çıkar.
         controller.PcResultReady += PcResultWindow.Display;
+        controller.MonitorSubtitleReady += SecondMonitorSubtitleWindow.Display;
         Closed += (_, _) =>
         {
             controller.PcResultReady -= PcResultWindow.Display;
+            controller.MonitorSubtitleReady -= SecondMonitorSubtitleWindow.Display;
+            SecondMonitorSubtitleWindow.CloseOutput();
             hotkeys?.Dispose();
             SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             controller.Dispose();
@@ -45,7 +48,12 @@ public partial class ShellWindow : Window
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(AppController.Step)) ShowScreen();
-        if (e.PropertyName == nameof(AppController.IsRunning) && hotkeys is not null) hotkeys.Enabled = controller.IsRunning;
+        if (e.PropertyName == nameof(AppController.IsRunning))
+        {
+            if (hotkeys is not null) hotkeys.Enabled = controller.IsRunning;
+            if (controller.PcMonitorMode && controller.IsRunning) SecondMonitorSubtitleWindow.Open();
+            else SecondMonitorSubtitleWindow.CloseOutput();
+        }
     }
 
     private void OnHotkey(HotkeyAction action)
