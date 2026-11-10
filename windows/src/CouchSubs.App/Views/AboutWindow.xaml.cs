@@ -12,7 +12,7 @@ public partial class AboutWindow : Window
     internal AboutWindow()
     {
         InitializeComponent();
-        Version.Text = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "";
+        Version.Text = "CouchSubs TR v1.0.0 · Build #001";
     }
 
     public static void Open(Window? owner) => new AboutWindow { Owner = owner }.ShowDialog();
