@@ -15,7 +15,7 @@
                         <!-- Koyu temada logonun kenarı zeminden ayrılsın. -->
                         <Border BorderBrush="{DynamicResource borderBrush}" BorderThickness="1" CornerRadius="9.9" />
                     </Grid>
-                    <TextBlock Text="CouchSubs" Style="{StaticResource TitleText}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    <TextBlock Text="CouchSubs TR" Style="{StaticResource TitleText}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <Button Style="{StaticResource IconButton}" HorizontalAlignment="Right" ToolTip="{t:T 'Settings'}" Click="OnSettings">
                     <TextBlock Text="{x:Static c:Glyphs.Settings}" Style="{StaticResource GlyphText}" FontSize="18" Foreground="{DynamicResource textSecondaryBrush}" />
