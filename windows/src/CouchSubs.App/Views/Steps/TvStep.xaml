@@ -8,6 +8,13 @@
     <c:StepLayout Glyph="{x:Static c:Glyphs.Tv}" Title="{t:T 'Connect your TV'}"
                   Message="{t:T 'Turn on the TV. When you press Connect, the TV asks for permission once — accept it with the remote. If the CouchSubs TV app is missing, this screen helps you install it.'}">
         <StackPanel>
+            <c:Card Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="TV kullanmadan devam et (Dell monitörü)" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="PS5 AOC OLED'de HDMI ile oynatılır. MSI bilgisayarı oyunun altyazısını çevirir, Türkçe yazı Dell ikinci monitörde görünür. TV bağlantısı gerekmiyor." TextWrapping="Wrap" Margin="0,8,0,12" />
+                    <Button Content="İkinci monitör modunu seç ve devam et" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Click="OnPcMode" />
+                </StackPanel>
+            </c:Card>
             <TextBlock x:Name="Done" Style="{StaticResource DoneText}" Margin="0,0,0,16" />
             <c:Card>
                 <StackPanel>
