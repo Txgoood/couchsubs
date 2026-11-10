@@ -3,6 +3,9 @@
 # uygulamayı tek klasör olarak yayınlar.
 name: windows
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main, "feat/windows-*"]
@@ -171,7 +174,7 @@ jobs:
       - name: Yayınla
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION=0.1.0-dev; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION=1.0.0; fi
           dotnet publish windows/src/CouchSubs.App -c Release -r win-x64 --self-contained -o publish/CouchSubs -p:Version="$VERSION"
 
       # Türkçe dublajın ses motoru (Kyutai pocket-tts, MIT): sabit sürüm, özeti denetlenir.
@@ -184,19 +187,19 @@ jobs:
       - name: Kurulum dosyası
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.1.0-dev" }
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "1.0.0" }
           Copy-Item -Recurse publish/CouchSubs pack
           Copy-Item LICENSE, THIRD-PARTY-NOTICES.md pack/
           dotnet tool install -g vpk --version 1.2.161
           if ($env:GITHUB_REF_TYPE -eq "tag") {
-            vpk download github --repoUrl https://github.com/yorulmazsinan/couchsubs -o Releases
+            vpk download github --repoUrl https://github.com/Txgoood/couchsubs -o Releases
             if ($LASTEXITCODE -ne 0) { Write-Host "Önceki Velopack sürümü yok; yalnız tam paket üretilecek." }
           }
-          vpk pack --packId CouchSubsApp --packVersion $version --packDir pack --mainExe CouchSubs.exe `
-            --packTitle CouchSubs --packAuthors Enmera --icon windows/src/CouchSubs.App/Assets/CouchSubs.ico --outputDir Releases
+          vpk pack --packId CouchSubsTRApp --packVersion $version --packDir pack --mainExe CouchSubs.exe `
+            --packTitle "CouchSubs TR" --packAuthors "Txgoood / Enmera" --icon windows/src/CouchSubs.App/Assets/CouchSubs.ico --outputDir Releases
           if ($LASTEXITCODE -ne 0) { throw "vpk pack başarısız" }
           New-Item -ItemType Directory installer | Out-Null
-          Move-Item Releases/CouchSubsApp-win-Setup.exe installer/CouchSubs-windows-Setup.exe
+          Move-Item Releases/CouchSubsTRApp-win-Setup.exe installer/CouchSubs-TR-v1.0.0-Build001-Setup.exe
           # Bu sürümün güncelleme dosyaları; önceki sürümden indirilen paketler sürüme yeniden eklenmez.
           Get-ChildItem Releases -File |
             Where-Object { ($_.Name -like "*$version*" -or $_.Name -like "releases.*.json" -or $_.Name -like "assets.*.json" -or $_.Name -eq "RELEASES") -and $_.Name -notlike "*Portable*" } |
@@ -206,7 +209,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: couchsubs-windows-installer
+          name: CouchSubs-TR-v1.0.0-Build001-Windows-Installer
           path: installer/*
           if-no-files-found: error
 
@@ -251,3 +254,21 @@ jobs:
           name: couchsubs-screens
           path: screens
           if-no-files-found: error
+
+      # Yalnız fork içindeki özellik dalından doğrulanmış Windows derlemesini yayınla.
+      - name: CouchSubs TR v1.0.0 Build001 ön sürümünü yayımla
+        if: github.ref == 'refs/heads/feat/windows-monitor-mode'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="tr-v1.0.0-build001"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Bu sürüm zaten yayımlanmış; üzerine yazılmıyor."
+            exit 0
+          fi
+          gh release create "$TAG" installer/* -R "$GITHUB_REPOSITORY" \\
+            --target "$GITHUB_SHA" --prerelease \\
+            --title "CouchSubs TR v1.0.0 (Build #001)" \\
+            --notes "TV bağlantısız PS5 → MSI OCR/çeviri → Dell ikinci ekran modu. Orijinal yorulmazsinan/couchsubs projesinden bağımsız fork derlemesi. Yalnız Windows; henüz gerçek PS5/Dell donanımı üzerinde doğrulanmadı."
