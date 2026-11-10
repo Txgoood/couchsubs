@@ -1,0 +1,31 @@
+name: webOS 2 HDMI test v0.1.0 Build001
+on:
+  push:
+    branches: [feat/webos2-hdmi-test]
+    paths: ['tv-webos2-test/**', '.github/workflows/webos2-test.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check legacy JavaScript syntax
+        run: |
+          npm install --no-save --ignore-scripts acorn@8.15.0
+          node -e "require('acorn').parse(require('fs').readFileSync('tv-webos2-test/app.js','utf8'), {ecmaVersion:5})"
+      - name: Package test IPK
+        run: |
+          npm install -g @webos-tools/cli
+          mkdir -p dist/webos2
+          ares-package tv-webos2-test -o dist/webos2 -n
+          test -n "$(find dist/webos2 -name '*.ipk' -print -quit)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CouchSubs-TR-webOS2-Test-v0.1.0-Build001
+          path: dist/webos2/*.ipk
+          if-no-files-found: error

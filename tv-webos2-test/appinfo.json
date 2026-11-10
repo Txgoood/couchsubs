@@ -1,0 +1,11 @@
+{
+  "id": "com.couchsubs.tr.webos2test",
+  "version": "0.1.0",
+  "vendor": "Txgoood",
+  "type": "web",
+  "main": "index.html",
+  "title": "CouchSubs TR Test v0.1.0 B001",
+  "icon": "icon.png",
+  "bgColor": "#000000",
+  "resolution": "1920x1080"
+}
