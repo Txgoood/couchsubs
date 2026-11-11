@@ -1,26 +1,30 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=1920">
-<title>CouchSubs TR webOS 2 Test</title>
+<title>CouchSubs TR webOS 2</title>
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font-family:Arial,sans-serif}
 #hdmi,#hdmi video{position:absolute;left:0;top:0;width:100%;height:100%}
 #panel{position:absolute;left:40px;top:30px;right:40px;background:rgba(0,0,0,.88);padding:24px;font-size:26px}
 h1{font-size:32px;margin:0 0 16px}p{margin:8px 0}
-button{font-size:26px;padding:12px;margin:6px;border:3px solid #777;background:#222;color:white}
-button:focus{border-color:#ffbd45;background:#444;outline:none}
-#subtitle{position:absolute;left:10%;right:10%;bottom:12%;text-align:center;font-size:44px;font-weight:bold}
+input,button{font-size:26px;padding:12px;margin:6px;border:3px solid #777;background:#222;color:white}
+input:focus,button:focus{border-color:#ffbd45;background:#444;outline:none}
+#subtitle{position:absolute;left:10%;right:10%;bottom:12%;text-align:center;font-size:44px;font-weight:bold;display:none;white-space:pre-line;word-wrap:break-word}
 #text{background:rgba(0,0,0,.85);padding:12px 20px;display:inline-block}
 #help{color:#ffbd45}
 </style></head><body>
 <div id="hdmi"></div>
 <div id="panel">
-<h1>CouchSubs TR — webOS 2 HDMI Test · v0.1.0 · Build 001</h1>
-<p>Bu uygulama yalnız uyumluluk testidir. Canlı çeviri henüz bağlanmadı.</p>
-<p>PS5 açık olmalı. Kendi HDMI girişinizi seçin. Görüntü ve aşağıdaki Türkçe yazı aynı anda görünmeli.</p>
-<div><button data-port="1">HDMI 1</button><button data-port="2">HDMI 2</button><button data-port="3">HDMI 3</button><button data-port="4">HDMI 4</button><button id="toggle">Paneli gizle</button></div>
-<p id="status">HDMI bekleniyor.</p>
-<p id="help">Yönler / OK: seçim · 1–4: HDMI · OK (panel gizliyken): panel · Geri: çıkış</p>
-<p>Başarı ölçütü gerçek PS5 görüntüsüyle Türkçe yazıyı birlikte görmenizdir; durum iletisi tek başına yeterli değildir. Siyah ekran varsa başka girişi deneyin; olmazsa HDMI desteği bu TV'de doğrulanamadı.</p>
+<h1>CouchSubs TR · webOS 2 · v0.2.0 · Build 002</h1>
+<p>PS5 girişini seçin. Windows'ta CouchSubs çevirisini başlatın.</p>
+<div><button data-port="1">HDMI 1</button><button data-port="2">HDMI 2</button><button data-port="3">HDMI 3</button><button data-port="4">HDMI 4</button></div>
+<p id="status" role="status">HDMI bekleniyor.</p>
+<div>
+<label for="address">Windows IPv4 adresi</label>
+<input id="address" type="text" maxlength="21" placeholder="192.168.1.20" autocomplete="off">
+<button id="connect">Bağlan</button><button id="toggle">Paneli gizle</button>
 </div>
-<div id="subtitle"><span id="text">Deneme: PS5 görüntüsünün üzerinde Türkçe altyazı.</span></div>
+<p id="connection" role="status">Bilgisayar adresi bekleniyor.</p>
+<p id="help">Yönler / OK: seçim · 1–4: HDMI · OK (panel gizliyken): panel · Geri: çıkış</p>
+</div>
+<div id="subtitle"><span id="text"></span></div>
 <script src="app.js"></script></body></html>
