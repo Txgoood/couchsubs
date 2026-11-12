@@ -71,7 +71,7 @@ internal sealed class SerialQueue : IDisposable
 }
 
 /// <summary>PS5'e (ikinci hesapla) Remote Play bağlantısı kurar ve görüntüyü kare kare verir.
-/// Ses kapalıdır, kol girdisi gönderilmez. Bağlantı koparsa kendiliğinden yeniden bağlanır.</summary>
+/// Ses varsayılan olarak kapalıdır; isteğe bağlı PCM yakalama modu vardır. Kol girdisi gönderilmez.</summary>
 public sealed class StreamSession : IStreamSession
 {
     /// <summary>Saniyede en çok bu kadar kare BGRA'ya çevrilir (Mac'teki gibi).</summary>
@@ -79,6 +79,9 @@ public sealed class StreamSession : IStreamSession
 
     /// <summary>Çözülmüş kare. Oturumun kare iş parçacığında çağrılır; işleyici meşgulken gelen kareler atlanır.</summary>
     public event Action<Frame>? FrameReceived;
+    /// <summary>Oyun sesi: Opus çözülmüş interleaved 16-bit PCM; hızlı kopyalanır. Varsayılan kapalı.</summary>
+    public event Action<short[]>? GameAudioReceived;
+    public event Action<int, int>? GameAudioFormatReceived;
     /// <summary>Oturum kuyruğunun iş parçacığında çağrılır.</summary>
     public event Action<SessionState>? StateChanged;
     /// <summary>Oturum kuyruğunun iş parçacığında çağrılır.</summary>
@@ -91,6 +94,7 @@ public sealed class StreamSession : IStreamSession
     private RegisteredConsole console;
     private DateTime nextRelocate = DateTime.MinValue;
     private readonly byte[] accountId;
+    private readonly bool captureGameAudio;
     private readonly SerialQueue queue = new("CouchSubs stream session");
     private readonly FrameDelivery delivery;
     private readonly ReconnectPolicy policy = new();
@@ -104,11 +108,12 @@ public sealed class StreamSession : IStreamSession
     private int generation;
     private bool disposed;
 
-    public StreamSession(RegisteredConsole console, byte[] accountId)
+    public StreamSession(RegisteredConsole console, byte[] accountId, bool captureGameAudio = false)
     {
         if (accountId.Length != 8) throw new ArgumentException("PSN account id must be 8 bytes", nameof(accountId));
         this.console = console;
         this.accountId = (byte[])accountId.Clone();
+        this.captureGameAudio = captureGameAudio;
         delivery = new FrameDelivery(frame => FrameReceived?.Invoke(frame));
     }
 
@@ -329,9 +334,19 @@ public sealed class StreamSession : IStreamSession
                 fixed (byte* key = registKey)
                 fixed (byte* morningPointer = morning)
                 fixed (byte* account = accountId)
-                    box.native = NativeMethods.cs_session_start(console.Host, key, morningPointer, account, MaxFps,
-                                                                (nint)frame, (nint)eventCallback, (nint)log,
-                                                                GCHandle.ToIntPtr(box.handle));
+                {
+                    if (owner.captureGameAudio)
+                    {
+                        delegate* unmanaged[Cdecl]<int, int, nint, void> format = &OnAudioFormat;
+                        delegate* unmanaged[Cdecl]<short*, int, nint, void> audio = &OnAudioPcm;
+                        box.native = NativeMethods.cs_session_start_audio(console.Host, key, morningPointer, account, MaxFps,
+                            (nint)frame, (nint)eventCallback, (nint)log, 1,
+                            (nint)format, (nint)audio, GCHandle.ToIntPtr(box.handle));
+                    }
+                    else
+                        box.native = NativeMethods.cs_session_start(console.Host, key, morningPointer, account, MaxFps,
+                            (nint)frame, (nint)eventCallback, (nint)log, GCHandle.ToIntPtr(box.handle));
+                }
             }
             catch (Exception error)
             {
@@ -367,6 +382,32 @@ public sealed class StreamSession : IStreamSession
                     box.owner.delivery.Offer((nint)bgra, width, height, stride);
             }
             catch (Exception error) { RemotePlayLog.Write(0, $"frame: {error.Message}"); }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static void OnAudioFormat(int channels, int rate, nint user)
+        {
+            try
+            {
+                if (From(user) is { } box && channels > 0 && rate > 0)
+                    box.owner.GameAudioFormatReceived?.Invoke(channels, rate);
+            }
+            catch (Exception error) { RemotePlayLog.Write(0, $"audio format: {error.Message}"); }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+        private static unsafe void OnAudioPcm(short* pcm, int samples, nint user)
+        {
+            try
+            {
+                if (From(user) is not { } box || pcm == null || samples <= 0 || samples > 96000)
+                    return;
+                // Native iş parçacığında tampon geçici; olay işleyicisi çağrılmadan önce kopyala.
+                var data = new short[samples];
+                new ReadOnlySpan<short>(pcm, samples).CopyTo(data);
+                box.owner.GameAudioReceived?.Invoke(data);
+            }
+            catch (Exception error) { RemotePlayLog.Write(0, $"audio PCM: {error.Message}"); }
         }
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
