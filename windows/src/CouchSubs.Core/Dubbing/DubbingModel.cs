@@ -31,6 +31,9 @@ public static class DubbingModel
 
     public static long TotalBytes => Files.Sum(file => file.Bytes);
 
+    /// <summary>Dar karakterli yerel kütüphaneler için yolda yalnız ASCII var mı?</summary>
+    public static bool IsAsciiPath(string path) => path.All(character => character <= 127);
+
     /// <summary>
     /// İndirilen ayar dosyasından yerel çalışma ayarı: ağırlık ve sözlük yolları klasördeki dosyalara çevrilir, model
     /// küçük harfle başlayan cümlelerle eğitildiği için ilk harf büyütülmez.
