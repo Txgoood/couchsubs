@@ -1,4 +1,4 @@
-name: webOS 2 Live v0.2.0 Build002
+name: webOS 2 Live v0.3.0 Build003
 on:
   push:
     branches: [feat/webos2-hdmi-test]
@@ -26,6 +26,6 @@ jobs:
           test -n "$(find dist/webos2 -name '*.ipk' -print -quit)"
       - uses: actions/upload-artifact@v4
         with:
-          name: CouchSubs-TR-webOS2-v0.2.0-Build002
+          name: CouchSubs-TR-webOS2-v0.3.0-Build003
           path: dist/webos2/*.ipk
           if-no-files-found: error
