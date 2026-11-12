@@ -77,6 +77,19 @@ CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0
                                     const uint8_t account_id[8], int max_fps,
                                     cs_frame_cb frame, cs_event_cb event, cs_log_cb log, void *user);
 
+/* Opt-in oyun sesi: Opus çözülmüş interleaved 16-bit PCM.
+ * samples_count: toplam int16 örnek sayısı, kanal başına kare sayısı değildir.
+ * Bellek yalnız callback süresince geçerlidir; PCM kopyalanmalıdır.
+ * enable_audio=0 ise mevcut görüntü modu korunur. */
+typedef void (*cs_audio_format_cb)(int channels, int sample_rate, void *user);
+typedef void (*cs_audio_pcm_cb)(const int16_t *pcm, int samples_count, void *user);
+
+CS_API cs_session *cs_session_start_audio(const char *host, const uint8_t regist_key[0x10],
+                                    const uint8_t morning[0x10], const uint8_t account_id[8], int max_fps,
+                                    cs_frame_cb frame, cs_event_cb event, cs_log_cb log,
+                                    int enable_audio, cs_audio_format_cb audio_format, cs_audio_pcm_cb audio_pcm,
+                                    void *user);
+
 /* Oturumu durdurur, iş parçacıklarını bekler ve belleği bırakır. Geri çağrı içinden çağrılmamalı. */
 CS_API void cs_session_stop(cs_session *session);
 

@@ -55,6 +55,7 @@ jobs:
             python:p
             python-protobuf:p
             protobuf:p
+            opus:p
             openssl:p
             json-c:p
             libevent:p
