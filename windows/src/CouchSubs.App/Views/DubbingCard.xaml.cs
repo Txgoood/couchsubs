@@ -77,6 +77,7 @@ public partial class DubbingCard : UserControl
         {
             DubbingOutput.Tv => OnTv,
             DubbingOutput.Agon => OnAgon,
+            DubbingOutput.Headset => OnHeadset,
             _ => OnComputer
         }).IsChecked = true;
         OutputHint.Text = settings.Output switch
