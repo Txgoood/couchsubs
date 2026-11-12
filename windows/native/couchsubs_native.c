@@ -630,9 +630,6 @@ CS_API cs_session *cs_session_start_audio(const char *host, const uint8_t regist
         const uint8_t morning[0x10], const uint8_t account_id[8], int max_fps,
         cs_frame_cb frame, cs_event_cb event, cs_log_cb log,
         int enable_audio, cs_audio_format_cb audio_format, cs_audio_pcm_cb audio_pcm, void *user)
-
-		const uint8_t account_id[8], int max_fps,
-		cs_frame_cb frame, cs_event_cb event, cs_log_cb log, void *user)
 {
 	if(!host || !regist_key || !morning || !account_id)
 		return NULL;
