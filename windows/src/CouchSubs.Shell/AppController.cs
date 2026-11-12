@@ -750,8 +750,6 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             server.SendStyle(settings.Style);
             SubtitlesPaused = false;
             MakePipeline();
-            if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
-
             // PULSE 3D: yalnız Headset modunda isteğe bağlı Remote Play oyun sesi açılır.
             // USB alıcısı Windows'un varsayılan çıkışı seçilmelidir.
             pulseAudioActive = false;
@@ -784,6 +782,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             stream.FrameReceived += HandleFrame;
             stream.Start();
             session = stream;
+            if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
 
             // TV uygulamasını başlat ve açık tut; TV kapalıysa açıldığında bağlanır.
             var running = server;
