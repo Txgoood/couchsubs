@@ -4,6 +4,7 @@ using System.IO;
 using CouchSubs.Core.Dubbing;
 using CouchSubs.Shell;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 
 namespace CouchSubs.App.Services;
 
@@ -33,7 +34,7 @@ internal sealed class Pulse3DAudioOutput : IAudioOutput, ISampleProvider, IDispo
             var player = new WaveOutEvent { DesiredLatency = 90, NumberOfBuffers = 3 };
             try
             {
-                player.Init(this);
+                player.Init(new SampleToWaveProvider(this));
                 player.Play();
                 output = player;
             }
