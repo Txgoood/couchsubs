@@ -73,7 +73,18 @@ public partial class DubbingCard : UserControl
         Progress.Value = controller.DubbingProgress;
         ProgressText.Text = Localizer.Current["Downloading voices… %lld%%"]
             .Replace("%lld", ((int)(controller.DubbingProgress * 100)).ToString()).Replace("%%", "%");
-        (settings.Output == DubbingOutput.Tv ? OnTv : OnComputer).IsChecked = true;
+        (settings.Output switch
+        {
+            DubbingOutput.Tv => OnTv,
+            DubbingOutput.Agon => OnAgon,
+            _ => OnComputer
+        }).IsChecked = true;
+        OutputHint.Text = settings.Output switch
+        {
+            DubbingOutput.Tv => "LG webOS TV: CouchSubs TV uygulamasının bağlı ve açık olması gerekir. Oyun sesiyle Türkçe dublaj TV'den duyulur.",
+            DubbingOutput.Agon => "Agon monitör: Türkçe ses Windows'un varsayılan ses çıkışından çalar. PS5'in HDMI kablosu tek başına PC sesini monitöre taşımaz; PC sesini monitöre veya hoparlöre ayrıca bağlayın.",
+            _ => "Türkçe dublaj bilgisayarın Windows varsayılan ses çıkışından çalar."
+        };
         Error.Text = controller.DubbingError ?? "";
         Error.Visibility = controller.DubbingError is null ? Visibility.Collapsed : Visibility.Visible;
         BuildVoices(settings.Cast);
