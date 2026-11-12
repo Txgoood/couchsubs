@@ -622,8 +622,11 @@ static void cs_audio_settings(uint32_t channels, uint32_t sample_rate, void *use
 static void cs_audio_frame(int16_t *pcm, size_t samples_count, void *user)
 {
     cs_session *session = user;
-    if(session->audio_pcm && pcm && samples_count <= (size_t)INT32_MAX)
-        session->audio_pcm(pcm, (int)samples_count, session->user);
+    /* chiaki_opus_decoder_frame callback count is frames per channel, not total int16 values. */
+    size_t channels = session->audio_decoder.audio_header.channels;
+    if(session->audio_pcm && pcm && channels > 0 && channels <= 8 &&
+            samples_count <= (size_t)INT32_MAX / channels)
+        session->audio_pcm(pcm, (int)(samples_count * channels), session->user);
 }
 
 CS_API cs_session *cs_session_start_audio(const char *host, const uint8_t regist_key[0x10],
