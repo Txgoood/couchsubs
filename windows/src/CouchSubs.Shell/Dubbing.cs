@@ -53,6 +53,13 @@ public interface IAudioOutput
     void Stop();
 }
 
+/// <summary>İsteğe bağlı oyun+dublaj miks çıkışı; sıradan TV/PC modları bu arayüzü kullanmaz.</summary>
+public interface IGameAudioOutput : IAudioOutput, IDisposable
+{
+    void Start();
+    void PushGameAudio(short[] pcm, int channels, int sampleRate);
+}
+
 /// <summary>Dublaj modeli: kurulu mu, indir, seslerin dosyaları, motor oluştur.</summary>
 public interface IDubbingModel
 {

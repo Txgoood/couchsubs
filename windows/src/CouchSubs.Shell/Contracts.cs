@@ -121,6 +121,8 @@ public interface IAppServices
     /// <summary>TV ile eşleşir ve TV uygulamasını sunucu adresiyle başlatmayı dener.</summary>
     Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server);
     IStreamSession MakeStream(RegisteredConsole console, byte[] accountId);
+    /// <summary>İsteğe bağlı oyun sesi akışı; eski servisler normal görüntü akışına düşer.</summary>
+    IStreamSession MakeAudioStream(RegisteredConsole console, byte[] accountId) => MakeStream(console, accountId);
     /// <param name="appConnected">TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).</param>
     /// <param name="onMoved">TV ağda yeni bir adreste bulununca çağrılır.</param>
     IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved);
@@ -158,6 +160,8 @@ public interface IAppServices
     IDubbingModel? FastDubbing => null;
     /// <summary>Bilgisayardan ses çalma (dublaj).</summary>
     IAudioOutput? Audio => null;
+    /// <summary>Oyun sesiyle Türkçe konuşmayı Windows aygıtında birleştiren çıkış (varsa).</summary>
+    IGameAudioOutput? GameAudio => null;
     /// <summary>Uygulama güncellemesi; geliştirici derlemesinde null.</summary>
     IUpdater? Updater => null;
     /// <summary>Windows Güvenlik Duvarı izni; Windows dışında ve testlerde null (hiçbir şey önerilmez).</summary>
