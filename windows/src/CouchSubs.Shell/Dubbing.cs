@@ -14,6 +14,9 @@ public enum DubbingOutput
     Tv,
     /// <summary>Bilgisayarın hoparlörü ya da kulaklığı.</summary>
     Computer,
+    /// <summary>PS5 Agon ekranında; Türkçe ses bilgisayarın Windows ses çıkışından verilir.
+    /// Monitörde duyulması için bilgisayarın ses çıkışı monitöre/hoparlöre fiziksel olarak yönlendirilmelidir.</summary>
+    Agon,
 }
 
 /// <summary>Seslendirme motoru.</summary>
