@@ -117,6 +117,13 @@ public class SpeechAudioTests
 public class DubbingModelTests
 {
     [Fact]
+    public void UnicodeWindowsProfileRequiresAsciiRuntimePath()
+    {
+        Assert.False(DubbingModel.IsAsciiPath(@"C:\Users\Msı_HX\AppData\Local\CouchSubs"));
+        Assert.True(DubbingModel.IsAsciiPath(@"C:\Users\Public\CouchSubs\tts-runtime"));
+    }
+
+    [Fact]
     public void LocalConfigPointsAtDownloadedFiles()
     {
         const string original = "weights_path: hf://wite-tech/pocket-tts-turkish/model.safetensors\r\nflow_lm:\r\n  lookup_table:\r\n" +
