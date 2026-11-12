@@ -2,6 +2,7 @@
 # Windows uygulaması: yerel DLL'i (libchiaki + FFmpeg) MSYS2 ile derler, .NET testlerini koşar,
 # uygulamayı tek klasör olarak yayınlar.
 name: windows
+# Pocket TTS Unicode profil düzeltmesi: v0.1.1-dev, CI test paketi.
 
 on:
   push:
