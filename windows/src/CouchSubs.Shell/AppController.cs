@@ -67,6 +67,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private TextBox? lastSubtitleBox;
     private int processing;
     private Dubber? dubber;
+    private bool pulseAudioActive;
+    private int pulseChannels = 2;
+    private int pulseSampleRate = 48000;
     private string? updateVersion;
     private bool updating;
     private double updateProgress;
@@ -749,7 +752,33 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             MakePipeline();
             if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
 
-            var stream = services.MakeStream(console, accountId);
+            // PULSE 3D: yalnız Headset modunda isteğe bağlı Remote Play oyun sesi açılır.
+            // USB alıcısı Windows'un varsayılan çıkışı seçilmelidir.
+            pulseAudioActive = false;
+            if (settings.Dubbing.Enabled && settings.Dubbing.Output == DubbingOutput.Headset && services.GameAudio is { } gameAudio)
+            {
+                try
+                {
+                    gameAudio.Start();
+                    pulseAudioActive = true;
+                }
+                catch (Exception error)
+                {
+                    DubbingError = "PULSE 3D ses çıkışı açılamadı: " + error.Message;
+                }
+            }
+
+            var stream = pulseAudioActive ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
+            if (pulseAudioActive && stream is StreamSession audioStream && services.GameAudio is { } mixer)
+            {
+                audioStream.GameAudioFormatReceived += (channels, rate) =>
+                {
+                    Volatile.Write(ref pulseChannels, channels);
+                    Volatile.Write(ref pulseSampleRate, rate);
+                };
+                audioStream.GameAudioReceived += pcm =>
+                    mixer.PushGameAudio(pcm, Volatile.Read(ref pulseChannels), Volatile.Read(ref pulseSampleRate));
+            }
             stream.StateChanged += state => post(() => SessionStateChanged(state));
             stream.ConsoleMoved += moved => post(() => ConsoleMoved(moved));
             stream.FrameReceived += HandleFrame;
@@ -779,6 +808,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         session?.Stop();
         session?.Dispose();
         session = null;
+        pulseAudioActive = false;
+        services.GameAudio?.Dispose();
         keeper?.Stop();
         keeper = null;
         pipeline?.Reset();
@@ -1225,7 +1256,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private Dubber? MakeDubber()
     {
         if (dubber is not null) return dubber;
-        if (ActiveDubbing is not { } model || services.Audio is not { } audio) return null;
+        if (ActiveDubbing is not { } model || services.Audio is not { } fallbackAudio) return null;
+        var audio = settings.Dubbing.Output == DubbingOutput.Headset && pulseAudioActive && services.GameAudio is { } game
+            ? (IAudioOutput)game : fallbackAudio;
         var made = new Dubber(model, audio, () => server, () => ServerPort, post)
         {
             Cast = settings.Dubbing.Cast.Copy(),
@@ -1263,8 +1296,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (!ReferenceEquals(now.Cast, old.Cast)) dubber.Cast = now.Cast.Copy();
         if (now.Output != old.Output)
         {
-            dubber.Stop();
-            dubber.Output = now.Output;
+            StopDubber(); // Ses cihazı değiştiğinde eski çıkışa konuşma gönderilmesin.
+            if (isRunning)
+            {
+                DubbingError = "Ses çıkışını değiştirdiniz. PS5 oyun sesi bağlantısını yenilemek için Çeviriyi Durdur ve Başlat yapın.";
+            }
         }
         if (!now.Enabled) StopDubber();
     }
