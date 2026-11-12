@@ -56,6 +56,13 @@ internal static unsafe partial class NativeMethods
     internal static partial nint cs_session_start(string host, byte* registKey, byte* morning, byte* accountId, int maxFps,
                                                   nint frame, nint eventCallback, nint log, nint user);
 
+    /// <summary>Optional Opus game audio callbacks, otherwise same as cs_session_start.</summary>
+    [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial nint cs_session_start_audio(string host, byte* registKey, byte* morning,
+        byte* accountId, int maxFps, nint frame, nint eventCallback, nint log,
+        int enableAudio, nint audioFormat, nint audioPcm, nint user);
+
     [LibraryImport(Library)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial void cs_session_stop(nint session);
