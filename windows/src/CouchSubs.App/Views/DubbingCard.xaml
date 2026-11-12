@@ -31,10 +31,12 @@
                     <TextBlock Text="{t:T 'Play the voice on'}" Margin="0,0,0,8" />
                     <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,16" HorizontalAlignment="Left">
                         <StackPanel Orientation="Horizontal">
-                            <RadioButton x:Name="OnTv" Content="{t:T 'TV'}" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
+                            <RadioButton x:Name="OnTv" Content="LG TV (webOS)" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
+                            <RadioButton x:Name="OnAgon" Content="Agon monitör" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Agon" />
                             <RadioButton x:Name="OnComputer" Content="{t:T 'This computer'}" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
                         </StackPanel>
                     </Border>
+                    <TextBlock x:Name="OutputHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
                     <StackPanel x:Name="Voices" />
                     <TextBlock x:Name="Credits" Style="{StaticResource HintText}" Margin="0,12,0,0" />
                 </StackPanel>
