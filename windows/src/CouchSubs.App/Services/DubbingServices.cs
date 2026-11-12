@@ -37,10 +37,52 @@ internal sealed class PocketDubbingModel : IDubbingModel
 
     public byte[] VoiceFile(DubbingVoice voice) => File.ReadAllBytes(store.PathOf($"voices/{voice.FileName()}.wav"));
 
-    public ISpeechSynthesizer CreateSynthesizer()
+    // SentencePiece'in Windows derlemesi Unicode kullanıcı dizinlerindeki dosyayı
+    // Win32 dar-karakterli API ile açamayabilir. Kaynak modeli silmeden ASCII
+    // yollu bir çalışma kopyası hazırla (yalnız ilk kullanımda).
+    public ISpeechSynthesizer CreateSynthesizer() => new Synthesizer(() =>
     {
-        var config = WriteConfig();
-        return new Synthesizer(new PocketTtsServer(Executable, config, store.PathOf("voices/male_1.wav")));
+        var directory = store.InstallDirectory;
+        if (!DubbingModel.IsAsciiPath(directory))
+            directory = PrepareAsciiRuntimeDirectory();
+
+        var config = Path.Combine(directory, "couchsubs.yaml");
+        var local = DubbingModel.LocalConfig(File.ReadAllText(Path.Combine(directory, "config.yaml")), directory);
+        if (!File.Exists(config) || File.ReadAllText(config) != local)
+            File.WriteAllText(config, local);
+        return new PocketTtsServer(Executable, config, Path.Combine(directory, "voices", "male_1.wav"));
+    });
+
+    private string PrepareAsciiRuntimeDirectory()
+    {
+        // PUBLIC Windows'ta genellikle C:\\Users\\Public'tir ve Türkçe kullanıcı
+        // adını içermez. Modeller herkese açık lisanslıdır; kişisel veri kopyalanmaz.
+        var publicRoot = Environment.GetEnvironmentVariable("PUBLIC");
+        if (string.IsNullOrWhiteSpace(publicRoot) || !DubbingModel.IsAsciiPath(publicRoot))
+            throw new InvalidOperationException("Pocket TTS için ASCII yol bulunamadı (PUBLIC).");
+
+        var directory = Path.Combine(publicRoot, "CouchSubs", "tts-runtime", DubbingModel.Revision);
+        Directory.CreateDirectory(directory);
+        foreach (var file in DubbingModel.Files)
+        {
+            var destination = Path.Combine(directory, file.Name.Replace('/', Path.DirectorySeparatorChar));
+            var info = new FileInfo(destination);
+            if (info.Exists && info.Length == file.Bytes) continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            var temp = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.Copy(store.PathOf(file.Name), temp, overwrite: false);
+                if (new FileInfo(temp).Length != file.Bytes)
+                    throw new InvalidDataException("Pocket TTS modeli eksik kopyalandı: " + file.Name);
+                File.Move(temp, destination, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
+        }
+        return directory;
     }
 
     private string WriteConfig()
@@ -51,12 +93,30 @@ internal sealed class PocketDubbingModel : IDubbingModel
         return path;
     }
 
-    private sealed class Synthesizer(PocketTtsServer server) : ISpeechSynthesizer
+    private sealed class Synthesizer(Func<PocketTtsServer> createServer) : ISpeechSynthesizer
     {
-        public Task StartAsync(CancellationToken cancellationToken = default) => server.StartAsync(cancellationToken);
-        public Task<SpeechAudio> SynthesizeAsync(string text, Uri voice, CancellationToken cancellationToken = default) =>
-            server.SynthesizeAsync(text, voice, cancellationToken);
-        public ValueTask DisposeAsync() => server.DisposeAsync();
+        private readonly object gate = new();
+        private Task<PocketTtsServer>? ready;
+
+        // 438 MB'lık yerel kopyalama arayüz iş parçacığını kilitlemesin.
+        private Task<PocketTtsServer> Server()
+        {
+            lock (gate) return ready ??= Task.Run(createServer);
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken = default) =>
+            await (await Server().WaitAsync(cancellationToken)).StartAsync(cancellationToken);
+
+        public async Task<SpeechAudio> SynthesizeAsync(string text, Uri voice, CancellationToken cancellationToken = default) =>
+            await (await Server().WaitAsync(cancellationToken)).SynthesizeAsync(text, voice, cancellationToken);
+
+        public async ValueTask DisposeAsync()
+        {
+            Task<PocketTtsServer>? existing;
+            lock (gate) existing = ready;
+            if (existing is not null)
+                await (await existing).DisposeAsync();
+        }
     }
 }
 
