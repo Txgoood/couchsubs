@@ -17,6 +17,8 @@ public enum DubbingOutput
     /// <summary>PS5 Agon ekranında; Türkçe ses bilgisayarın Windows ses çıkışından verilir.
     /// Monitörde duyulması için bilgisayarın ses çıkışı monitöre/hoparlöre fiziksel olarak yönlendirilmelidir.</summary>
     Agon,
+    /// <summary>PS5 kablosuz kulaklık: PC sesi ancak kulaklık bilgisayardan ikinci ses akışı alabiliyorsa duyulur.</summary>
+    Headset,
 }
 
 /// <summary>Seslendirme motoru.</summary>
