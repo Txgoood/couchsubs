@@ -132,6 +132,20 @@ public class DubberTests
     }
 
     [Fact]
+    public async Task AgonProfilePlaysThroughWindowsAudioOutput()
+    {
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        var dubber = new Dubber(new FakeModel(new FakeSynth()), audio, () => server, () => 8787, action => action())
+        {
+            Output = DubbingOutput.Agon,
+        };
+        dubber.Speak([new SpokenLine("Hello.", "Merhaba.")]);
+        await WaitUntil(() => audio.Played == 1);
+        await dubber.DisposeAsync();
+    }
+
+    [Fact]
     public async Task PreviewAlwaysPlaysOnTheComputer()
     {
         var synth = new FakeSynth();
