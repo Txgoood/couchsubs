@@ -84,7 +84,7 @@ public partial class DubbingCard : UserControl
         {
             DubbingOutput.Tv => "LG webOS TV: CouchSubs TV uygulamasının bağlı ve açık olması gerekir. Oyun sesiyle Türkçe dublaj TV'den duyulur.",
             DubbingOutput.Agon => "Agon monitör: Türkçe ses Windows'un varsayılan ses çıkışından çalar. PS5'in HDMI kablosu tek başına PC sesini monitöre taşımaz; PC sesini monitöre veya hoparlöre ayrıca bağlayın.",
-            DubbingOutput.Headset => "PULSE 3D: USB adaptörü bilgisayara takılırsa şimdilik yalnız Türkçe dublaj çalar. PS5 oyun sesiyle aynı kulaklıkta birleştirme henüz aktif DEĞİL; Remote Play ses yakalama aşaması geliştiriliyor. USB adaptörü PS5 üzerinde kalırsa PC dublajı kulaklığa gönderilemez.",
+            DubbingOutput.Headset => "PULSE 3D (deneysel): USB adaptörünü MSI bilgisayara takın ve Windows varsayılan ses çıkışı olarak PULSE 3D seçin. Ardından CouchSubs çevirisini durdurup yeniden başlatın. PS5 Remote Play oyun sesi ve Türkçe dublaj aynı çıkışta karıştırılır. USB adaptör PS5 üzerinde kalırsa çalışmaz; gerçek cihazda henüz test edilmedi.",
             _ => "Türkçe dublaj bilgisayarın Windows varsayılan ses çıkışından çalar."
         };
         Error.Text = controller.DubbingError ?? "";
