@@ -33,6 +33,7 @@
                         <StackPanel Orientation="Horizontal">
                             <RadioButton x:Name="OnTv" Content="LG TV (webOS)" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
                             <RadioButton x:Name="OnAgon" Content="Agon monitör" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Agon" />
+                            <RadioButton x:Name="OnHeadset" Content="PS5 kulaklık" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Headset" />
                             <RadioButton x:Name="OnComputer" Content="{t:T 'This computer'}" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
                         </StackPanel>
                     </Border>
