@@ -12,7 +12,7 @@ public class GameSpeechMixerTests
     {
         float[] output = new float[3];
         GameSpeechMixer.Mix(output, [0.2f, -0.5f, 0.7f], []);
-        Assert.Equal([0.2f, -0.5f, 0.7f], output);
+        Assert.Equal(new float[] { 0.2f, -0.5f, 0.7f }, output);
     }
 
     [Fact]
