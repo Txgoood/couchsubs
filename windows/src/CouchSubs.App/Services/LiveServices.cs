@@ -24,6 +24,7 @@ public sealed class LiveServices : IAppServices
     public IDubbingModel? Dubbing { get; } = PocketDubbingModel.EngineBundled ? new PocketDubbingModel() : null;
     public IDubbingModel? FastDubbing { get; } = WindowsVoiceModel.Available ? new WindowsVoiceModel() : null;
     public IAudioOutput? Audio { get; } = new WindowsAudioOutput();
+    public IGameAudioOutput? GameAudio { get; } = new Pulse3DAudioOutput();
     public IUpdater? Updater { get; } = new Updater();
     public IFirewall? Firewall { get; } = new WindowsFirewall();
 
@@ -71,6 +72,7 @@ public sealed class LiveServices : IAppServices
     }
 
     public IStreamSession MakeStream(RegisteredConsole console, byte[] accountId) => new StreamSession(console, accountId);
+    public IStreamSession MakeAudioStream(RegisteredConsole console, byte[] accountId) => new StreamSession(console, accountId, captureGameAudio: true);
 
     public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved)
     {
