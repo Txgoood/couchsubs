@@ -7,6 +7,7 @@
 #include <chiaki/common.h>
 #include <chiaki/discovery.h>
 #include <chiaki/log.h>
+#include <chiaki/opusdecoder.h>
 #include <chiaki/regist.h>
 #include <chiaki/session.h>
 #include <chiaki/thread.h>
@@ -534,6 +535,10 @@ struct cs_session {
 	cs_decoder decoder;
 	cs_throttle throttle;
 	bool decoder_ready;
+	ChiakiOpusDecoder audio_decoder;
+	bool audio_decoder_ready;
+	cs_audio_format_cb audio_format;
+	cs_audio_pcm_cb audio_pcm;
 };
 
 static int cs_quit_reason(ChiakiQuitReason reason)
@@ -607,7 +612,25 @@ static bool cs_session_video_sample(uint8_t *buf, size_t buf_size, int32_t frame
 	return true;
 }
 
-CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0x10], const uint8_t morning[0x10],
+static void cs_audio_settings(uint32_t channels, uint32_t sample_rate, void *user)
+{
+    cs_session *session = user;
+    if(session->audio_format)
+        session->audio_format((int)channels, (int)sample_rate, session->user);
+}
+
+static void cs_audio_frame(int16_t *pcm, size_t samples_count, void *user)
+{
+    cs_session *session = user;
+    if(session->audio_pcm && pcm && samples_count <= (size_t)INT32_MAX)
+        session->audio_pcm(pcm, (int)samples_count, session->user);
+}
+
+CS_API cs_session *cs_session_start_audio(const char *host, const uint8_t regist_key[0x10],
+        const uint8_t morning[0x10], const uint8_t account_id[8], int max_fps,
+        cs_frame_cb frame, cs_event_cb event, cs_log_cb log,
+        int enable_audio, cs_audio_format_cb audio_format, cs_audio_pcm_cb audio_pcm, void *user)
+
 		const uint8_t account_id[8], int max_fps,
 		cs_frame_cb frame, cs_event_cb event, cs_log_cb log, void *user)
 {
@@ -619,6 +642,8 @@ CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0
 		return NULL;
 	session->frame = frame;
 	session->event = event;
+	session->audio_format = audio_format;
+	session->audio_pcm = audio_pcm;
 	session->user = user;
 	session->log_target.cb = log;
 	session->log_target.user = user;
@@ -644,7 +669,7 @@ CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0
 	info.video_profile_auto_downgrade = true;
 	info.enable_keyboard = false;
 	info.enable_dualsense = false;
-	info.audio_video_disabled = CHIAKI_AUDIO_DISABLED;
+	info.audio_video_disabled = enable_audio ? 0 : CHIAKI_AUDIO_DISABLED;
 	info.auto_regist = false;
 	info.holepunch_session = NULL;
 	info.rudp_sock = NULL;
@@ -660,6 +685,15 @@ CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0
 		free(session);
 		return NULL;
 	}
+	if(enable_audio)
+	{
+		chiaki_opus_decoder_init(&session->audio_decoder, &session->log);
+		chiaki_opus_decoder_set_cb(&session->audio_decoder, cs_audio_settings, cs_audio_frame, session);
+		ChiakiAudioSink sink;
+		chiaki_opus_decoder_get_sink(&session->audio_decoder, &sink);
+		chiaki_session_set_audio_sink(&session->session, &sink);
+		session->audio_decoder_ready = true;
+	}
 	chiaki_session_set_event_cb(&session->session, cs_session_event, session);
 	chiaki_session_set_video_sample_cb(&session->session, cs_session_video_sample, session);
 
@@ -669,11 +703,20 @@ CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0
 		/* Başlamamış oturumun beklenecek iş parçacığı yok; yalnız bellek bırakılır. */
 		cs_logf(log, user, 0, "Session start failed: %s", chiaki_error_string(err));
 		chiaki_session_fini(&session->session);
+		if(session->audio_decoder_ready) chiaki_opus_decoder_fini(&session->audio_decoder);
 		cs_decoder_fini(&session->decoder);
 		free(session);
 		return NULL;
 	}
 	return session;
+}
+
+CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0x10],
+        const uint8_t morning[0x10], const uint8_t account_id[8], int max_fps,
+        cs_frame_cb frame, cs_event_cb event, cs_log_cb log, void *user)
+{
+    return cs_session_start_audio(host, regist_key, morning, account_id, max_fps,
+            frame, event, log, 0, NULL, NULL, user);
 }
 
 CS_API void cs_session_stop(cs_session *session)
@@ -685,6 +728,7 @@ CS_API void cs_session_stop(cs_session *session)
 	chiaki_session_stop(&session->session);
 	chiaki_session_join(&session->session);
 	chiaki_session_fini(&session->session);
+	if(session->audio_decoder_ready) chiaki_opus_decoder_fini(&session->audio_decoder);
 	cs_decoder_fini(&session->decoder);
 	free(session);
 }
