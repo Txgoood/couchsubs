@@ -13,7 +13,7 @@ namespace CouchSubs.App.Services;
 /// PULSE 3D USB adaptörü bilgisayara takılı ve Windows varsayılan çıkışı seçili olmalıdır.
 /// 48 kHz stereo PCM akışı; tampon dolarsa eski ses atılır, sessizlikte takılmaz.
 /// </summary>
-internal sealed class Pulse3DAudioOutput : IAudioOutput, ISampleProvider, IDisposable
+internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
 {
     private const int Rate = 48000;
     private const int Channels = 2;
