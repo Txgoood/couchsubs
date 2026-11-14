@@ -150,7 +150,14 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             LastBox = box;
         }
         PairShown?.Invoke(source, translated);
-        if (SpeechReady is { } speech) speech(translator.SpokenLines(source));
+        if (SpeechReady is { } speech)
+        {
+            // Birçok ITextTranslator uygulaması SpokenLines özelliğini desteklemez ve boş
+            // liste döndürür. Çeviri TV'de görünürken sesin tamamen susmasını önle:
+            // konuşmacı ataması varsa koru, yoksa GÖSTERİLEN Türkçe metni seslendir.
+            var lines = translator.SpokenLines(source);
+            speech(lines.Count > 0 ? lines : [new SpokenLine(source, translated)]);
+        }
     }
 
     /// <summary>Okuma durunca TV'deki son altyazıyı kaldırır.</summary>
