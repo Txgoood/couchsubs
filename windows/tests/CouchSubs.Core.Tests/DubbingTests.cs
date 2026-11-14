@@ -84,7 +84,7 @@ public class VoiceCastTests
     [Fact]
     public void TwoDashedLinesUseBothVoices()
     {
-        var lines = SubtitleDialogue.Parse("- Where are you?\\n- Here.", "- Neredesin?\\n- Buradayım.");
+        var lines = SubtitleDialogue.Parse("- Where are you?\n- Here.", "- Neredesin?\n- Buradayım.");
         Assert.Equal(2, lines.Count);
         var cast = new VoiceCast();
         Assert.Equal(cast.Narrator, cast.VoiceFor(lines[0], out _));
