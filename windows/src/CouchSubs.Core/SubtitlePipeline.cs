@@ -156,7 +156,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             // liste döndürür. Çeviri TV'de görünürken sesin tamamen susmasını önle:
             // konuşmacı ataması varsa koru, yoksa GÖSTERİLEN Türkçe metni seslendir.
             var lines = translator.SpokenLines(source);
-            speech(lines.Count > 0 ? lines : [new SpokenLine(source, translated)]);
+            speech(lines.Count > 0 ? lines : SubtitleDialogue.Parse(source, translated));
         }
     }
 
