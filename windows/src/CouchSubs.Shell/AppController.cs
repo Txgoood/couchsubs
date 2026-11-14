@@ -165,7 +165,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (!Set(ref settings, value)) return;
             if (isRunning && (old.Source != value.Source || old.PcDisplayId != value.PcDisplayId)) Stop();
             settingsStore.Save(value);
-            Changed(nameof(IsPcMode), nameof(PcDisplays));
+            Changed(nameof(IsPcMode), nameof(PcDisplays), nameof(KnownGames));
             if (old.Source != value.Source && value.Source == GameSource.Ps5 && !HasPairedPs5)
                 Step = OnboardingStep.Welcome;
             server.SendStyle(value.Style);
@@ -1327,11 +1327,45 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         MakeDubber()?.Preview(voice);
     }
 
+    public IReadOnlyList<string> KnownGames => GameCastLibrary.Games(settings.Dubbing);
+
+    /// <summary>İsim verilmezse Genel; eski oyun sesleri saklanır.</summary>
+    public void SelectGame(string name)
+    {
+        var selected = GameCastLibrary.Switch(settings.Dubbing, name);
+        if (ReferenceEquals(selected, settings.Dubbing)) return;
+        Settings = settings with { Dubbing = selected };
+        Changed(nameof(KnownGames));
+    }
+
+    public void AddCharacter(string name, CharacterGroup group)
+    {
+        name = name.Trim();
+        if (name.Length is 0 or > 64) return;
+        var cast = settings.Dubbing.Cast.Copy();
+        cast.SetGroup(name, group);
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
+    }
+
+    public void SetCharacterGroup(string name, CharacterGroup group)
+    {
+        var cast = settings.Dubbing.Cast.Copy();
+        cast.SetGroup(name, group);
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
+    }
+
+    public void RemoveCharacter(string name)
+    {
+        var cast = settings.Dubbing.Cast.Copy();
+        cast.Remove(name);
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
+    }
+
     public void AssignVoice(DubbingVoice voice, string name)
     {
         var cast = settings.Dubbing.Cast.Copy();
         cast.Assign(voice, name);
-        Settings = settings with { Dubbing = settings.Dubbing with { Cast = cast } };
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
     }
 
     private Dubber? MakeDubber()
@@ -1345,7 +1379,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             Cast = settings.Dubbing.Cast.Copy(),
             Output = settings.Source == GameSource.Pc ? DubbingOutput.Computer : settings.Dubbing.Output,
         };
-        made.CastChanged += cast => Settings = settings with { Dubbing = settings.Dubbing with { Cast = cast } };
+        made.CastChanged += cast => Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
         made.Failed += message => DubbingError = message;
         dubber = made;
         return made;
