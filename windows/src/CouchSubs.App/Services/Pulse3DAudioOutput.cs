@@ -21,6 +21,9 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     private readonly object speechGate = new();
     private float[]? speech;
     private int speechPosition;
+    // Oyun sesini aniden %35'e düşürmek kısa çıt sesine neden olabiliyor.
+    // Kanallar arası aynı gain korunarak örnek başına yumuşak geçiş uygulanır.
+    private float gameGain = 1f;
     private WaveOutEvent? output;
     private readonly object lifecycleGate = new();
 
@@ -116,12 +119,18 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
             {
                 var remaining = voice.Length - speechPosition;
                 var mixed = Math.Min(count, remaining);
-                // Ducking yalnız konuşma örneklerinin bulunduğu yerde uygulanır.
-                for (var i = 0; i < mixed; i++)
+                // 20 ms'lik düşüş / 35 ms'lik yükseliş. Stereo kanallara aynı kazanç.
+                for (var i = 0; i < mixed; i += Channels)
                 {
-                    var spoken = voice[speechPosition + i];
-                    var gain = MathF.Abs(spoken) > 0.0001f ? 0.35f : 1f;
-                    destination[i] = Math.Clamp(destination[i] * gain + spoken, -1f, 1f);
+                    var left = voice[speechPosition + i];
+                    var right = i + 1 < mixed ? voice[speechPosition + i + 1] : left;
+                    var speaking = MathF.Max(MathF.Abs(left), MathF.Abs(right)) > 0.0001f;
+                    var target = speaking ? 0.35f : 1f;
+                    var step = (1f - 0.35f) / (Rate * (target < gameGain ? 0.020f : 0.035f));
+                    gameGain += Math.Clamp(target - gameGain, -step, step);
+                    destination[i] = Math.Clamp(destination[i] * gameGain + left, -1f, 1f);
+                    if (i + 1 < mixed)
+                        destination[i + 1] = Math.Clamp(destination[i + 1] * gameGain + right, -1f, 1f);
                 }
                 speechPosition += mixed;
                 if (speechPosition >= voice.Length)
@@ -130,6 +139,16 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
                     speechPosition = 0;
                 }
             }
+        }
+        // Konuşma bitince arka plan sesini de yavaşça eski seviyesine yükselt.
+        // Yukarıdaki döngü yalnız konuşma örneği bulunan parçayı işlemiş olabilir.
+        var resume = Math.Clamp((1f - 0.35f) / (Rate * 0.035f), 0f, 1f);
+        var start = speech is null ? 0 : count;
+        for (var i = start; i < count; i += Channels)
+        {
+            gameGain = MathF.Min(1f, gameGain + resume);
+            destination[i] *= gameGain;
+            if (i + 1 < count) destination[i + 1] *= gameGain;
         }
         return count;
     }
