@@ -10,6 +10,10 @@ public enum DubbingVoice { Female1, Female2, Female3, Male1, Male2, Male3 }
 
 public enum VoiceGender { Female, Male }
 
+/// <summary>Karakter düzenleme grubu. Ses üretici sayısını veya karakter havuzunu sınırlamaz.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<CharacterGroup>))]
+public enum CharacterGroup { Unknown, Male, Female, Child, Creature, Narrator }
+
 public static class DubbingVoices
 {
     public static readonly DubbingVoice[] All = Enum.GetValues<DubbingVoice>();
@@ -37,6 +41,8 @@ public sealed class VoiceCast
 {
     /// <summary>Adın büyük harfli biçimi → ses. Ayarlardan değiştirilebilir.</summary>
     public Dictionary<string, DubbingVoice> Assignments { get; init; } = new(StringComparer.Ordinal);
+    /// <summary>Karakterin düzenleme grubu; modelin sesini değiştirmez, kullanıcı isterse ayarlar.</summary>
+    public Dictionary<string, CharacterGroup> Groups { get; init; } = new(StringComparer.Ordinal);
     public DubbingVoice Narrator { get; set; } = DubbingVoice.Male1;
     /// <summary>Tireli konuşmada sıradaki kişinin sesi.</summary>
     public DubbingVoice Partner { get; set; } = DubbingVoice.Female1;
@@ -77,9 +83,42 @@ public sealed class VoiceCast
 
     public void Assign(DubbingVoice voice, string name) => Assignments[Key(name)] = voice;
 
+    public CharacterGroup GroupFor(string name)
+    {
+        var key = Key(name);
+        if (Groups.TryGetValue(key, out var group)) return group;
+        return NameGender.Guess(name) switch
+        {
+            VoiceGender.Male => CharacterGroup.Male,
+            VoiceGender.Female => CharacterGroup.Female,
+            _ => CharacterGroup.Unknown,
+        };
+    }
+
+    public void SetGroup(string name, CharacterGroup group)
+    {
+        var key = Key(name);
+        Groups[key] = group;
+        if (!Assignments.ContainsKey(key))
+            Assignments[key] = group switch
+            {
+                CharacterGroup.Female => Partner,
+                CharacterGroup.Child => Partner,
+                _ => Narrator,
+            };
+    }
+
+    public void Remove(string name)
+    {
+        var key = Key(name);
+        Assignments.Remove(key);
+        Groups.Remove(key);
+    }
+
     public VoiceCast Copy() => new()
     {
         Assignments = new Dictionary<string, DubbingVoice>(Assignments, StringComparer.Ordinal),
+        Groups = new Dictionary<string, CharacterGroup>(Groups, StringComparer.Ordinal),
         Narrator = Narrator,
         Partner = Partner,
     };
