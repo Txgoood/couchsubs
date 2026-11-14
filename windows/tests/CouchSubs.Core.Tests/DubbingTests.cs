@@ -53,10 +53,50 @@ public class VoiceCastTests
         Assert.Equal(VoiceGender.Male, kratos.Gender());
         Assert.Equal(VoiceGender.Female, freya.Gender());
         Assert.Equal(VoiceGender.Male, atreus.Gender());
-        Assert.NotEqual(kratos, atreus);
-        Assert.NotEqual(cast.Narrator, kratos);
+        Assert.Equal(cast.Narrator, kratos);
+        Assert.Equal(cast.Narrator, atreus);
+        Assert.Equal(cast.Partner, freya);
         Assert.Equal(kratos, cast.VoiceFor(new SpokenLine("", "", "Kratos"), out assigned));
         Assert.False(assigned);
+    }
+
+    [Fact]
+    public void TwoDistinctUnknownSpeakersGetTwoPersistentVoices()
+    {
+        var cast = new VoiceCast();
+        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "CAPTAIN A"), out _));
+        Assert.Equal(cast.Partner, cast.VoiceFor(new SpokenLine("", "", "CAPTAIN B"), out _));
+        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "CAPTAIN A"), out _));
+        var saved = JsonSerializer.Deserialize<VoiceCast>(JsonSerializer.Serialize(cast))!;
+        Assert.Equal(saved.Partner, saved.VoiceFor(new SpokenLine("", "", "CAPTAIN B"), out _));
+    }
+
+    [Theory]
+    [InlineData("KRATOS: Leave now!", "KRATOS: Hemen git!", "KRATOS", "Hemen git!")]
+    [InlineData("FREYA: Stop.", "Dur.", "FREYA", "Dur.")]
+    public void NamedDialogueKeepsSpeakerAndStripsLabels(string source, string translated, string speaker, string spoken)
+    {
+        var line = Assert.Single(SubtitleDialogue.Parse(source, translated));
+        Assert.Equal(speaker, line.Speaker);
+        Assert.Equal(spoken, line.Turkish);
+    }
+
+    [Fact]
+    public void TwoDashedLinesUseBothVoices()
+    {
+        var lines = SubtitleDialogue.Parse("- Where are you?\\n- Here.", "- Neredesin?\\n- Buradayım.");
+        Assert.Equal(2, lines.Count);
+        var cast = new VoiceCast();
+        Assert.Equal(cast.Narrator, cast.VoiceFor(lines[0], out _));
+        Assert.Equal(cast.Partner, cast.VoiceFor(lines[1], out _));
+    }
+
+    [Fact]
+    public void UnlabeledTextDoesNotGuessSpeaker()
+    {
+        var line = Assert.Single(SubtitleDialogue.Parse("We have to leave.", "Gitmemiz gerekiyor."));
+        Assert.Null(line.Speaker);
+        Assert.False(line.NewTurn);
     }
 
     [Fact]
