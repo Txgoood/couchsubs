@@ -15,6 +15,7 @@ namespace CouchSubs.App.Views;
 public partial class MainView : UserControl
 {
     private readonly AppController controller;
+    private bool selectingSource;
     // Çeviri sürerken PS5 ve TV bağlanamıyorsa güvenlik duvarı kartı önerilir.
     private readonly DispatcherTimer connectionWatch = new() { Interval = TimeSpan.FromSeconds(5) };
 
@@ -31,6 +32,10 @@ public partial class MainView : UserControl
             controller.PropertyChanged -= OnChanged;
             connectionWatch.Stop();
         };
+        selectingSource = true;
+        SourceSelection.SelectedIndex = controller.IsPcMode ? 1 : 0;
+        ReloadDisplays();
+        selectingSource = false;
         Refresh();
         ShowUpdate();
         _ = controller.CheckForUpdateAsync();
@@ -38,7 +43,7 @@ public partial class MainView : UserControl
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AppController.IsRunning) or nameof(AppController.TranslatorStatus) or nameof(AppController.ModelInstalled))
+        if (e.PropertyName is nameof(AppController.IsRunning) or nameof(AppController.IsPcMode) or nameof(AppController.TranslatorStatus) or nameof(AppController.ModelInstalled))
             Refresh();
         if (e.PropertyName is nameof(AppController.UpdateVersion) or nameof(AppController.Updating)
             or nameof(AppController.UpdateProgress) or nameof(AppController.UpdateError))
@@ -67,6 +72,45 @@ public partial class MainView : UserControl
         ToggleGlyph.Text = running ? Glyphs.Stop : Glyphs.Play;
         ToggleText.Text = Localizer.Current[running ? "Stop translating" : "Start translating"];
         ModelCard.Visibility = controller.ModelInstalled ? Visibility.Collapsed : Visibility.Visible;
+        SourceSelection.IsEnabled = !running;
+        PcDisplaySelection.IsEnabled = !running;
+        PcDisplayPanel.Visibility = controller.IsPcMode ? Visibility.Visible : Visibility.Collapsed;
+        ConsoleStatusCard.Visibility = controller.IsPcMode ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OnSourceChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (selectingSource || SourceSelection.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        var source = Enum.Parse<GameSource>(tag);
+        if (controller.Settings.Source == source) return;
+        controller.Settings = controller.Settings with { Source = source };
+        ReloadDisplays();
+        Refresh();
+    }
+
+    private void ReloadDisplays()
+    {
+        selectingSource = true;
+        PcDisplaySelection.Items.Clear();
+        var displays = controller.PcDisplays;
+        foreach (var display in displays)
+            PcDisplaySelection.Items.Add(new ComboBoxItem
+            {
+                Content = display.Name,
+                Tag = display.Id,
+                IsSelected = display.Id == controller.Settings.PcDisplayId ||
+                    (string.IsNullOrWhiteSpace(controller.Settings.PcDisplayId) && display.Primary)
+            });
+        selectingSource = false;
+    }
+
+    private void OnRefreshDisplays(object sender, RoutedEventArgs e) => ReloadDisplays();
+
+    private void OnPcDisplayChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (selectingSource || PcDisplaySelection.SelectedItem is not ComboBoxItem { Tag: string id }) return;
+        if (controller.Settings.PcDisplayId != id)
+            controller.Settings = controller.Settings with { PcDisplayId = id };
     }
 
     private async void OnToggle(object sender, RoutedEventArgs e)
