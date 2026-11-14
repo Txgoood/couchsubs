@@ -234,6 +234,41 @@ public class AppControllerTests
         new(services ?? new FakeServices(), store ?? new MemoryStore(), settings ?? new MemorySettings(), sleep ?? new FakeSleep(), Localizer.ForLanguage("en"), action => action());
 
     [Fact]
+    public void MenuTranslationIsOptInToPreserveExistingGamePerformance()
+    {
+        Assert.False(new UserSettings().AutoWorldText);
+    }
+
+    [Fact]
+    public async Task PcWorldTextModeCanTranslateInventoryWithoutPs5Stream()
+    {
+        var services = new FakeServices
+        {
+            ReaderLines = new Reading([
+                new TextLine("Inventory", new TextBox(0.03, 0.05, 0.24, 0.12)),
+                new TextLine("Open refrigerator", new TextBox(0.04, 0.30, 0.45, 0.37))
+            ])
+        };
+        var store = new MemorySettings();
+        store.Save(new UserSettings { Source = GameSource.Pc, AutoWorldText = true });
+        var controller = Make(services: services, settings: store);
+        int received = 0;
+        controller.PcWorldTextReady += (items, _) =>
+        {
+            if (items.Any(item => item.Translation.Contains("TR: Inventory")))
+                Interlocked.Increment(ref received);
+        };
+        await controller.StartAsync();
+        var deadline = DateTime.UtcNow.AddSeconds(4);
+        while (Volatile.Read(ref received) == 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(30);
+        Assert.True(Volatile.Read(ref received) > 0, "Auto-world text should translate visible PC menu");
+        Assert.Empty(services.Streams);
+        controller.Stop();
+        controller.Dispose();
+    }
+
+    [Fact]
     public void PcModeCanSkipPlayStationOnboarding()
     {
         var controller = Make();
