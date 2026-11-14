@@ -1124,8 +1124,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 }
                 worldNoText = 0;
                 var key = AmbientTextTranslation.SnapshotKey(results);
-                if (key == lastWorldKey) return;
                 lastWorldKey = key;
+                // Her taramada yenile: TV 'screen' katmanı 9 sn sonunda kapanır; sabit menü açıkken
+                // çeviri kaybolmasın. PC katmanı aynı pencerenin metnini günceller, dublaja dokunmaz.
                 if (pc)
                     post(() => PcWorldTextReady?.Invoke(results, display));
                 else
