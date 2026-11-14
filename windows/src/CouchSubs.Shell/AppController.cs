@@ -561,6 +561,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void SendTestSubtitle()
     {
+        if (settings.Source == GameSource.Pc)
+        {
+            PcSubtitleReady?.Invoke("Türkçe altyazı testi — PC ekranı", 5000, settings.PcDisplayId);
+            return;
+        }
         server.SendStyle(settings.Style);
         // Oyunda henüz altyazı görülmediyse altyazı bölgesinin altına yakın tipik bir yer kullanılır.
         var region = settings.Region;
@@ -1375,7 +1380,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             StopDubber(); // Ses cihazı değiştiğinde eski çıkışa konuşma gönderilmesin.
             if (isRunning)
             {
-                DubbingError = "Ses çıkışını değiştirdiniz. PS5 oyun sesi bağlantısını yenilemek için Çeviriyi Durdur ve Başlat yapın.";
+                DubbingError = settings.Source == GameSource.Pc
+                    ? null
+                    : "Ses çıkışını değiştirdiniz. PS5 oyun sesi bağlantısını yenilemek için Çeviriyi Durdur ve Başlat yapın.";
+                if (settings.Source == GameSource.Pc && now.Enabled && DubbingInstalled)
+                    MakeDubber()?.Prepare();
             }
         }
         if (!now.Enabled) StopDubber();
