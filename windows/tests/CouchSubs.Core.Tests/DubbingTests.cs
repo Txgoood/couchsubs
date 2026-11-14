@@ -81,6 +81,19 @@ public class VoiceCastTests
         Assert.Equal(spoken, line.Turkish);
     }
 
+    [Theory]
+    [InlineData("Michael: We need a car.", "Bir arabaya ihtiyacımız var.", "Michael")]
+    [InlineData("Franklin: Come on!", "Hadi!", "Franklin")]
+    [InlineData("Trevor: Get out!", "Çık dışarı!", "Trevor")]
+    [InlineData("Lucia: Let's go.", "Gidelim.", "Lucia")]
+    [InlineData("Jason: Wait.", "Bekle.", "Jason")]
+    public void GtaSpeakerNamesAreRecognizedCaseInsensitively(string source, string translated, string expected)
+    {
+        var line = Assert.Single(SubtitleDialogue.Parse(source, translated));
+        Assert.Equal(expected, line.Speaker);
+        Assert.Equal(translated, line.Turkish);
+    }
+
     [Fact]
     public void TwoDashedLinesUseBothVoices()
     {
