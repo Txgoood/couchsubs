@@ -33,6 +33,26 @@
                 </StackPanel>
             </c:Card>
 
+            <!-- Oyun kaynağı: PS5 korunur, PC'de ekran seçimi yerel olarak yapılır. -->
+            <c:Card Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Oyun kaynağı" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ComboBox x:Name="SourceSelection" SelectionChanged="OnSourceChanged">
+                        <ComboBoxItem Content="PlayStation 5 (mevcut)" Tag="Ps5" />
+                        <ComboBoxItem Content="Bilgisayar oyunu (PS5 gerekmez)" Tag="Pc" />
+                    </ComboBox>
+                    <StackPanel x:Name="PcDisplayPanel" Margin="0,12,0,0" Visibility="Collapsed">
+                        <TextBlock Text="Oyunun açık olduğu ekran" Margin="0,0,0,6" />
+                        <ComboBox x:Name="PcDisplaySelection" SelectionChanged="OnPcDisplayChanged" />
+                        <Button Content="Ekranları yenile" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnRefreshDisplays" />
+                        <TextBlock Text="Laptop ekranı veya bağlı Agon OLED seçilebilir. Oyun kenarlıksız tam ekranda çalışırsa altyazı daha güvenilir görünür. PC sesi Windows üzerinden çıkar."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                        <TextBlock Text="{Binding PcCaptureError}" Foreground="{DynamicResource dangerBrush}" TextWrapping="Wrap"
+                                   Margin="0,8,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </c:Card>
+
             <!-- Başlat / Durdur -->
             <Button x:Name="Toggle" HorizontalAlignment="Stretch" MinHeight="{DynamicResource size.primaryActionHeight}" Click="OnToggle"
                     IsEnabled="{Binding IsStarting, Converter={StaticResource Not}}">
@@ -43,7 +63,7 @@
             </Button>
 
             <!-- Durumlar -->
-            <c:Card Margin="0,24,0,0">
+            <c:Card x:Name="ConsoleStatusCard" Margin="0,24,0,0">
                 <StackPanel>
                     <c:StatusRow Title="PS5" Value="{Binding Ps5StatusText}" Tone="{Binding Ps5Tone}" />
                     <Separator />
