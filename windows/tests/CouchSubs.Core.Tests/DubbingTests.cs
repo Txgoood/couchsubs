@@ -64,11 +64,11 @@ public class VoiceCastTests
     public void TwoDistinctUnknownSpeakersGetTwoPersistentVoices()
     {
         var cast = new VoiceCast();
-        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "CAPTAIN A"), out _));
-        Assert.Equal(cast.Partner, cast.VoiceFor(new SpokenLine("", "", "CAPTAIN B"), out _));
-        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "CAPTAIN A"), out _));
+        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "MYSTERY ONE"), out _));
+        Assert.Equal(cast.Partner, cast.VoiceFor(new SpokenLine("", "", "MYSTERY TWO"), out _));
+        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "MYSTERY ONE"), out _));
         var saved = JsonSerializer.Deserialize<VoiceCast>(JsonSerializer.Serialize(cast))!;
-        Assert.Equal(saved.Partner, saved.VoiceFor(new SpokenLine("", "", "CAPTAIN B"), out _));
+        Assert.Equal(saved.Partner, saved.VoiceFor(new SpokenLine("", "", "MYSTERY TWO"), out _));
     }
 
     [Theory]
