@@ -22,8 +22,22 @@ public static class StoreKeys
 }
 
 /// <summary>Kalıcı ayarlar (şifreli depo değil, sıradan ayar dosyası).</summary>
+public enum GameSource { Ps5, Pc }
+
+/// <summary>Yerel Windows oyun ekranını yakalayan birincil / bağlı monitör.</summary>
+public sealed record GameDisplay(string Id, string Name, bool Primary);
+
+public interface IGameScreenCapture
+{
+    IReadOnlyList<GameDisplay> Displays();
+    Frame Capture(string displayId);
+}
+
 public sealed record UserSettings
 {
+    public GameSource Source { get; init; } = GameSource.Ps5;
+    /// <summary>Boşsa birincil ekran; diğer monitör çıkarıldığında otomatik geri düşer.</summary>
+    public string PcDisplayId { get; init; } = "";
     public CropRegion Region { get; init; } = new();
     /// <summary>Ek bölge 1 (ör. sağ üstteki görev paneli); null ise kapalı. Num 1 tuşuyla bir kez okunup çevrilir.</summary>
     public CropRegion? ExtraRegion1 { get; init; }
@@ -121,6 +135,7 @@ public interface IAppServices
     /// <summary>TV ile eşleşir ve TV uygulamasını sunucu adresiyle başlatmayı dener.</summary>
     Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server);
     IStreamSession MakeStream(RegisteredConsole console, byte[] accountId);
+    IGameScreenCapture? GameScreen => null;
     /// <summary>İsteğe bağlı oyun sesi akışı; eski servisler normal görüntü akışına düşer.</summary>
     IStreamSession MakeAudioStream(RegisteredConsole console, byte[] accountId) => MakeStream(console, accountId);
     /// <param name="appConnected">TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).</param>

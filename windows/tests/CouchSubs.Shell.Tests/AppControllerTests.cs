@@ -84,6 +84,20 @@ internal sealed class FakeReader(Reading? lines = null) : ITextReader
     public Reading ReadLines(Frame image, bool deep) => lines ?? Reading.Empty;
 }
 
+internal sealed class FakePcScreens : IGameScreenCapture
+{
+    public int Captures;
+    public string LastDisplay = "";
+    public IReadOnlyList<GameDisplay> Displays() =>
+        [new("\\\\.\\DISPLAY1", "MSI Laptop", true), new("\\\\.\\DISPLAY2", "Agon OLED", false)];
+    public Frame Capture(string displayId)
+    {
+        LastDisplay = displayId;
+        Interlocked.Increment(ref Captures);
+        return Frame.Blank(64, 64);
+    }
+}
+
 internal sealed class FakeServices : IAppServices
 {
     public List<ConsoleInfo> Consoles { get; } = [new("192.168.1.253", "PS5-789", true)];
@@ -102,6 +116,7 @@ internal sealed class FakeServices : IAppServices
     public IDubbingModel? Dubbing { get; set; }
     public IDubbingModel? FastDubbing { get; set; }
     public FakeTranslation Translation { get; } = new();
+    public IGameScreenCapture? GameScreen { get; set; } = new FakePcScreens();
     public IFirewall? Firewall { get; set; }
     ITranslationModel IAppServices.Translation => Translation;
     public OnlineKeyCheck KeyCheck { get; set; } = new(OnlineKeyState.Valid, 10, 500_000);
@@ -217,6 +232,40 @@ public class AppControllerTests
 
     internal static AppController Make(FakeServices? services = null, MemoryStore? store = null, MemorySettings? settings = null, FakeSleep? sleep = null) =>
         new(services ?? new FakeServices(), store ?? new MemoryStore(), settings ?? new MemorySettings(), sleep ?? new FakeSleep(), Localizer.ForLanguage("en"), action => action());
+
+    [Fact]
+    public void PcModeCanSkipPlayStationOnboarding()
+    {
+        var controller = Make();
+        Assert.Equal(OnboardingStep.Welcome, controller.Step);
+        controller.EnterPcMode();
+        Assert.True(controller.IsPcMode);
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        controller.Dispose();
+    }
+
+    [Fact]
+    public async Task PcModeCapturesSelectedMonitorWithoutOpeningPs5Stream()
+    {
+        var services = new FakeServices();
+        var screens = (FakePcScreens)services.GameScreen!;
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { Source = GameSource.Pc, PcDisplayId = "\\\\.\\DISPLAY2" });
+        var controller = Make(services: services, settings: settings);
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        await controller.StartAsync();
+        Assert.True(controller.IsRunning);
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (screens.Captures == 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+        Assert.True(screens.Captures > 0);
+        Assert.Equal("\\\\.\\DISPLAY2", screens.LastDisplay);
+        Assert.Empty(services.Streams);
+        Assert.Empty(services.Keepers);
+        controller.Stop();
+        Assert.False(controller.IsRunning);
+        controller.Dispose();
+    }
 
     [Fact]
     public void FreshInstallStartsAtWelcome() => Assert.Equal(OnboardingStep.Welcome, Make().Step);

@@ -67,6 +67,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private TextBox? lastSubtitleBox;
     private int processing;
     private Dubber? dubber;
+    private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
     private int pulseChannels = 2;
     private int pulseSampleRate = 48000;
@@ -92,7 +93,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         console = store.Load<RegisteredConsole>(StoreKeys.Console);
         tv = store.Load<LgTv>(StoreKeys.Tv);
         settings = settingsStore.Load();
-        var ready = accountId is not null && console is not null && tv is not null && store.Load<string>(StoreKeys.TvKey) is not null;
+        var ready = settings.Source == GameSource.Pc || accountId is not null && console is not null && tv is not null && store.Load<string>(StoreKeys.TvKey) is not null;
         step = ready ? OnboardingStep.Done : OnboardingStep.Welcome;
         server.ClientsChanged += OnClientsChanged;
     }
@@ -113,6 +114,20 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public bool HasAccount => accountId is not null;
     public RegisteredConsole? Console => console;
     public LgTv? Tv => tv;
+    private bool HasPairedPs5 => accountId is not null && console is not null && tv is not null
+        && store.Load<string>(StoreKeys.TvKey) is not null;
+    /// <summary>PS5 olmadan doğrudan bilgisayar oyununu kullan; yerel modeller gerektiğinde indirilir.</summary>
+    public void EnterPcMode()
+    {
+        Settings = settings with { Source = GameSource.Pc };
+        if (!ModelInstalled) StartModelDownload();
+        Step = OnboardingStep.Done;
+    }
+
+    public bool IsPcMode => settings.Source == GameSource.Pc;
+    public IReadOnlyList<GameDisplay> PcDisplays => services.GameScreen?.Displays() ?? [];
+    public string? PcCaptureError { get; private set; }
+    public event Action<string, int, string>? PcSubtitleReady;
     public bool IsRunning { get => isRunning; private set => Set(ref isRunning, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(TvTone)]); }
     public bool IsStarting { get => isStarting; private set => Set(ref isStarting, value); }
     public SessionState SessionState { get => sessionState; private set => Set(ref sessionState, value, [nameof(Ps5StatusText), nameof(Ps5Tone)]); }
@@ -148,7 +163,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             var old = settings;
             if (!Set(ref settings, value)) return;
+            if (isRunning && (old.Source != value.Source || old.PcDisplayId != value.PcDisplayId)) Stop();
             settingsStore.Save(value);
+            Changed(nameof(IsPcMode), nameof(PcDisplays));
+            if (old.Source != value.Source && value.Source == GameSource.Ps5 && !HasPairedPs5)
+                Step = OnboardingStep.Welcome;
             server.SendStyle(value.Style);
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
@@ -542,6 +561,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void SendTestSubtitle()
     {
+        if (settings.Source == GameSource.Pc)
+        {
+            PcSubtitleReady?.Invoke("Türkçe altyazı testi — PC ekranı", 5000, settings.PcDisplayId);
+            return;
+        }
         server.SendStyle(settings.Style);
         // Oyunda henüz altyazı görülmediyse altyazı bölgesinin altına yakın tipik bir yer kullanılır.
         var region = settings.Region;
@@ -741,7 +765,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task StartAsync()
     {
         // Düğmeye iki kez basılması ya da beklerken tekrar çağrılması ikinci bir oturum açmaz.
-        if (isRunning || isStarting || console is null || accountId is null || tv is null) return;
+        if (isRunning || isStarting) return;
+        if (settings.Source == GameSource.Pc)
+        {
+            await StartPcAsync();
+            return;
+        }
+        if (console is null || accountId is null || tv is null) return;
         IsStarting = true;
         try
         {
@@ -802,8 +832,58 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>Windows ekranında oyun: PS5/TV/PSN bağlantısı açılmadan yerel OCR ve dublaj.</summary>
+    private async Task StartPcAsync()
+    {
+        if (services.GameScreen is not { } capture) return;
+        IsStarting = true;
+        try
+        {
+            RefreshTranslatorStatus();
+            await StartServerAsync();
+            server.SendStyle(settings.Style);
+            SubtitlesPaused = false;
+            PcCaptureError = null;
+            Changed(nameof(PcCaptureError));
+            MakePipeline();
+            // PC oyun sesi zaten Windows mikserindedir; ikinci bir PS5 ses hattı başlatılmaz.
+            pulseAudioActive = false;
+            if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
+            var token = new CancellationTokenSource();
+            pcCaptureCancellation = token;
+            sleep.Begin();
+            IsRunning = true;
+            _ = Task.Run(async () =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var selected = settings.PcDisplayId;
+                        var frame = capture.Capture(selected);
+                        HandleFrame(frame);
+                    }
+                    catch (Exception error)
+                    {
+                        post(() =>
+                        {
+                            PcCaptureError = "PC ekran yakalama hatası: " + error.Message;
+                            Changed(nameof(PcCaptureError));
+                        });
+                        // Ekran çıkarılınca boş ID ile birincil ekrana geri dön.
+                    }
+                    try { await Task.Delay(280, token.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
+                }
+            });
+        }
+        finally { IsStarting = false; }
+    }
+
     public void Stop()
     {
+        pcCaptureCancellation?.Cancel();
+        pcCaptureCancellation = null;
         session?.Stop();
         session?.Dispose();
         session = null;
@@ -889,6 +969,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 LastSource = source;
                 LastTranslation = translation;
                 if (box is not null) lastSubtitleBox = box;
+                if (settings.Source == GameSource.Pc)
+                    PcSubtitleReady?.Invoke(translation, SubtitlePipeline.ReadingTime(translation), settings.PcDisplayId);
             });
         };
         // Model bu arada inmiş olabilir; her çeviri sonucu durumu günceller.
@@ -1256,12 +1338,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         if (dubber is not null) return dubber;
         if (ActiveDubbing is not { } model || services.Audio is not { } fallbackAudio) return null;
-        var audio = settings.Dubbing.Output == DubbingOutput.Headset && pulseAudioActive && services.GameAudio is { } game
+        var audio = settings.Source != GameSource.Pc && settings.Dubbing.Output == DubbingOutput.Headset && pulseAudioActive && services.GameAudio is { } game
             ? (IAudioOutput)game : fallbackAudio;
         var made = new Dubber(model, audio, () => server, () => ServerPort, post)
         {
             Cast = settings.Dubbing.Cast.Copy(),
-            Output = settings.Dubbing.Output,
+            Output = settings.Source == GameSource.Pc ? DubbingOutput.Computer : settings.Dubbing.Output,
         };
         made.CastChanged += cast => Settings = settings with { Dubbing = settings.Dubbing with { Cast = cast } };
         made.Failed += message => DubbingError = message;
@@ -1298,7 +1380,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             StopDubber(); // Ses cihazı değiştiğinde eski çıkışa konuşma gönderilmesin.
             if (isRunning)
             {
-                DubbingError = "Ses çıkışını değiştirdiniz. PS5 oyun sesi bağlantısını yenilemek için Çeviriyi Durdur ve Başlat yapın.";
+                DubbingError = settings.Source == GameSource.Pc
+                    ? null
+                    : "Ses çıkışını değiştirdiniz. PS5 oyun sesi bağlantısını yenilemek için Çeviriyi Durdur ve Başlat yapın.";
+                if (settings.Source == GameSource.Pc && now.Enabled && DubbingInstalled)
+                    MakeDubber()?.Prepare();
             }
         }
         if (!now.Enabled) StopDubber();
