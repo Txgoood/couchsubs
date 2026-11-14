@@ -14,6 +14,8 @@ public partial class DubbingCard : UserControl
 {
     private AppController? controller;
     private bool loading;
+    private int characterPage;
+    private const int PageSize = 24;
 
     public DubbingCard()
     {
@@ -89,8 +91,129 @@ public partial class DubbingCard : UserControl
         };
         Error.Text = controller.DubbingError ?? "";
         Error.Visibility = controller.DubbingError is null ? Visibility.Collapsed : Visibility.Visible;
+        BuildGames();
         BuildVoices(settings.Cast);
         loading = false;
+    }
+
+    private void BuildGames()
+    {
+        if (controller is null) return;
+        var game = controller.Settings.Dubbing.ActiveGame;
+        GameSelection.Items.Clear();
+        foreach (var title in controller.KnownGames)
+            GameSelection.Items.Add(new ComboBoxItem
+            {
+                Content = title,
+                Tag = title,
+                IsSelected = string.Equals(title, game, StringComparison.OrdinalIgnoreCase)
+            });
+        GameName.Text = game;
+        GameInfo.Text = $"Oyun: {game} · {controller.Settings.Dubbing.Cast.Assignments.Count} kayıtlı karakter. Altı temel ses paylaşılır; karakter sayısı sınırı yok.";
+    }
+
+    private void OnGameSelection(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || GameSelection.SelectedItem is not ComboBoxItem { Tag: string game } || controller is null) return;
+        controller.SelectGame(game);
+    }
+
+    private void OnSelectGame(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        controller.SelectGame(GameName.Text);
+    }
+
+    private void OnAddCharacter(object sender, RoutedEventArgs e)
+    {
+        if (controller is null || string.IsNullOrWhiteSpace(CharacterName.Text)) return;
+        var group = NewCharacterGroup.SelectedItem is ComboBoxItem { Tag: string tag }
+            ? Enum.Parse<CharacterGroup>(tag) : CharacterGroup.Unknown;
+        controller.AddCharacter(CharacterName.Text, group);
+        CharacterName.Clear();
+    }
+
+    private static string GroupLabel(CharacterGroup group) => group switch
+    {
+        CharacterGroup.Male => "Erkek",
+        CharacterGroup.Female => "Kadın",
+        CharacterGroup.Child => "Çocuk",
+        CharacterGroup.Creature => "Canlı / Fantastik",
+        CharacterGroup.Narrator => "Anlatıcı",
+        _ => "Bilinmeyen",
+    };
+
+    private Grid CharacterRow(string name, VoiceCast cast)
+    {
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(195) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        row.Children.Add(new TextBlock
+        {
+            Text = DisplayName(name), VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0)
+        });
+        var kind = new ComboBox { Margin = new Thickness(0, 0, 6, 0) };
+        foreach (var group in Enum.GetValues<CharacterGroup>())
+            kind.Items.Add(new ComboBoxItem
+            {
+                Content = GroupLabel(group), Tag = group,
+                IsSelected = group == cast.GroupFor(name)
+            });
+        kind.SelectionChanged += (_, _) =>
+        {
+            if (!loading && kind.SelectedItem is ComboBoxItem { Tag: CharacterGroup group })
+                controller?.SetCharacterGroup(name, group);
+        };
+        Grid.SetColumn(kind, 1);
+        row.Children.Add(kind);
+
+        var voicePicker = new ComboBox { Margin = new Thickness(0, 0, 6, 0) };
+        foreach (var voice in DubbingVoices.All)
+            voicePicker.Items.Add(new ComboBoxItem
+            {
+                Content = Label(voice), Tag = voice,
+                IsSelected = voice == cast.Assignments[name]
+            });
+        voicePicker.SelectionChanged += (_, _) =>
+        {
+            if (!loading && voicePicker.SelectedItem is ComboBoxItem { Tag: DubbingVoice voice })
+                controller?.AssignVoice(voice, name);
+        };
+        Grid.SetColumn(voicePicker, 2);
+        row.Children.Add(voicePicker);
+        var remove = new Button { Content = "Sil", ToolTip = "Bu oyundan karakter kaydını sil" };
+        remove.Click += (_, _) => controller?.RemoveCharacter(name);
+        Grid.SetColumn(remove, 3);
+        row.Children.Add(remove);
+        return row;
+    }
+
+    private void OnCharacterSearch(object sender, TextChangedEventArgs e)
+    {
+        if (controller is null || loading) return;
+        characterPage = 0;
+        BuildVoices(controller.Settings.Dubbing.Cast);
+    }
+
+    private void OnPreviousCharacters(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        characterPage = Math.Max(0, characterPage - 1);
+        BuildVoices(controller.Settings.Dubbing.Cast);
+    }
+
+    private void OnNextCharacters(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        var query = CharacterSearch.Text.Trim();
+        var total = controller.Settings.Dubbing.Cast.Assignments.Keys.Count(name =>
+            name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        characterPage = Math.Min(Math.Max(0, (total - 1) / PageSize), characterPage + 1);
+        BuildVoices(controller.Settings.Dubbing.Cast);
     }
 
     private void BuildVoices(VoiceCast cast)
@@ -100,10 +223,21 @@ public partial class DubbingCard : UserControl
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, narrator: voice) } })));
         Voices.Children.Add(VoiceRow(Localizer.Current["Second speaker in dialogue"], cast.Partner,
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, partner: voice) } })));
-        if (cast.Assignments.Count == 0) return;
-        Voices.Children.Add(new TextBlock { Text = Localizer.Current["Characters"], FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
-        foreach (var name in cast.Assignments.Keys.Order(StringComparer.Ordinal))
-            Voices.Children.Add(VoiceRow(DisplayName(name), cast.Assignments[name], voice => controller?.AssignVoice(voice, name)));
+        var filter = CharacterSearch.Text.Trim();
+        var names = cast.Assignments.Keys.Where(name =>
+            name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        characterPage = Math.Min(characterPage, Math.Max(0, (names.Length - 1) / PageSize));
+        CharacterPageInfo.Text = names.Length == 0 ? "0 karakter" :
+            $"{names.Length} karakter · {characterPage + 1}/{(names.Length - 1) / PageSize + 1}";
+        if (names.Length == 0) return;
+        Voices.Children.Add(new TextBlock
+        {
+            Text = Localizer.Current["Characters"], FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 12, 0, 4)
+        });
+        foreach (var name in names.Skip(characterPage * PageSize).Take(PageSize))
+            Voices.Children.Add(CharacterRow(name, cast));
     }
 
     private static VoiceCast WithRoles(VoiceCast cast, DubbingVoice? narrator = null, DubbingVoice? partner = null)

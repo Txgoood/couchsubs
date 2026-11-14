@@ -38,6 +38,41 @@
                         </StackPanel>
                     </Border>
                     <TextBlock x:Name="OutputHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                    <!-- Oyun bazlı ses hafızası: ayrı oyun kayıtları, karakter sayısı sınırı yok. -->
+                    <StackPanel Margin="0,0,0,12">
+                        <TextBlock Text="Oyun ve karakter hafızası" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="GTA 5, GTA 6 veya diğer oyunun adını gir. Karakterler bu oyuna özel saklanır; önceki oyunun sesleri silinmez."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox x:Name="GameSelection" Width="170" SelectionChanged="OnGameSelection" Margin="0,0,8,0" />
+                            <TextBox x:Name="GameName" Width="205" VerticalContentAlignment="Center" Margin="0,0,8,0"
+                                     ToolTip="Örneğin: GTA 5, GTA 6, Peppa Pig" />
+                            <Button Content="Oyunu seç / ekle" Click="OnSelectGame" />
+                        </StackPanel>
+                        <TextBlock x:Name="GameInfo" Style="{StaticResource HintText}" Margin="0,8,0,0" />
+                        <TextBlock Text="Elle karakter ekle" FontWeight="SemiBold" Margin="0,12,0,6" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox x:Name="CharacterName" Width="205" Margin="0,0,8,0"
+                                     VerticalContentAlignment="Center" ToolTip="Örneğin: Michael, Franklin, Trevor" />
+                            <ComboBox x:Name="NewCharacterGroup" Width="145" Margin="0,0,8,0">
+                                <ComboBoxItem Content="Bilinmeyen" Tag="Unknown" IsSelected="True" />
+                                <ComboBoxItem Content="Erkek" Tag="Male" />
+                                <ComboBoxItem Content="Kadın" Tag="Female" />
+                                <ComboBoxItem Content="Çocuk" Tag="Child" />
+                                <ComboBoxItem Content="Canlı / Fantastik" Tag="Creature" />
+                                <ComboBoxItem Content="Anlatıcı" Tag="Narrator" />
+                            </ComboBox>
+                            <Button Content="Karakter ekle" Click="OnAddCharacter" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
+                        <TextBox x:Name="CharacterSearch" Width="240" ToolTip="Karakter adına göre filtrele"
+                                 TextChanged="OnCharacterSearch" Margin="0,0,8,0" />
+                        <Button Content="Önceki" Click="OnPreviousCharacters" Margin="0,0,6,0" />
+                        <Button Content="Sonraki" Click="OnNextCharacters" />
+                        <TextBlock x:Name="CharacterPageInfo" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Style="{StaticResource HintText}" />
+                    </StackPanel>
                     <StackPanel x:Name="Voices" />
                     <TextBlock x:Name="Credits" Style="{StaticResource HintText}" Margin="0,12,0,0" />
                 </StackPanel>

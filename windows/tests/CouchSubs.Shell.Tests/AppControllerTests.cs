@@ -268,6 +268,43 @@ public class AppControllerTests
     }
 
     [Fact]
+    public void SwitchingGamesPreservesSeparateCastAndOriginalSettings()
+    {
+        var settings = new MemorySettings();
+        var controller = Make(settings: settings);
+        controller.SelectGame("GTA 5");
+        controller.AddCharacter("Michael", CharacterGroup.Male);
+        controller.AssignVoice(DubbingVoice.Male2, "Michael");
+        controller.SelectGame("GTA 6");
+        controller.AddCharacter("Lucia", CharacterGroup.Female);
+        controller.AssignVoice(DubbingVoice.Female3, "Lucia");
+        Assert.DoesNotContain("MICHAEL", controller.Settings.Dubbing.Cast.Assignments.Keys);
+        Assert.Equal(DubbingVoice.Female3, controller.Settings.Dubbing.Cast.Assignments["LUCIA"]);
+        controller.SelectGame("GTA 5");
+        Assert.Equal(DubbingVoice.Male2, controller.Settings.Dubbing.Cast.Assignments["MICHAEL"]);
+        Assert.DoesNotContain("LUCIA", controller.Settings.Dubbing.Cast.Assignments.Keys);
+        Assert.Contains("GTA 6", controller.KnownGames);
+        Assert.Equal("GTA 5", settings.Saved!.Dubbing.ActiveGame);
+        controller.Dispose();
+    }
+
+    [Fact]
+    public void CharacterGameLibraryPersistsWhenSettingsAreSerialized()
+    {
+        var settings = new DubbingSettings();
+        settings = GameCastLibrary.Switch(settings, "GTA 5");
+        var cast = settings.Cast.Copy();
+        cast.Assign(DubbingVoice.Male3, "Trevor");
+        settings = GameCastLibrary.SaveCurrent(settings with { Cast = cast });
+        settings = GameCastLibrary.Switch(settings, "GTA 6");
+        var serialized = System.Text.Json.JsonSerializer.Serialize(settings);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<DubbingSettings>(serialized)!;
+        var gta5 = GameCastLibrary.Switch(restored, "GTA 5");
+        Assert.Equal(DubbingVoice.Male3, gta5.Cast.Assignments["TREVOR"]);
+        Assert.Equal("GTA 6", restored.ActiveGame);
+    }
+
+    [Fact]
     public void FreshInstallStartsAtWelcome() => Assert.Equal(OnboardingStep.Welcome, Make().Step);
 
     [Fact]

@@ -36,7 +36,11 @@ public sealed record DubbingSettings
     public bool Enabled { get; init; }
     public DubbingEngine Engine { get; init; } = DubbingEngine.Natural;
     public DubbingOutput Output { get; init; } = DubbingOutput.Tv;
+    /// <summary>Geçerli oyunun sesleri; önceki sürümlerin Cast ayarıyla uyumludur.</summary>
     public VoiceCast Cast { get; init; } = new();
+    /// <summary>Karakterler oyun adına göre ayrılır, oyun başına sınırsız giriş saklanabilir.</summary>
+    public string ActiveGame { get; init; } = "Genel";
+    public Dictionary<string, VoiceCast> GameCasts { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>Seslendirme motoru (gerçekte uygulamayla gelen pocket-tts, bkz. <see cref="PocketTtsServer"/>).</summary>
