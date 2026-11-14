@@ -3,7 +3,7 @@
 using System.Windows;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
-using System.Windows.Forms;
+using CouchSubs.App.Services;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -40,9 +40,10 @@ public sealed class PcResultWindow : Window
     public static void DisplayOnMonitor(string text, int milliseconds, string displayId)
     {
         current?.Close();
-        var monitor = Screen.AllScreens.FirstOrDefault(s => s.DeviceName == displayId)
-            ?? Screen.AllScreens.FirstOrDefault(s => s.Primary);
-        current = new PcResultWindow(text, milliseconds, monitor?.Bounds);
+        System.Drawing.Rectangle? bounds;
+        try { bounds = WindowsGameScreenCapture.BoundsFor(displayId); }
+        catch (InvalidOperationException) { bounds = null; }
+        current = new PcResultWindow(text, milliseconds, bounds);
         current.Show();
     }
 
