@@ -66,6 +66,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Oyundaki altyazının son görüldüğü yer; deneme altyazısı TV'de oraya yerleşir.</summary>
     private TextBox? lastSubtitleBox;
     private int processing;
+    private ITextReader? worldReader;
+    private ITextTranslator? worldTranslator;
+    private CancellationTokenSource worldWork = new();
+    private int worldBusy;
+    private DateTime nextWorldScan;
+    private string lastWorldKey = "";
+    private int worldNoText;
     private Dubber? dubber;
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
@@ -128,6 +135,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<GameDisplay> PcDisplays => services.GameScreen?.Displays() ?? [];
     public string? PcCaptureError { get; private set; }
     public event Action<string, int, string>? PcSubtitleReady;
+    /// <summary>PC üzerinde diyalogdan ayrı envanter/menü/nesne çevirileri.</summary>
+    public event Action<IReadOnlyList<ScreenTranslation.Item>, string>? PcWorldTextReady;
+    public event Action? PcWorldTextClear;
     public bool IsRunning { get => isRunning; private set => Set(ref isRunning, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(TvTone)]); }
     public bool IsStarting { get => isStarting; private set => Set(ref isStarting, value); }
     public SessionState SessionState { get => sessionState; private set => Set(ref sessionState, value, [nameof(Ps5StatusText), nameof(Ps5Tone)]); }
@@ -171,7 +181,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             server.SendStyle(value.Style);
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
-                              || old.OnlineTranslation != value.OnlineTranslation))
+                              || old.OnlineTranslation != value.OnlineTranslation || old.AutoWorldText != value.AutoWorldText))
             {
                 RefreshTranslatorStatus();
                 MakePipeline();
@@ -884,6 +894,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         pcCaptureCancellation?.Cancel();
         pcCaptureCancellation = null;
+        worldWork.Cancel();
+        worldWork = new CancellationTokenSource();
+        worldReader = null;
+        worldTranslator = null;
+        lastWorldKey = "";
+        worldNoText = 0;
+        server.ClearScreen();
+        post(() => PcWorldTextClear?.Invoke());
         session?.Stop();
         session?.Dispose();
         session = null;
@@ -955,6 +973,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         pipeline?.Reset();
         pipeline = null;
+        worldWork.Cancel();
+        worldWork = new CancellationTokenSource();
+        worldReader = settings.AutoWorldText ? services.MakeReader(settings.SourceLanguage) : null;
+        worldTranslator = settings.AutoWorldText ? MakeTranslator() : null;
+        nextWorldScan = default;
+        lastWorldKey = "";
+        worldNoText = 0;
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage);
         activeReader = reader;
@@ -1063,9 +1088,59 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Ayrı OCR/çeviri hattı. Ses üretmez, dublajı kesmez, konuşma altyazısının alanını atlar.
+    /// 3 saniyelik tarama ve tek uçuş kuralı ana oyun/altyazı işleme hattını korur.
+    /// </summary>
+    private void ScheduleWorldText(Frame frame)
+    {
+        if (!settings.AutoWorldText || worldReader is null || worldTranslator is null) return;
+        if (screenWork is not null || DateTime.UtcNow < screenShownUntil) return;
+        if (DateTime.UtcNow < nextWorldScan) return;
+        if (Interlocked.CompareExchange(ref worldBusy, 1, 0) != 0) return;
+        nextWorldScan = DateTime.UtcNow.AddSeconds(3);
+        var cancellation = worldWork.Token;
+        var reader = worldReader;
+        var translator = worldTranslator;
+        var subtitleRegion = settings.Region;
+        var display = settings.PcDisplayId;
+        var pc = settings.Source == GameSource.Pc;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var results = await AmbientTextTranslation.TranslateAsync(
+                    frame, reader, translator, subtitleRegion, cancellation).ConfigureAwait(false);
+                if (cancellation.IsCancellationRequested) return;
+                if (results.Count == 0)
+                {
+                    if (++worldNoText >= 2 && lastWorldKey.Length != 0)
+                    {
+                        lastWorldKey = "";
+                        server.ClearScreen();
+                        if (pc) post(() => PcWorldTextClear?.Invoke());
+                    }
+                    return;
+                }
+                worldNoText = 0;
+                var key = AmbientTextTranslation.SnapshotKey(results);
+                if (key == lastWorldKey) return;
+                lastWorldKey = key;
+                if (pc)
+                    post(() => PcWorldTextReady?.Invoke(results, display));
+                else
+                    server.SendScreen(results, 9000);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception) { /* İkincil yazı okuma hatası konuşma dublajını durdurmaz. */ }
+            finally { Volatile.Write(ref worldBusy, 0); }
+        }, cancellation);
+    }
+
     private async void HandleFrame(Frame frame)
     {
         post(() => LastFrame = frame);
+        ScheduleWorldText(frame);
         // Duraklatıldıysa kare yalnız ek bölgeler ve serbest alan için saklanır; altyazı okunmaz.
         if (subtitlesPaused) return;
         // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
