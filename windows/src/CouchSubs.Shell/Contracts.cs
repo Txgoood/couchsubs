@@ -40,7 +40,7 @@ public sealed record UserSettings
     public string PcDisplayId { get; init; } = "";
     public CropRegion Region { get; init; } = new();
     /// <summary>Envanter/harita/menü OCR; diyalog hattından bağımsız ve otomatik.</summary>
-    public bool AutoWorldText { get; init; } = true;
+    public bool AutoWorldText { get; init; } = false;
     /// <summary>Ek bölge 1 (ör. sağ üstteki görev paneli); null ise kapalı. Num 1 tuşuyla bir kez okunup çevrilir.</summary>
     public CropRegion? ExtraRegion1 { get; init; }
     /// <summary>Ek bölge 2 (ör. sağ alttaki bilgi kutusu); null ise kapalı. Num 2 tuşuyla bir kez okunup çevrilir.</summary>
