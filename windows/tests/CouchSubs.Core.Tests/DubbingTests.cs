@@ -110,6 +110,38 @@ public class VoiceCastTests
     }
 
     [Fact]
+    public void UnlimitedCharactersReuseExistingVoiceFilesWithoutNewTtsModels()
+    {
+        var cast = new VoiceCast();
+        for (var i = 0; i < 500; i++)
+        {
+            var name = $"GTA NPC {i:000}";
+            cast.SetGroup(name, i % 3 == 0 ? CharacterGroup.Male :
+                i % 3 == 1 ? CharacterGroup.Female : CharacterGroup.Creature);
+            cast.Assign(DubbingVoices.All[i % DubbingVoices.All.Length], name);
+        }
+        var restored = JsonSerializer.Deserialize<VoiceCast>(JsonSerializer.Serialize(cast))!;
+        Assert.Equal(500, restored.Assignments.Count);
+        Assert.Equal(500, restored.Groups.Count);
+        Assert.Equal(CharacterGroup.Creature, restored.GroupFor("GTA NPC 002"));
+        Assert.Equal(cast.Assignments["GTA NPC 499"], restored.Assignments["GTA NPC 499"]);
+        Assert.Equal(6, restored.Assignments.Values.Distinct().Count());
+    }
+
+    [Fact]
+    public void NewGroupDoesNotReplaceAssignedCharacterVoice()
+    {
+        var cast = new VoiceCast();
+        cast.Assign(DubbingVoice.Male3, "Trevor");
+        cast.SetGroup("Trevor", CharacterGroup.Male);
+        Assert.Equal(DubbingVoice.Male3, cast.VoiceFor(new SpokenLine("", "", "TREVOR"), out _));
+        Assert.Equal(CharacterGroup.Male, cast.GroupFor("trevor"));
+        cast.Remove("Trevor");
+        Assert.Empty(cast.Assignments);
+        Assert.Empty(cast.Groups);
+    }
+
+    [Fact]
     public void ManualChoiceIsSaved()
     {
         var cast = new VoiceCast();
