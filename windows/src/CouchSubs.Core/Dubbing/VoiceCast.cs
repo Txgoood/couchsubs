@@ -129,6 +129,7 @@ public static class NameGender
 {
     private static readonly HashSet<string> Female = new(StringComparer.Ordinal)
     {
+        "lucia", "amanda", "tracey", "tanisha", "denise", "patricia", "paige", "maude", "molly", "taliana",
         "freya", "faye", "angrboda", "sif", "thrud", "ellie", "abby", "dina", "tess", "marlene", "riley", "aloy", "elisabet",
         "beta", "mary", "jane", "mj", "may", "rio", "hailey", "lara", "jill", "claire", "ada", "ashley", "tifa", "aerith",
         "yuffie", "jessie", "yuna", "lulu", "rikku", "ciri", "yennefer", "triss", "kassandra", "aya", "evie", "lydia",
@@ -141,6 +142,8 @@ public static class NameGender
 
     private static readonly HashSet<string> Male = new(StringComparer.Ordinal)
     {
+        "michael", "franklin", "trevor", "lamar", "lester", "jimmy", "ron", "wade", "devin", "solomon", "martin",
+        "brad", "dave", "jason", "niko", "roman", "luis", "johnny", "chop",
         "kratos", "atreus", "mimir", "baldur", "thor", "odin", "brok", "sindri", "tyr", "heimdall", "freyr", "durlin", "joel",
         "tommy", "bill", "henry", "jesse", "lev", "isaac", "owen", "manny", "jerry", "rost", "erend", "varl", "sylens",
         "kotallo", "peter", "miles", "harry", "otto", "kraven", "venom", "norman", "aaron", "ganke", "leon", "chris",
