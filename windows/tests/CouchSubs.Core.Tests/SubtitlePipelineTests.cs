@@ -148,6 +148,21 @@ public class SubtitlePipelineTests
     }
 
     [Fact]
+    public async Task LiveTurkishSubtitleIsSpokenWhenTranslatorDoesNotProvideSpeakerLines()
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(
+            new FakeReader("Hold the gate", "Hold the gate"), new FakeTranslator(), sender);
+        var speech = new List<CouchSubs.Core.Dubbing.SpokenLine>();
+        pipeline.SpeechReady += lines => speech.AddRange(lines);
+        await Run(pipeline, 2);
+        Assert.Equal(["TR: Hold the gate"], sender.Sent);
+        var spoken = Assert.Single(speech);
+        Assert.Equal("Hold the gate", spoken.English);
+        Assert.Equal("TR: Hold the gate", spoken.Turkish);
+    }
+
+    [Fact]
     public async Task TextRecognitionRunsOffTheCallingThread()
     {
         var reader = new FakeReader("Hold the gate");
