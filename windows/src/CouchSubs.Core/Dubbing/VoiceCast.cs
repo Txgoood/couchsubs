@@ -41,20 +41,32 @@ public sealed class VoiceCast
     /// <summary>Tireli konuşmada sıradaki kişinin sesi.</summary>
     public DubbingVoice Partner { get; set; } = DubbingVoice.Female1;
 
-    private bool _lastWasPartner;
+    // Etiketsiz repliklerde sadece açık diyalog tiresi varsa dönüşümlü ses verilir.
+    // İlk tireli konuşma anlatıcıdan başlar.
+    private bool _lastWasPartner = true;
 
-    public static string Key(string name) => name.ToUpperInvariant();
+    public static string Key(string name) => name.Trim().ToUpperInvariant();
 
-    /// <summary>Satırın sesi; yeni bir ad ilk kez görülünce ona bir ses ayrılır (değişti: true).</summary>
+    /// <summary>
+    /// İki sesli mod: bilinen erkek isimleri anlatıcı, bilinen kadın isimleri partner.
+    /// Cinsiyeti bilinmeyen iki farklı isim sırayla iki role sabitlenir.
+    /// Bu atamalar oyun boyunca ve ayarlarda kalıcıdır.
+    /// </summary>
     public DubbingVoice VoiceFor(SpokenLine line, out bool assigned)
     {
         assigned = false;
-        if (line.Speaker is { } speaker)
+        if (!string.IsNullOrWhiteSpace(line.Speaker))
         {
-            _lastWasPartner = false;
-            var key = Key(speaker);
+            var key = Key(line.Speaker);
             if (Assignments.TryGetValue(key, out var known)) return known;
-            var voice = Pick(NameGender.Guess(speaker));
+            var gender = NameGender.Guess(line.Speaker);
+            var voice = gender switch
+            {
+                VoiceGender.Female => Partner,
+                VoiceGender.Male => Narrator,
+                _ => Assignments.Values.Count(v => v == Narrator) <= Assignments.Values.Count(v => v == Partner)
+                    ? Narrator : Partner,
+            };
             Assignments[key] = voice;
             assigned = true;
             return voice;
@@ -71,18 +83,6 @@ public sealed class VoiceCast
         Narrator = Narrator,
         Partner = Partner,
     };
-
-    /// <summary>Yeni karakter için en az kullanılan ses; anlatıcı sesi en sona kalır.</summary>
-    private DubbingVoice Pick(VoiceGender? gender)
-    {
-        var uses = DubbingVoices.All.ToDictionary(voice => voice, _ => 0);
-        foreach (var voice in Assignments.Values) uses[voice]++;
-        uses[Narrator]++;
-        return DubbingVoices.All
-            .Where(voice => gender is null || voice.Gender() == gender)
-            .OrderBy(voice => uses[voice]).ThenBy(voice => (int)voice)
-            .First();
-    }
 }
 
 /// <summary>Addan cinsiyet tahmini: oyun karakterleri ve yaygın İngilizce adlar (Mac ile aynı listeler).</summary>
