@@ -114,6 +114,16 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public bool HasAccount => accountId is not null;
     public RegisteredConsole? Console => console;
     public LgTv? Tv => tv;
+    private bool HasPairedPs5 => accountId is not null && console is not null && tv is not null
+        && store.Load<string>(StoreKeys.TvKey) is not null;
+    /// <summary>PS5 olmadan doğrudan bilgisayar oyununu kullan; yerel modeller gerektiğinde indirilir.</summary>
+    public void EnterPcMode()
+    {
+        Settings = settings with { Source = GameSource.Pc };
+        if (!ModelInstalled) StartModelDownload();
+        Step = OnboardingStep.Done;
+    }
+
     public bool IsPcMode => settings.Source == GameSource.Pc;
     public IReadOnlyList<GameDisplay> PcDisplays => services.GameScreen?.Displays() ?? [];
     public string? PcCaptureError { get; private set; }
@@ -156,6 +166,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (isRunning && (old.Source != value.Source || old.PcDisplayId != value.PcDisplayId)) Stop();
             settingsStore.Save(value);
             Changed(nameof(IsPcMode), nameof(PcDisplays));
+            if (old.Source != value.Source && value.Source == GameSource.Ps5 && !HasPairedPs5)
+                Step = OnboardingStep.Welcome;
             server.SendStyle(value.Style);
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
