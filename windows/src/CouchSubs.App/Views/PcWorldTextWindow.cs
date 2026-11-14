@@ -19,8 +19,8 @@ public sealed class PcWorldTextWindow : Window
     private static PcWorldTextWindow? current;
     private readonly TextBlock content;
     private const int GwlExstyle = -20;
-    private const nint WsExTransparent = 0x20;
-    private const nint WsExNoactivate = 0x08000000;
+    private static readonly nint WsExTransparent = (nint)0x20;
+    private static readonly nint WsExNoactivate = (nint)0x08000000;
     private const uint WdaExcludeFromCapture = 0x11;
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
