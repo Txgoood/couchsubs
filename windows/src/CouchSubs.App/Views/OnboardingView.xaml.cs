@@ -45,7 +45,10 @@ public partial class OnboardingView : UserControl
         Progress.Value = (double)controller.StepNumber / AppController.StepCount;
         BackButton.Visibility = controller.Step == OnboardingStep.Welcome ? Visibility.Hidden : Visibility.Visible;
         ContinueButton.Visibility = controller.Step == OnboardingStep.Test ? Visibility.Hidden : Visibility.Visible;
+        PcSkipButton.Visibility = controller.Step == OnboardingStep.Welcome ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void OnPcSkip(object sender, RoutedEventArgs e) => controller.EnterPcMode();
 
     private void OnBack(object sender, RoutedEventArgs e) => controller.Back();
 
