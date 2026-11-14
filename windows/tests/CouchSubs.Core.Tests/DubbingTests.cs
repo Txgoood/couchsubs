@@ -128,6 +128,28 @@ public class SpeechAudioTests
     private static float[] Silence(double seconds) => new float[(int)(seconds * 24000)];
 
     [Fact]
+    public void SmoothEdgesAvoidHardStartAndStopWithoutChangingLength()
+    {
+        var source = new SpeechAudio(Enumerable.Repeat(0.8f, 2400).ToArray(), 24000);
+        var softened = source.SoftEdges();
+        Assert.Equal(source.Samples.Length, softened.Samples.Length);
+        Assert.Equal(0f, softened.Samples[0]);
+        Assert.Equal(0f, softened.Samples[^1]);
+        Assert.InRange(softened.Samples[100], 0.01f, 0.8f);
+        Assert.Equal(0.8f, softened.Samples[1200], 5);
+        Assert.Equal(0.8f, source.Samples[0]); // Source is unchanged.
+    }
+
+    [Fact]
+    public void SmoothEdgesHandleVeryShortSpeech()
+    {
+        var audio = new SpeechAudio([0.6f, 0.4f, 0.3f], 24000);
+        var softened = audio.SoftEdges();
+        Assert.Equal(3, softened.Samples.Length);
+        Assert.Equal(0f, softened.Samples[0]);
+    }
+
+    [Fact]
     public void LongPausesAreShortenedTo200Ms()
     {
         var audio = new SpeechAudio([.. Silence(0.2), .. Tone(0.3), .. Silence(0.4), .. Tone(0.3), .. Silence(0.5)], 24000);
