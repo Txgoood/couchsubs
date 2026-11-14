@@ -84,6 +84,11 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private readonly object gate = new();
     private readonly Queue<(SpokenLine Line, DubbingVoice? Preview)> queue = new();
     private ISpeechSynthesizer? synthesizer;
+    // Ses motorunun HTTP isteği bitmeden dispose edilmesini önler.
+    // Prepare ve Next tarafından başlatılan TÜM ses işlemleri takip edilir.
+    private int activeSynthOperations;
+    private TaskCompletionSource? synthIdle;
+    private bool disposed;
     private bool working;
     private int generation;
     private int Generation { get { lock (gate) return generation; } }
@@ -99,17 +104,17 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     public void Prepare()
     {
         PublishVoices();
-        var engine = Synthesizer();
-        _ = Task.Run(async () =>
+        _ = TrackSynth(async engine =>
         {
             try { await engine.StartAsync(); }
-            catch (Exception error) { post(() => Failed?.Invoke(error.Message)); }
+            catch (Exception error) { ReportFailure(error); }
         });
     }
 
     public void Speak(IReadOnlyList<SpokenLine> lines)
     {
         if (lines.Count == 0) return;
+        lock (gate) if (disposed) return;
         PublishVoices();
         bool interrupt;
         int number;
@@ -136,6 +141,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     /// <summary>Ayarlardaki "Dinle": deneme her zaman bilgisayardan çalar, kullanıcı o an bilgisayarın başında.</summary>
     public void Preview(DubbingVoice voice)
     {
+        lock (gate) if (disposed) return;
         Stop();
         PublishVoices();
         int number;
@@ -162,17 +168,79 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
 
     public async ValueTask DisposeAsync()
     {
-        Stop();
-        if (synthesizer is { } engine)
+        Task waitForSynthesis;
+        ISpeechSynthesizer? engine;
+        lock (gate)
         {
+            if (disposed) return;
+            disposed = true;
+            waitForSynthesis = activeSynthOperations == 0
+                ? Task.CompletedTask
+                : (synthIdle ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            engine = synthesizer;
             synthesizer = null;
-            await engine.DisposeAsync();
         }
+        Stop();
+        // Model hazırlama ve HTTP /tts istekleri bitmeden HttpClient kapatılamaz.
+        await waitForSynthesis.ConfigureAwait(false);
+        if (engine is not null) await engine.DisposeAsync().ConfigureAwait(false);
     }
 
-    private ISpeechSynthesizer Synthesizer()
+    /// <summary>Ses motoru oluşturma ve işlem sayma aynı kilit altında. Kapanırken yeni iş açılmaz.</summary>
+    private Task<T> TrackSynth<T>(Func<ISpeechSynthesizer, Task<T>> work)
     {
-        lock (gate) return synthesizer ??= model.CreateSynthesizer();
+        ISpeechSynthesizer engine;
+        lock (gate)
+        {
+            if (disposed) return Task.FromResult(default(T)!);
+            engine = synthesizer ??= model.CreateSynthesizer();
+            activeSynthOperations++;
+        }
+        return Task.Run(async () =>
+        {
+            try { return await work(engine).ConfigureAwait(false); }
+            finally { SynthesisFinished(); }
+        });
+    }
+
+    private Task TrackSynth(Func<ISpeechSynthesizer, Task> work)
+    {
+        ISpeechSynthesizer engine;
+        lock (gate)
+        {
+            if (disposed) return Task.CompletedTask;
+            engine = synthesizer ??= model.CreateSynthesizer();
+            activeSynthOperations++;
+        }
+        return Task.Run(async () =>
+        {
+            try { await work(engine).ConfigureAwait(false); }
+            finally { SynthesisFinished(); }
+        });
+    }
+
+    private void SynthesisFinished()
+    {
+        TaskCompletionSource? idle = null;
+        lock (gate)
+        {
+            if (--activeSynthOperations == 0)
+            {
+                idle = synthIdle;
+                synthIdle = null;
+            }
+        }
+        idle?.TrySetResult();
+    }
+
+    private void ReportFailure(Exception error)
+    {
+        lock (gate) if (disposed) return;
+        post(() =>
+        {
+            lock (gate) if (disposed) return;
+            Failed?.Invoke(error.Message);
+        });
     }
 
     private async Task RunAsync(int number)
@@ -205,7 +273,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         lock (gate)
         {
             // Geç başlayan eski döngü yeni altyazının cümlesini alıp atmasın.
-            if (queue.Count == 0 || number != generation) return null;
+            if (disposed || queue.Count == 0 || number != generation) return null;
             (line, preview) = queue.Dequeue();
         }
         DubbingVoice voice;
@@ -226,8 +294,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         }
         var text = SpeechText.Prepare(line.Turkish, SpeechEmotions.Guess(line.English));
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
-        var engine = Synthesizer();
-        return Task.Run<(SpeechAudio, bool)?>(async () =>
+        return TrackSynth<(SpeechAudio, bool)?>(async engine =>
         {
             try
             {
@@ -236,7 +303,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             // Motor ne olursa olsun (pocket-tts, Windows sesi) bir cümlenin hatası dublajı durdurmaz.
             catch (Exception error)
             {
-                post(() => Failed?.Invoke(error.Message));
+                ReportFailure(error);
                 return null;
             }
         });
