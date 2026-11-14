@@ -83,6 +83,27 @@ public sealed class SpeechAudio(float[] samples, int sampleRate)
     }
 
     /// <summary>
+    /// Seslendirme paketlerinin başında/sonunda ani PCM sıçramasını önleyen
+    /// kısa, örnek sayısını değiştirmeyen giriş/çıkış rampası.
+    /// Dublajın zamanlaması korunur; kaynağın örnek dizisi değiştirilmez.
+    /// </summary>
+    public SpeechAudio SoftEdges(double milliseconds = 12)
+    {
+        if (SampleRate <= 0 || Samples.Length == 0) return this;
+        var count = Math.Min((int)Math.Round(milliseconds * SampleRate / 1000.0), Samples.Length / 2);
+        if (count <= 0) return this;
+        var smooth = (float[])Samples.Clone();
+        for (var i = 0; i < count; i++)
+        {
+            // Başta ve sonda sıfıra in; köşe noktaları keskin olmasın.
+            var gain = (float)(0.5 - 0.5 * Math.Cos(Math.PI * i / count));
+            smooth[i] *= gain;
+            smooth[^(i + 1)] *= gain;
+        }
+        return new SpeechAudio(smooth, SampleRate);
+    }
+
+    /// <summary>
     /// Akıcılık: model virgül ve ünlemden sonra 200–400 ms susuyor. Cümle içindeki her sessizlik en çok
     /// <paramref name="maxPause"/>'a, baştaki <paramref name="lead"/>'e, sondaki <paramref name="tail"/>'e iner;
     /// kesilen yerler <paramref name="fade"/> ile yumuşatılır (Mac ile aynı).
