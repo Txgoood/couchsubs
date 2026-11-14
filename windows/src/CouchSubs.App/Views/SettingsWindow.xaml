@@ -136,6 +136,16 @@
                     </StackPanel>
                 </c:Card>
 
+                <c:Card Title="Oyun içi menü ve nesne çevirisi" Margin="0,16,0,0">
+                    <StackPanel>
+                        <CheckBox x:Name="AutoWorldText" Content="Menü, envanter, harita ve nesne yazılarını otomatik Türkçeye çevir"
+                                  Checked="OnAutoWorldText" Unchecked="OnAutoWorldText"
+                                  Foreground="{DynamicResource textPrimaryBrush}" />
+                        <TextBlock Text="Konuşma ve dublaj bağımsız kalır. Yeni yazılar yaklaşık 3 saniyede bir taranır. Karakter konuşuyorsa Türkçe dublaj devam eder; menü yazıları ayrı gösterilir. Bu seçenek performans için kapatılabilir."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    </StackPanel>
+                </c:Card>
+
                 <c:Card Title="{t:T 'Translate the screen (Num 9)'}" Margin="0,16,0,0">
                     <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
                                Text="{t:T 'Press Num 9 while playing: every text on the screen is translated once and shown on the TV in its own place. Press again to remove the translations.'}" />

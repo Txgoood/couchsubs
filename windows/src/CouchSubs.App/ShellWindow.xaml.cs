@@ -33,10 +33,15 @@ public partial class ShellWindow : Window
         // Bilgisayarda gösterilecek çeviriler küçük, üstte duran bir kutuda çıkar.
         controller.PcResultReady += PcResultWindow.Display;
         controller.PcSubtitleReady += PcResultWindow.DisplayOnMonitor;
+        controller.PcWorldTextReady += PcWorldTextWindow.Display;
+        controller.PcWorldTextClear += PcWorldTextWindow.Clear;
         Closed += (_, _) =>
         {
             controller.PcResultReady -= PcResultWindow.Display;
             controller.PcSubtitleReady -= PcResultWindow.DisplayOnMonitor;
+            controller.PcWorldTextReady -= PcWorldTextWindow.Display;
+            controller.PcWorldTextClear -= PcWorldTextWindow.Clear;
+            PcWorldTextWindow.Clear();
             hotkeys?.Dispose();
             SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             controller.Dispose();

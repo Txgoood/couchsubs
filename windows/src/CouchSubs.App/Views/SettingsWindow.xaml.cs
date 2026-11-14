@@ -45,6 +45,7 @@ public partial class SettingsWindow : Window
         // Num 8: oyunun o anki görüntüsü önizlemeye alınır.
         controller.SnapshotRequested += OnSnapshot;
         Closed += (_, _) => controller.SnapshotRequested -= OnSnapshot;
+        AutoWorldText.IsChecked = settings.AutoWorldText;
         Dubbing.Attach(controller);
         ShowDeepL();
         if (controller.HasDeepLKey) _ = ShowDeepLUsageAsync();
@@ -92,6 +93,9 @@ public partial class SettingsWindow : Window
             DeepLSave.IsEnabled = true;
         }
     }
+
+    private void OnAutoWorldText(object sender, RoutedEventArgs e) =>
+        Update(s => s with { AutoWorldText = AutoWorldText.IsChecked == true });
 
     private void OnDeepLToggle(object sender, RoutedEventArgs e) => Update(s => s with { OnlineTranslation = DeepLOn.IsChecked == true });
 
