@@ -14,6 +14,8 @@ public partial class DubbingCard : UserControl
 {
     private AppController? controller;
     private bool loading;
+    private int characterPage;
+    private const int PageSize = 24;
 
     public DubbingCard()
     {
@@ -190,6 +192,30 @@ public partial class DubbingCard : UserControl
         return row;
     }
 
+    private void OnCharacterSearch(object sender, TextChangedEventArgs e)
+    {
+        if (controller is null || loading) return;
+        characterPage = 0;
+        BuildVoices(controller.Settings.Dubbing.Cast);
+    }
+
+    private void OnPreviousCharacters(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        characterPage = Math.Max(0, characterPage - 1);
+        BuildVoices(controller.Settings.Dubbing.Cast);
+    }
+
+    private void OnNextCharacters(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        var query = CharacterSearch.Text.Trim();
+        var total = controller.Settings.Dubbing.Cast.Assignments.Keys.Count(name =>
+            name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        characterPage = Math.Min(Math.Max(0, (total - 1) / PageSize), characterPage + 1);
+        BuildVoices(controller.Settings.Dubbing.Cast);
+    }
+
     private void BuildVoices(VoiceCast cast)
     {
         Voices.Children.Clear();
@@ -197,9 +223,20 @@ public partial class DubbingCard : UserControl
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, narrator: voice) } })));
         Voices.Children.Add(VoiceRow(Localizer.Current["Second speaker in dialogue"], cast.Partner,
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, partner: voice) } })));
-        if (cast.Assignments.Count == 0) return;
-        Voices.Children.Add(new TextBlock { Text = Localizer.Current["Characters"], FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
-        foreach (var name in cast.Assignments.Keys.Order(StringComparer.Ordinal))
+        var filter = CharacterSearch.Text.Trim();
+        var names = cast.Assignments.Keys.Where(name =>
+            name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        characterPage = Math.Min(characterPage, Math.Max(0, (names.Length - 1) / PageSize));
+        CharacterPageInfo.Text = names.Length == 0 ? "0 karakter" :
+            $"{names.Length} karakter · {characterPage + 1}/{(names.Length - 1) / PageSize + 1}";
+        if (names.Length == 0) return;
+        Voices.Children.Add(new TextBlock
+        {
+            Text = Localizer.Current["Characters"], FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 12, 0, 4)
+        });
+        foreach (var name in names.Skip(characterPage * PageSize).Take(PageSize))
             Voices.Children.Add(CharacterRow(name, cast));
     }
 
