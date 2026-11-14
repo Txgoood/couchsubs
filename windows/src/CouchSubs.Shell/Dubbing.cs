@@ -298,7 +298,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         {
             try
             {
-                return ((await engine.SynthesizeAsync(text, url)).Tightened(), preview is not null);
+                return ((await engine.SynthesizeAsync(text, url)).Tightened().SoftEdges(), preview is not null);
             }
             // Motor ne olursa olsun (pocket-tts, Windows sesi) bir cümlenin hatası dublajı durdurmaz.
             catch (Exception error)
