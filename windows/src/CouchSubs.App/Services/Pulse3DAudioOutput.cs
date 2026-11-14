@@ -111,44 +111,33 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     public int Read(float[] buffer, int offset, int count)
     {
         var destination = buffer.AsSpan(offset, count);
-        // WaveOutEvent 16-bit stereo ya da float stereo fark etmeksizin sample provider'ı okur.
         game.Read(destination);
         lock (speechGate)
         {
-            if (speech is { } voice)
+            // Oyun ve Türkçe ses tek 48 kHz stereo döngüde karıştırılır.
+            // Konuşma başladığında/kesildiğinde oyun sesi aniden değişmez.
+            for (var i = 0; i < count; i += Channels)
             {
-                var remaining = voice.Length - speechPosition;
-                var mixed = Math.Min(count, remaining);
-                // 20 ms'lik düşüş / 35 ms'lik yükseliş. Stereo kanallara aynı kazanç.
-                for (var i = 0; i < mixed; i += Channels)
+                var speaking = speech is { } voice && speechPosition < voice.Length;
+                var left = speaking ? speech![speechPosition] : 0f;
+                var right = speaking && speechPosition + 1 < speech!.Length ? speech![speechPosition + 1] : left;
+                if (speaking)
                 {
-                    var left = voice[speechPosition + i];
-                    var right = i + 1 < mixed ? voice[speechPosition + i + 1] : left;
-                    var speaking = MathF.Max(MathF.Abs(left), MathF.Abs(right)) > 0.0001f;
-                    var target = speaking ? 0.35f : 1f;
-                    var step = (1f - 0.35f) / (Rate * (target < gameGain ? 0.020f : 0.035f));
-                    gameGain += Math.Clamp(target - gameGain, -step, step);
-                    destination[i] = Math.Clamp(destination[i] * gameGain + left, -1f, 1f);
-                    if (i + 1 < mixed)
-                        destination[i + 1] = Math.Clamp(destination[i + 1] * gameGain + right, -1f, 1f);
+                    speechPosition += Channels;
+                    if (speechPosition >= speech!.Length)
+                    {
+                        speech = null;
+                        speechPosition = 0;
+                    }
                 }
-                speechPosition += mixed;
-                if (speechPosition >= voice.Length)
-                {
-                    speech = null;
-                    speechPosition = 0;
-                }
+                var target = MathF.Max(MathF.Abs(left), MathF.Abs(right)) > 0.0001f ? 0.35f : 1f;
+                var transitionFrames = target < gameGain ? Rate * 0.020f : Rate * 0.035f;
+                var gainStep = 0.65f / transitionFrames;
+                gameGain += Math.Clamp(target - gameGain, -gainStep, gainStep);
+                destination[i] = Math.Clamp(destination[i] * gameGain + left, -1f, 1f);
+                if (i + 1 < count)
+                    destination[i + 1] = Math.Clamp(destination[i + 1] * gameGain + right, -1f, 1f);
             }
-        }
-        // Konuşma bitince arka plan sesini de yavaşça eski seviyesine yükselt.
-        // Yukarıdaki döngü yalnız konuşma örneği bulunan parçayı işlemiş olabilir.
-        var resume = Math.Clamp((1f - 0.35f) / (Rate * 0.035f), 0f, 1f);
-        var start = speech is null ? 0 : count;
-        for (var i = start; i < count; i += Channels)
-        {
-            gameGain = MathF.Min(1f, gameGain + resume);
-            destination[i] *= gameGain;
-            if (i + 1 < count) destination[i + 1] *= gameGain;
         }
         return count;
     }
