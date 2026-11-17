@@ -11,10 +11,11 @@ namespace CouchSubs.App.Services;
 /// Important: detects likely SPEECH, not anger, voice identity, or separated dialogue.
 /// Processes PS5 game audio in a bounded background queue, never on the native audio callback.
 /// </summary>
-internal sealed class SileroVadService : INeuralSpeechDetector
+internal sealed class SileroVadService(string? overrideModelPath = null) : INeuralSpeechDetector
 {
     public static string ModelPath => Path.Combine(AppContext.BaseDirectory, "vad", "silero_vad.onnx");
     public static bool IsBundled => File.Exists(ModelPath);
+    private string LocalModelPath => overrideModelPath ?? ModelPath;
     private readonly object lifecycle = new();
     private CancellationTokenSource? cancellation;
     private Channel<AudioPacket>? incoming;
@@ -33,7 +34,7 @@ internal sealed class SileroVadService : INeuralSpeechDetector
     {
         lock (lifecycle)
         {
-            if (cancellation is not null || !IsBundled) return;
+            if (cancellation is not null || !File.Exists(LocalModelPath)) return;
             Interlocked.Exchange(ref lastSpeechTicks, 0);
             Interlocked.Exchange(ref lastEvaluationTicks, 0);
             var token = new CancellationTokenSource();
@@ -89,7 +90,7 @@ internal sealed class SileroVadService : INeuralSpeechDetector
                 ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
                 GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
             };
-            using var session = new InferenceSession(ModelPath, options);
+            using var session = new InferenceSession(LocalModelPath, options);
             // Silero model state: [2,1,128], plus 64 preceding samples of context.
             float[] state = new float[256];
             float[] context = new float[64];
