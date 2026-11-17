@@ -1513,8 +1513,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             dubber.EmotionMode = now.EmotionMode;
             if (isRunning && settings.Source == GameSource.Ps5 &&
-                (now.EmotionMode is DubbingEmotionMode.Acoustic or DubbingEmotionMode.Neural) !=
-                (old.EmotionMode is DubbingEmotionMode.Acoustic or DubbingEmotionMode.Neural))
+                (now.EmotionMode is DubbingEmotionMode.Acoustic or DubbingEmotionMode.Neural ||
+                 old.EmotionMode is DubbingEmotionMode.Acoustic or DubbingEmotionMode.Neural))
                 DubbingError = "Ses destekli modu değiştirdiniz. PS5 ses yakalamayı yenilemek için Çeviriyi Durdur ve Başlat yapın.";
         }
         if (now.Output != old.Output)
