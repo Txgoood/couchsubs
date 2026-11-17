@@ -9,11 +9,11 @@ namespace CouchSubs.Shell.Tests;
 public sealed class EmotionContinuityTests
 {
     [Fact]
-    public void EmotionIsDisabledByDefaultToPreservePreviousAudio()
+    public void PreviousTextEmotionBehaviorIsPreservedByDefault()
     {
         var settings = new DubbingSettings();
-        Assert.Equal(DubbingEmotionMode.Off, settings.EmotionMode);
-        Assert.Null(new EmotionContinuity().Resolve(new SpokenLine("Get back!", "Geri çekil!", "Jason"), settings.EmotionMode));
+        Assert.Equal(DubbingEmotionMode.Balanced, settings.EmotionMode);
+        Assert.Equal(SpeechEmotion.Angry, new EmotionContinuity().Resolve(new SpokenLine("Get back!", "Geri çekil!", "Jason"), settings.EmotionMode));
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public sealed class EmotionContinuityTests
     {
         var settings = JsonSerializer.Deserialize<DubbingSettings>("{\"Enabled\":true}");
         Assert.NotNull(settings);
-        Assert.Equal(DubbingEmotionMode.Off, settings!.EmotionMode);
+        Assert.Equal(DubbingEmotionMode.Balanced, settings!.EmotionMode);
         Assert.True(settings.Enabled);
     }
 }
