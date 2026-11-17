@@ -37,7 +37,7 @@ public sealed record DubbingSettings
 {
     public bool Enabled { get; init; }
     /// <summary>Opt-in emotional speech. Never affects subtitle OCR or translation.</summary>
-    public DubbingEmotionMode EmotionMode { get; init; } = DubbingEmotionMode.Off;
+    public DubbingEmotionMode EmotionMode { get; init; } = DubbingEmotionMode.Balanced;
     public DubbingEngine Engine { get; init; } = DubbingEngine.Natural;
     public DubbingOutput Output { get; init; } = DubbingOutput.Tv;
     /// <summary>Geçerli oyunun sesleri; önceki sürümlerin Cast ayarıyla uyumludur.</summary>
@@ -103,7 +103,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private SubtitleServer? publishedOn;
 
     private readonly EmotionContinuity emotions = new();
-    public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Off;
+    public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Balanced;
     public DubbingEngine Engine { get; set; } = DubbingEngine.Natural;
     public VoiceCast Cast { get; set; } = new();
     public DubbingOutput Output { get; set; } = DubbingOutput.Tv;
