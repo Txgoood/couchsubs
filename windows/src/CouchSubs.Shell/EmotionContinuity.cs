@@ -18,14 +18,9 @@ public sealed class EmotionContinuity(Func<DateTimeOffset>? clock = null)
     {
         if (mode == DubbingEmotionMode.Off) return null;
         var guess = SpeechEmotions.Guess(line.English);
-        // Cinematic mode uses extra punctuation cues, but never guesses a speaker's identity.
-        if (mode == DubbingEmotionMode.Cinematic && guess is null)
-        {
-            if (line.English.TrimEnd().EndsWith('!')) guess = SpeechEmotion.Angry;
-            else if (line.English.TrimEnd().EndsWith('?')) guess = SpeechEmotion.Surprised;
-        }
+
         var speaker = line.Speaker?.Trim();
-        if (string.IsNullOrEmpty(speaker)) return guess;
+        if (string.IsNullOrEmpty(speaker)) return Punctuated(guess, line.English, mode);
         lock (gate)
         {
             var time = now();
@@ -46,6 +41,15 @@ public sealed class EmotionContinuity(Func<DateTimeOffset>? clock = null)
                 time - prior.At <= TimeSpan.FromSeconds(6))
                 return prior.Emotion;
         }
+        return Punctuated(null, line.English, mode);
+    }
+
+    private static SpeechEmotion? Punctuated(SpeechEmotion? existing, string english, DubbingEmotionMode mode)
+    {
+        if (existing is not null || mode != DubbingEmotionMode.Cinematic) return existing;
+        var text = english.TrimEnd();
+        if (text.EndsWith('!')) return SpeechEmotion.Angry;
+        if (text.EndsWith('?')) return SpeechEmotion.Surprised;
         return null;
     }
 }
