@@ -49,6 +49,23 @@
                         </StackPanel>
                     </Border>
                     <TextBlock x:Name="OutputHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                    <StackPanel x:Name="AtmospherePanel" Margin="0,0,0,16">
+                        <TextBlock Text="Oyun atmosferini koru – PULSE 3D" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="Oyun sesi (dublaj sırasında en az)" Style="{StaticResource HintText}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Slider x:Name="GameAtmosphere" Width="260" Minimum="35" Maximum="100" ValueChanged="OnAtmosphereChange"
+                                    TickFrequency="5" IsSnapToTickEnabled="True" />
+                            <TextBlock x:Name="GameAtmosphereValue" Width="50" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="Türkçe dublaj sesi" Style="{StaticResource HintText}" Margin="0,8,0,0" />
+                        <StackPanel Orientation="Horizontal">
+                            <Slider x:Name="TurkishVoiceVolume" Width="260" Minimum="0" Maximum="100" ValueChanged="OnAtmosphereChange"
+                                    TickFrequency="5" IsSnapToTickEnabled="True" />
+                            <TextBlock x:Name="TurkishVoiceVolumeValue" Width="50" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="Bu ayarlar yalnız PS5 oyun sesi ve dublajı aynı Windows/PULSE 3D çıkışına gönderildiğinde çalışır. Müzik ve efektler oyun sesinden ayrı değildir; İngilizce diyaloğu tek başına azaltmaz."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                    </StackPanel>
                     <!-- Oyun bazlı ses hafızası: ayrı oyun kayıtları, karakter sayısı sınırı yok. -->
                     <StackPanel Margin="0,0,0,12">
                         <TextBlock Text="Oyun ve karakter hafızası" FontWeight="SemiBold" Margin="0,0,0,6" />
