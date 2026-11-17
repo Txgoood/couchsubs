@@ -31,9 +31,13 @@ public enum DubbingEngine
     Fast,
 }
 
+public enum DubbingEmotionMode { Off, Balanced, Cinematic }
+
 public sealed record DubbingSettings
 {
     public bool Enabled { get; init; }
+    /// <summary>Opt-in emotional speech. Never affects subtitle OCR or translation.</summary>
+    public DubbingEmotionMode EmotionMode { get; init; } = DubbingEmotionMode.Off;
     public DubbingEngine Engine { get; init; } = DubbingEngine.Natural;
     public DubbingOutput Output { get; init; } = DubbingOutput.Tv;
     /// <summary>Geçerli oyunun sesleri; önceki sürümlerin Cast ayarıyla uyumludur.</summary>
@@ -98,6 +102,9 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private int Generation { get { lock (gate) return generation; } }
     private SubtitleServer? publishedOn;
 
+    private readonly EmotionContinuity emotions = new();
+    public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Off;
+    public DubbingEngine Engine { get; set; } = DubbingEngine.Natural;
     public VoiceCast Cast { get; set; } = new();
     public DubbingOutput Output { get; set; } = DubbingOutput.Tv;
     /// <summary>Yeni bir karaktere ses verildi; ayarlara kaydedilir (arayüz iş parçacığında).</summary>
@@ -296,7 +303,11 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             }
             if (copy is not null) post(() => CastChanged?.Invoke(copy));
         }
-        var text = SpeechText.Prepare(line.Turkish, SpeechEmotions.Guess(line.English));
+        // Windows' built-in synthesizer cannot interpret pocket-tts [emotion] tags.
+        // Text-only analysis is intentionally inexpensive and never blocks OCR or audio capture.
+        var emotion = EmotionMode == DubbingEmotionMode.Off || Engine == DubbingEngine.Fast
+            ? null : emotions.Resolve(line, EmotionMode);
+        var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
         return TrackSynth<(SpeechAudio, bool)?>(async engine =>
         {
