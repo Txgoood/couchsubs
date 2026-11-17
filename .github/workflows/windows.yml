@@ -190,6 +190,13 @@ jobs:
             "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.1/LICENSE" \
             -o publish/CouchSubs/vad/LICENSE.silero
 
+      # Exercise the real ONNX graph on silent PS5-shaped PCM before packaging.
+      - name: Silero VAD gerçek ONNX testi
+        shell: pwsh
+        env:
+          COUCHSUBS_SILERO_SMOKE_MODEL: ${{ github.workspace }}/publish/CouchSubs/vad/silero_vad.onnx
+        run: dotnet test windows/tests/CouchSubs.Shell.Tests/CouchSubs.Shell.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~SileroVadTests.BundledOnnxModelLoadsAndRejectsSilentPcm"
+
       # Türkçe dublajın ses motoru (Kyutai pocket-tts, MIT): sabit sürüm, özeti denetlenir.
       - name: Dublaj ses motoru
         shell: bash
