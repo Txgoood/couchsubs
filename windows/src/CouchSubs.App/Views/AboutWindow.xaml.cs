@@ -12,7 +12,8 @@ public partial class AboutWindow : Window
     internal AboutWindow()
     {
         InitializeComponent();
-        Version.Text = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "";
+        var version = Assembly.GetEntryAssembly()?.GetName().Version;
+        Version.Text = version is null ? "" : $"v{version.Major}.{version.Minor}.{version.Build} · Build #{version.Revision}";
     }
 
     public static void Open(Window? owner) => new AboutWindow { Owner = owner }.ShowDialog();

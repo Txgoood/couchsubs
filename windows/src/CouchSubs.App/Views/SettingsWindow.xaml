@@ -191,6 +191,7 @@
                         <Button Content="{t:T 'Set up again…'}" HorizontalAlignment="Right" Foreground="{DynamicResource dangerBrush}" Click="OnReset" />
                     </Grid>
                 </c:Card>
+                <TextBlock x:Name="BuildInfo" Style="{StaticResource HintText}" HorizontalAlignment="Center" Margin="0,24,0,0" />
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

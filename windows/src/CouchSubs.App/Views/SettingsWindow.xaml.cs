@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Navigation;
@@ -26,6 +27,8 @@ public partial class SettingsWindow : Window
     {
         this.controller = controller;
         InitializeComponent();
+        var version = Assembly.GetEntryAssembly()?.GetName().Version;
+        BuildInfo.Text = version is null ? "" : $"CouchSubs v{version.Major}.{version.Minor}.{version.Build} · Build #{version.Revision}";
         var settings = controller.Settings;
         TextSize.Value = Math.Clamp(settings.Style.FontSize, TextSize.Minimum, TextSize.Maximum);
         TextSizeValue.Text = ((int)TextSize.Value).ToString();
