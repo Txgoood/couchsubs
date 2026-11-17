@@ -15,6 +15,7 @@ public readonly record struct ProsodySnapshot(float Rms, float PeakRms, float En
 public sealed class GameProsodyMeter
 {
     private readonly object gate = new();
+    private readonly SpeechCandidateTracker speechCandidate = new();
     private float energy;
     private float peak;
     private float variation;
@@ -47,6 +48,7 @@ public sealed class GameProsodyMeter
         lock (gate)
         {
             var delta = Math.Abs(rms - energy);
+            speechCandidate.Observe(rms, zcr, delta, 1000.0 * frames / sampleRate, Environment.TickCount64);
             variation = packets == 0 ? 0f : variation * 0.8f + delta * 0.2f;
             energy = packets == 0 ? rms : 0.75f * energy + 0.25f * rms;
             peak = Math.Max(rms, peak * 0.88f);
@@ -82,11 +84,20 @@ public sealed class GameProsodyMeter
             state.ZeroCrossing >= 0.005f && state.ZeroCrossing <= 0.75f;
     }
 
+    /// <summary>Only a voice-like activity hint; not confirmed speech or emotion.</summary>
+    public bool RecentSpeechCandidate()
+    {
+        lock (gate)
+            return packets >= 3 && Environment.TickCount64 - lastTicks <= 800 &&
+                speechCandidate.IsCandidate(Environment.TickCount64);
+    }
+
     public void Clear()
     {
         lock (gate)
         {
             energy = peak = variation = crossings = 0;
+            speechCandidate.Reset();
             packets = 0;
             lastTicks = 0;
         }
