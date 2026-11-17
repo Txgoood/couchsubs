@@ -173,8 +173,22 @@ jobs:
       - name: Yayınla
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.1.1-dev.${GITHUB_RUN_NUMBER}"; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.1.6-dev.${GITHUB_RUN_NUMBER}"; fi
           dotnet publish windows/src/CouchSubs.App -c Release -r win-x64 --self-contained -o publish/CouchSubs -p:Version="$VERSION"
+
+      # MIT-licensed Silero v6.2.1: small local neural speech-activity model.
+      # Pin the source tag AND SHA256; a changed upstream binary must fail CI.
+      - name: Silero VAD ONNX modelini doğrula ve paketle
+        shell: bash
+        run: |
+          mkdir -p publish/CouchSubs/vad
+          curl -fL --retry 4 --retry-delay 3 \
+            "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.1/src/silero_vad/data/silero_vad.onnx" \
+            -o publish/CouchSubs/vad/silero_vad.onnx
+          echo "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3  publish/CouchSubs/vad/silero_vad.onnx" | sha256sum -c -
+          curl -fL --retry 4 --retry-delay 3 \
+            "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.1/LICENSE" \
+            -o publish/CouchSubs/vad/LICENSE.silero
 
       # Türkçe dublajın ses motoru (Kyutai pocket-tts, MIT): sabit sürüm, özeti denetlenir.
       - name: Dublaj ses motoru
@@ -186,7 +200,7 @@ jobs:
       - name: Kurulum dosyası
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.1.1-dev.$env:GITHUB_RUN_NUMBER" }
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.1.6-dev.$env:GITHUB_RUN_NUMBER" }
           Copy-Item -Recurse publish/CouchSubs pack
           Copy-Item LICENSE, THIRD-PARTY-NOTICES.md pack/
           dotnet tool install -g vpk --version 1.2.161
@@ -217,6 +231,7 @@ jobs:
         run: |
           if (-not (Test-Path publish/CouchSubs/couchsubs_native.dll)) { throw "couchsubs_native.dll yayın klasöründe yok" }
           if (-not (Test-Path publish/CouchSubs/tts/pocket-tts.exe)) { throw "pocket-tts.exe yayın klasöründe yok" }
+          if (-not (Test-Path publish/CouchSubs/vad/silero_vad.onnx)) { throw "Silero ONNX modeli yayın klasöründe yok" }
 
       - uses: actions/upload-artifact@v4
         with:
