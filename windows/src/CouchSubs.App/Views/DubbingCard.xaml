@@ -21,6 +21,16 @@
                     </Border>
                     <TextBlock x:Name="EngineHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
                 </StackPanel>
+                <StackPanel Margin="0,0,0,14">
+                    <TextBlock Text="Duygusal Türkçe dublaj" FontWeight="SemiBold" Margin="0,0,0,7" />
+                    <ComboBox x:Name="EmotionModePicker" Width="260" HorizontalAlignment="Left" SelectionChanged="OnEmotionMode">
+                        <ComboBoxItem Content="Kapalı (önceki dublaj)" Tag="Off" IsSelected="True" />
+                        <ComboBoxItem Content="Dengeli (metinden duygu)" Tag="Balanced" />
+                        <ComboBoxItem Content="Sinematik (güçlü vurgu)" Tag="Cinematic" />
+                    </ComboBox>
+                    <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Konuşma sesinin duygusunu henüz dinleyerek tanımaz. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
+                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,7,0,0" />
+                </StackPanel>
                 <StackPanel x:Name="DownloadPanel">
                     <TextBlock Text="{t:T 'The voices are downloaded once (440 MB).'}" Style="{StaticResource HintText}" Margin="0,0,0,8" />
                     <Button x:Name="DownloadButton" Content="{t:T 'Download voices'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Click="OnDownload" />
