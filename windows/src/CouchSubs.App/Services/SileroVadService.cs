@@ -117,12 +117,19 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
                     var frames = packet.Pcm.Length / packet.Channels;
                     for (int frame = 0; frame < frames; frame += stride)
                     {
-                        // Channel-average downmix and integer 48k -> 16k decimation.
-                        // In a later model revision replace with a proper low-pass resampler.
-                        var at = frame * packet.Channels;
-                        float mono = packet.Channels == 2
-                            ? (packet.Pcm[at] + packet.Pcm[at + 1]) / 65536f
-                            : packet.Pcm[at] / 32768f;
+                        // Simple anti-alias 3-tap box filter for 48k -> 16k analysis.
+                        // Downmix both channels; the original game PCM is never modified.
+                        float sum = 0f;
+                        var gathered = 0;
+                        for (int tap = 0; tap < stride && frame + tap < frames; tap++)
+                        {
+                            var at = (frame + tap) * packet.Channels;
+                            sum += packet.Channels == 2
+                                ? (packet.Pcm[at] + packet.Pcm[at + 1]) / 65536f
+                                : packet.Pcm[at] / 32768f;
+                            gathered++;
+                        }
+                        float mono = sum / gathered;
                         chunk[filled++] = mono;
                         if (filled < 512) continue;
                         Array.Copy(context, 0, modelInput, 0, 64);
