@@ -60,6 +60,8 @@ public partial class DubbingCard : UserControl
         loading = true;
         var settings = controller.Settings.Dubbing;
         Enabled.IsChecked = settings.Enabled;
+        foreach (ComboBoxItem item in EmotionModePicker.Items)
+            item.IsSelected = string.Equals(item.Tag as string, settings.EmotionMode.ToString(), StringComparison.Ordinal);
         EnginePanel.Visibility = controller.FastDubbingAvailable ? Visibility.Visible : Visibility.Collapsed;
         var fast = controller.FastDubbingAvailable && settings.Engine == DubbingEngine.Fast;
         (fast ? FastEngine : NaturalEngine).IsChecked = true;
@@ -252,6 +254,13 @@ public partial class DubbingCard : UserControl
     private static string DisplayName(string name) =>
         string.Join(' ', name.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
+
+    private void OnEmotionMode(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || controller is null || EmotionModePicker.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        if (Enum.TryParse<DubbingEmotionMode>(tag, out var mode))
+            Update(s => s with { Dubbing = s.Dubbing with { EmotionMode = mode } });
+    }
 
     private void OnEngine(object sender, RoutedEventArgs e)
     {
