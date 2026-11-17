@@ -1453,6 +1453,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var made = new Dubber(model, audio, () => server, () => ServerPort, post)
         {
             Cast = settings.Dubbing.Cast.Copy(),
+            Engine = settings.Dubbing.Engine,
+            EmotionMode = settings.Dubbing.EmotionMode,
             Output = settings.Source == GameSource.Pc ? DubbingOutput.Computer : settings.Dubbing.Output,
         };
         made.CastChanged += cast => Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
@@ -1485,6 +1487,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         // Dublajın kendi atadığı ses (CastChanged) zaten dublajda; kullanıcının seçimi kopyalanır.
         if (!ReferenceEquals(now.Cast, old.Cast)) dubber.Cast = now.Cast.Copy();
+        if (now.EmotionMode != old.EmotionMode) dubber.EmotionMode = now.EmotionMode;
         if (now.Output != old.Output)
         {
             StopDubber(); // Ses cihazı değiştiğinde eski çıkışa konuşma gönderilmesin.
