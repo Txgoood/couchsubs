@@ -311,7 +311,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         // Game audio is a mixed signal; it is NEVER authoritative for emotional state.
         // It can only strengthen explicitly emphatic text, not invent emotion from SFX.
         if (EmotionMode == DubbingEmotionMode.Acoustic && Engine == DubbingEngine.Natural &&
-            emotion is null && line.English.Contains('!') && Prosody?.RecentStrongEnergy() == true)
+            emotion is null && line.English.Contains('!') && Prosody?.RecentDynamicEnergy() == true)
             emotion = SpeechEmotion.Angry;
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
