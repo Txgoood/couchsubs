@@ -31,7 +31,7 @@ public enum DubbingEngine
     Fast,
 }
 
-public enum DubbingEmotionMode { Off, Balanced, Cinematic, Acoustic }
+public enum DubbingEmotionMode { Off, Balanced, Cinematic, Acoustic, Neural }
 
 public sealed record DubbingSettings
 {
@@ -66,6 +66,15 @@ public interface IAudioOutput
 }
 
 /// <summary>İsteğe bağlı oyun+dublaj miks çıkışı; sıradan TV/PC modları bu arayüzü kullanmaz.</summary>
+public interface INeuralSpeechDetector
+{
+    bool Ready { get; }
+    bool RecentSpeech { get; }
+    void Start();
+    void Push(short[] pcm, int channels, int rate);
+    void Stop();
+}
+
 public interface IGameAudioOutput : IAudioOutput, IDisposable
 {
     void Start();
@@ -110,6 +119,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
 
     private readonly EmotionContinuity emotions = new();
     public GameProsodyMeter? Prosody { get; set; }
+    public INeuralSpeechDetector? NeuralSpeech { get; set; }
     public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Balanced;
     public DubbingEngine Engine { get; set; } = DubbingEngine.Natural;
     public VoiceCast Cast { get; set; } = new();
@@ -316,8 +326,12 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         // Acoustic mode only allows a recent known emotion to carry into an
         // otherwise ambiguous line when sustained voice-like activity is present.
         // Explicit English text cues remain available even without a PS5 audio stream.
-        var allowCarry = EmotionMode != DubbingEmotionMode.Acoustic ||
-            Prosody?.RecentSpeechCandidate() == true;
+        var allowCarry = EmotionMode switch
+        {
+            DubbingEmotionMode.Acoustic => Prosody?.RecentSpeechCandidate() == true,
+            DubbingEmotionMode.Neural => NeuralSpeech?.RecentSpeech == true,
+            _ => true
+        };
         var emotion = EmotionMode == DubbingEmotionMode.Off || Engine == DubbingEngine.Fast
             ? null : emotions.Resolve(line, EmotionMode, allowCarry);
         var text = SpeechText.Prepare(line.Turkish, emotion);

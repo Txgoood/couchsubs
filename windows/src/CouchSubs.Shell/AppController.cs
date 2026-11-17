@@ -810,7 +810,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             }
 
             bool acousticMode = settings.Dubbing.Enabled && settings.Dubbing.EmotionMode == DubbingEmotionMode.Acoustic;
-            bool captureAudio = pulseAudioActive || acousticMode;
+            bool neuralMode = settings.Dubbing.Enabled && settings.Dubbing.EmotionMode == DubbingEmotionMode.Neural
+                && services.NeuralSpeech is not null;
+            if (neuralMode) services.NeuralSpeech?.Start();
+            bool captureAudio = pulseAudioActive || acousticMode || neuralMode;
             gameProsody.Clear();
             var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
             if (captureAudio && stream is StreamSession audioStream)
@@ -825,6 +828,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     var channels = Volatile.Read(ref pulseChannels);
                     var rate = Volatile.Read(ref pulseSampleRate);
                     if (acousticMode) gameProsody.Push(pcm, channels, rate);
+                    if (neuralMode) services.NeuralSpeech?.Push(pcm, channels, rate);
                     if (pulseAudioActive && services.GameAudio is { } mixer)
                         mixer.PushGameAudio(pcm, channels, rate);
                 };
@@ -919,6 +923,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         session = null;
         pulseAudioActive = false;
         services.GameAudio?.Dispose();
+        services.NeuralSpeech?.Stop();
         keeper?.Stop();
         keeper = null;
         pipeline?.Reset();
@@ -1468,6 +1473,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             Engine = settings.Dubbing.Engine,
             EmotionMode = settings.Dubbing.EmotionMode,
             Prosody = gameProsody,
+            NeuralSpeech = services.NeuralSpeech,
             Output = settings.Source == GameSource.Pc ? DubbingOutput.Computer : settings.Dubbing.Output,
         };
         made.CastChanged += cast => Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
@@ -1507,7 +1513,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             dubber.EmotionMode = now.EmotionMode;
             if (isRunning && settings.Source == GameSource.Ps5 &&
-                (now.EmotionMode == DubbingEmotionMode.Acoustic) != (old.EmotionMode == DubbingEmotionMode.Acoustic))
+                (now.EmotionMode is DubbingEmotionMode.Acoustic or DubbingEmotionMode.Neural ||
+                 old.EmotionMode is DubbingEmotionMode.Acoustic or DubbingEmotionMode.Neural))
                 DubbingError = "Ses destekli modu değiştirdiniz. PS5 ses yakalamayı yenilemek için Çeviriyi Durdur ve Başlat yapın.";
         }
         if (now.Output != old.Output)

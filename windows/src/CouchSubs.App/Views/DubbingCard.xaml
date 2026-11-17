@@ -28,8 +28,9 @@
                         <ComboBoxItem Content="Dengeli (metinden duygu)" Tag="Balanced" />
                         <ComboBoxItem Content="Sinematik (güçlü vurgu)" Tag="Cinematic" />
                         <ComboBoxItem Content="Ses destekli (PS5 deneysel)" Tag="Acoustic" />
+                        <ComboBoxItem Content="Yapay zekâ konuşma tespiti (Silero ONNX)" Tag="Neural" />
                     </ComboBox>
-                    <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Ses destekli mod, PS5 sesindeki konuşmaya benzer hareketlilik en az kısa bir süre devam ederse duygu sürekliliğine yardımcı olur. Müzik ve efektlerden konuşmayı kesin olarak ayıramaz. PC modunda metin tabanlı devam eder. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
+                    <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Ses destekli mod, PS5 sesindeki konuşmaya benzer hareketlilik en az kısa bir süre devam ederse duygu sürekliliğine yardımcı olur. Müzik ve efektlerden konuşmayı kesin olarak ayıramaz. Yapay zekâ modu yerel Silero ONNX ile konuşma olup olmadığını tahmin eder; müzik/efekti ayırmaz ve duyguyu sesten sınıflandırmaz. PC modunda metin tabanlı devam eder. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
                                Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,7,0,0" />
                 </StackPanel>
                 <StackPanel x:Name="DownloadPanel">
