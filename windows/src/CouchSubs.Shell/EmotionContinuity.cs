@@ -14,7 +14,7 @@ public sealed class EmotionContinuity(Func<DateTimeOffset>? clock = null)
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Func<DateTimeOffset> now = clock ?? (() => DateTimeOffset.UtcNow);
 
-    public SpeechEmotion? Resolve(SpokenLine line, DubbingEmotionMode mode)
+    public SpeechEmotion? Resolve(SpokenLine line, DubbingEmotionMode mode, bool allowAcousticCarry = true)
     {
         if (mode == DubbingEmotionMode.Off) return null;
         var guess = SpeechEmotions.Guess(line.English);
@@ -36,7 +36,8 @@ public sealed class EmotionContinuity(Func<DateTimeOffset>? clock = null)
             }
             // Only cinematic mode carries emotion to the next emphatic line within a short turn.
             // Plain neutral sentences must stay neutral to avoid repetitive theatrical voices.
-            if ((mode == DubbingEmotionMode.Cinematic || mode == DubbingEmotionMode.Acoustic) &&
+            if ((mode == DubbingEmotionMode.Cinematic ||
+                 (mode == DubbingEmotionMode.Acoustic && allowAcousticCarry)) &&
                 line.English.Contains('!') && memory.TryGetValue(speaker, out var prior) &&
                 time - prior.At <= TimeSpan.FromSeconds(6))
                 return prior.Emotion;
