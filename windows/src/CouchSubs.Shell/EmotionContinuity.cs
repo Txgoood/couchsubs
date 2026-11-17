@@ -37,7 +37,7 @@ public sealed class EmotionContinuity(Func<DateTimeOffset>? clock = null)
             // Only cinematic mode carries emotion to the next emphatic line within a short turn.
             // Plain neutral sentences must stay neutral to avoid repetitive theatrical voices.
             if ((mode == DubbingEmotionMode.Cinematic ||
-                 (mode == DubbingEmotionMode.Acoustic && allowAcousticCarry)) &&
+                 ((mode == DubbingEmotionMode.Acoustic || mode == DubbingEmotionMode.Neural) && allowAcousticCarry)) &&
                 line.English.Contains('!') && memory.TryGetValue(speaker, out var prior) &&
                 time - prior.At <= TimeSpan.FromSeconds(6))
                 return prior.Emotion;
