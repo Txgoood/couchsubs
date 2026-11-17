@@ -798,6 +798,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 try
                 {
+                    gameAudio.SetAtmosphereMix(settings.Dubbing.GameAtmospherePercent,
+                        settings.Dubbing.TurkishVoicePercent);
                     gameAudio.Start();
                     pulseAudioActive = true;
                 }
@@ -1498,6 +1500,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         // Dublajın kendi atadığı ses (CastChanged) zaten dublajda; kullanıcının seçimi kopyalanır.
         if (!ReferenceEquals(now.Cast, old.Cast)) dubber.Cast = now.Cast.Copy();
+        if (now.GameAtmospherePercent != old.GameAtmospherePercent ||
+            now.TurkishVoicePercent != old.TurkishVoicePercent)
+            services.GameAudio?.SetAtmosphereMix(now.GameAtmospherePercent, now.TurkishVoicePercent);
         if (now.EmotionMode != old.EmotionMode)
         {
             dubber.EmotionMode = now.EmotionMode;

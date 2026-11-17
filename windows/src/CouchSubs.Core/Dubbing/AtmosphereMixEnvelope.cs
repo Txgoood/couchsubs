@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+namespace CouchSubs.Core.Dubbing;
+
+/// <summary>
+/// Smooth stereo ambience-preserving mix envelope. Does not attempt to isolate
+/// dialogue from music/effects: the PS5 signal is a single mixed soundtrack.
+/// No allocation, I/O or model inference in the render callback.
+/// </summary>
+public sealed class AtmosphereMixEnvelope
+{
+    private readonly int rate;
+    private float gameGain = 1f;
+    private float voiceGain;
+    public AtmosphereMixEnvelope(int sampleRate = 48000)
+    {
+        if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
+        rate = sampleRate;
+    }
+
+    public float CurrentGameGain => gameGain;
+    public float CurrentVoiceGain => voiceGain;
+
+    /// <summary>Process one stereo frame. KeepGame=1 disables ducking entirely.</summary>
+    public (float Left, float Right) Step(
+        float gameLeft, float gameRight, float speechLeft, float speechRight,
+        float keepGame = 0.82f, float speechVolume = 0.85f)
+    {
+        keepGame = Math.Clamp(float.IsFinite(keepGame) ? keepGame : 1f, 0.35f, 1f);
+        speechVolume = Math.Clamp(float.IsFinite(speechVolume) ? speechVolume : 0f, 0f, 1f);
+        var speaking = MathF.Max(MathF.Abs(speechLeft), MathF.Abs(speechRight)) > 0.0001f;
+        // Downward gain takes ~35ms, release ~180ms to avoid pumping/abrupt ambient loss.
+        var target = speaking ? keepGame : 1f;
+        var limit = 1f / (rate * (target < gameGain ? 0.035f : 0.180f));
+        gameGain += Math.Clamp(target - gameGain, -limit, limit);
+        // Ramps TTS start/stop independently so sudden words don't click.
+        var voiceTarget = speaking ? speechVolume : 0f;
+        var voiceStep = 1f / (rate * (voiceTarget > voiceGain ? 0.012f : 0.045f));
+        voiceGain += Math.Clamp(voiceTarget - voiceGain, -voiceStep, voiceStep);
+
+        var left = gameLeft * gameGain + speechLeft * voiceGain;
+        var right = gameRight * gameGain + speechRight * voiceGain;
+        // Gentle shared limiter avoids clipping while preserving stereo balance.
+        var highest = MathF.Max(1f, MathF.Max(MathF.Abs(left), MathF.Abs(right)));
+        return (left / highest, right / highest);
+    }
+
+    public void Reset()
+    {
+        gameGain = 1f;
+        voiceGain = 0f;
+    }
+}

@@ -21,13 +21,20 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     private readonly object speechGate = new();
     private float[]? speech;
     private int speechPosition;
-    // Oyun sesini aniden %35'e düşürmek kısa çıt sesine neden olabiliyor.
-    // Kanallar arası aynı gain korunarak örnek başına yumuşak geçiş uygulanır.
-    private float gameGain = 1f;
+    // Separate envelopes preserve stereo space and prevent abrupt ambience changes.
+    private readonly AtmosphereMixEnvelope mix = new(Rate);
+    private int keepGamePercent = 82;
+    private int voicePercent = 85;
     private WaveOutEvent? output;
     private readonly object lifecycleGate = new();
 
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(Rate, Channels);
+
+    public void SetAtmosphereMix(int keepGame, int voice)
+    {
+        Volatile.Write(ref keepGamePercent, Math.Clamp(keepGame, 35, 100));
+        Volatile.Write(ref voicePercent, Math.Clamp(voice, 0, 100));
+    }
 
     public void Start()
     {
@@ -114,8 +121,9 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
         game.Read(destination);
         lock (speechGate)
         {
-            // Oyun ve Türkçe ses tek 48 kHz stereo döngüde karıştırılır.
-            // Konuşma başladığında/kesildiğinde oyun sesi aniden değişmez.
+            // Preserve stereo position and ambience while a Turkish line plays.
+            var keep = Volatile.Read(ref keepGamePercent) / 100f;
+            var voiceLevel = Volatile.Read(ref voicePercent) / 100f;
             for (var i = 0; i < count; i += Channels)
             {
                 var speaking = speech is { } voice && speechPosition < voice.Length;
@@ -130,13 +138,10 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
                         speechPosition = 0;
                     }
                 }
-                var target = MathF.Max(MathF.Abs(left), MathF.Abs(right)) > 0.0001f ? 0.35f : 1f;
-                var transitionFrames = target < gameGain ? Rate * 0.020f : Rate * 0.035f;
-                var gainStep = 0.65f / transitionFrames;
-                gameGain += Math.Clamp(target - gameGain, -gainStep, gainStep);
-                destination[i] = Math.Clamp(destination[i] * gameGain + left, -1f, 1f);
-                if (i + 1 < count)
-                    destination[i + 1] = Math.Clamp(destination[i + 1] * gameGain + right, -1f, 1f);
+                var mixed = mix.Step(destination[i], i + 1 < count ? destination[i + 1] : 0f,
+                    left, right, keep, voiceLevel);
+                destination[i] = mixed.Left;
+                if (i + 1 < count) destination[i + 1] = mixed.Right;
             }
         }
         return count;
@@ -152,5 +157,6 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
         }
         Stop();
         game.Clear();
+        lock (speechGate) mix.Reset();
     }
 }
