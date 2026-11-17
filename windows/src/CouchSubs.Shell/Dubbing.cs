@@ -306,13 +306,14 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         }
         // Windows' built-in synthesizer cannot interpret pocket-tts [emotion] tags.
         // Text-only analysis is intentionally inexpensive and never blocks OCR or audio capture.
+        // Mixed game audio must never invent anger from loud explosions or music.
+        // Acoustic mode only allows a recent known emotion to carry into an
+        // otherwise ambiguous line when sustained voice-like activity is present.
+        // Explicit English text cues remain available even without a PS5 audio stream.
+        var allowCarry = EmotionMode != DubbingEmotionMode.Acoustic ||
+            Prosody?.RecentSpeechCandidate() == true;
         var emotion = EmotionMode == DubbingEmotionMode.Off || Engine == DubbingEngine.Fast
-            ? null : emotions.Resolve(line, EmotionMode);
-        // Game audio is a mixed signal; it is NEVER authoritative for emotional state.
-        // It can only strengthen explicitly emphatic text, not invent emotion from SFX.
-        if (EmotionMode == DubbingEmotionMode.Acoustic && Engine == DubbingEngine.Natural &&
-            emotion is null && line.English.Contains('!') && Prosody?.RecentDynamicEnergy() == true)
-            emotion = SpeechEmotion.Angry;
+            ? null : emotions.Resolve(line, EmotionMode, allowCarry);
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
         return TrackSynth<(SpeechAudio, bool)?>(async engine =>
