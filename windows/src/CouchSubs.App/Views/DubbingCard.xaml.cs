@@ -84,6 +84,12 @@ public partial class DubbingCard : UserControl
             DubbingOutput.Headset => OnHeadset,
             _ => OnComputer
         }).IsChecked = true;
+        AtmospherePanel.Visibility = settings.Output == DubbingOutput.Headset
+            ? Visibility.Visible : Visibility.Collapsed;
+        GameAtmosphere.Value = Math.Clamp(settings.GameAtmospherePercent, 35, 100);
+        TurkishVoiceVolume.Value = Math.Clamp(settings.TurkishVoicePercent, 0, 100);
+        GameAtmosphereValue.Text = $"{(int)GameAtmosphere.Value}%";
+        TurkishVoiceVolumeValue.Text = $"{(int)TurkishVoiceVolume.Value}%";
         OutputHint.Text = settings.Output switch
         {
             DubbingOutput.Tv => "LG webOS TV: CouchSubs TV uygulamasının bağlı ve açık olması gerekir. Oyun sesiyle Türkçe dublaj TV'den duyulur.",
@@ -260,6 +266,21 @@ public partial class DubbingCard : UserControl
         if (loading || controller is null || EmotionModePicker.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
         if (Enum.TryParse<DubbingEmotionMode>(tag, out var mode))
             Update(s => s with { Dubbing = s.Dubbing with { EmotionMode = mode } });
+    }
+
+    private void OnAtmosphereChange(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (GameAtmosphere is null || TurkishVoiceVolume is null) return;
+        if (GameAtmosphereValue is not null)
+            GameAtmosphereValue.Text = $"{(int)GameAtmosphere.Value}%";
+        if (TurkishVoiceVolumeValue is not null)
+            TurkishVoiceVolumeValue.Text = $"{(int)TurkishVoiceVolume.Value}%";
+        if (loading || controller is null) return;
+        Update(s => s with { Dubbing = s.Dubbing with
+        {
+            GameAtmospherePercent = (int)GameAtmosphere.Value,
+            TurkishVoicePercent = (int)TurkishVoiceVolume.Value
+        } });
     }
 
     private void OnEngine(object sender, RoutedEventArgs e)
