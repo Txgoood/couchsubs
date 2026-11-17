@@ -40,6 +40,10 @@ public sealed record DubbingSettings
     public DubbingEmotionMode EmotionMode { get; init; } = DubbingEmotionMode.Balanced;
     public DubbingEngine Engine { get; init; } = DubbingEngine.Natural;
     public DubbingOutput Output { get; init; } = DubbingOutput.Tv;
+    /// <summary>Keep at least this percentage of PS5 game ambience while speaking (PULSE 3D mixer only).</summary>
+    public int GameAtmospherePercent { get; init; } = 82;
+    /// <summary>Turkish voice level on shared PULSE 3D output; other outputs are unaffected.</summary>
+    public int TurkishVoicePercent { get; init; } = 85;
     /// <summary>Geçerli oyunun sesleri; önceki sürümlerin Cast ayarıyla uyumludur.</summary>
     public VoiceCast Cast { get; init; } = new();
     /// <summary>Karakterler oyun adına göre ayrılır, oyun başına sınırsız giriş saklanabilir.</summary>
@@ -66,6 +70,8 @@ public interface IGameAudioOutput : IAudioOutput, IDisposable
 {
     void Start();
     void PushGameAudio(short[] pcm, int channels, int sampleRate);
+    /// <summary>Optional mixer settings; existing implementations remain compatible.</summary>
+    void SetAtmosphereMix(int keepGamePercent, int voicePercent) { }
 }
 
 /// <summary>Dublaj modeli: kurulu mu, indir, seslerin dosyaları, motor oluştur.</summary>
