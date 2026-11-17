@@ -4,10 +4,10 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.1.1</Version>
-    <AssemblyVersion>0.1.1.125</AssemblyVersion>
-    <FileVersion>0.1.1.125</FileVersion>
-    <InformationalVersion>0.1.1-emotion.125</InformationalVersion>
+    <Version>0.1.2</Version>
+    <AssemblyVersion>0.1.2.126</AssemblyVersion>
+    <FileVersion>0.1.2.126</FileVersion>
+    <InformationalVersion>0.1.2-acoustic.126</InformationalVersion>
     <Company>Enmera</Company>
     <Product>CouchSubs</Product>
     <Copyright>AGPL-3.0. Uses chiaki-ng (AGPL-3.0).</Copyright>

@@ -76,6 +76,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private Dubber? dubber;
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
+    private readonly GameProsodyMeter gameProsody = new();
     private int pulseChannels = 2;
     private int pulseSampleRate = 48000;
     private string? updateVersion;
@@ -806,8 +807,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 }
             }
 
-            var stream = pulseAudioActive ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
-            if (pulseAudioActive && stream is StreamSession audioStream && services.GameAudio is { } mixer)
+            bool acousticMode = settings.Dubbing.Enabled && settings.Dubbing.EmotionMode == DubbingEmotionMode.Acoustic;
+            bool captureAudio = pulseAudioActive || acousticMode;
+            gameProsody.Clear();
+            var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
+            if (captureAudio && stream is StreamSession audioStream)
             {
                 audioStream.GameAudioFormatReceived += (channels, rate) =>
                 {
@@ -815,7 +819,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     Volatile.Write(ref pulseSampleRate, rate);
                 };
                 audioStream.GameAudioReceived += pcm =>
-                    mixer.PushGameAudio(pcm, Volatile.Read(ref pulseChannels), Volatile.Read(ref pulseSampleRate));
+                {
+                    var channels = Volatile.Read(ref pulseChannels);
+                    var rate = Volatile.Read(ref pulseSampleRate);
+                    if (acousticMode) gameProsody.Push(pcm, channels, rate);
+                    if (pulseAudioActive && services.GameAudio is { } mixer)
+                        mixer.PushGameAudio(pcm, channels, rate);
+                };
             }
             stream.StateChanged += state => post(() => SessionStateChanged(state));
             stream.ConsoleMoved += moved => post(() => ConsoleMoved(moved));
@@ -1455,6 +1465,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             Cast = settings.Dubbing.Cast.Copy(),
             Engine = settings.Dubbing.Engine,
             EmotionMode = settings.Dubbing.EmotionMode,
+            Prosody = gameProsody,
             Output = settings.Source == GameSource.Pc ? DubbingOutput.Computer : settings.Dubbing.Output,
         };
         made.CastChanged += cast => Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
@@ -1487,7 +1498,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         // Dublajın kendi atadığı ses (CastChanged) zaten dublajda; kullanıcının seçimi kopyalanır.
         if (!ReferenceEquals(now.Cast, old.Cast)) dubber.Cast = now.Cast.Copy();
-        if (now.EmotionMode != old.EmotionMode) dubber.EmotionMode = now.EmotionMode;
+        if (now.EmotionMode != old.EmotionMode)
+        {
+            dubber.EmotionMode = now.EmotionMode;
+            if (isRunning && settings.Source == GameSource.Ps5 &&
+                (now.EmotionMode == DubbingEmotionMode.Acoustic) != (old.EmotionMode == DubbingEmotionMode.Acoustic))
+                DubbingError = "Ses destekli modu değiştirdiniz. PS5 ses yakalamayı yenilemek için Çeviriyi Durdur ve Başlat yapın.";
+        }
         if (now.Output != old.Output)
         {
             StopDubber(); // Ses cihazı değiştiğinde eski çıkışa konuşma gönderilmesin.

@@ -27,8 +27,9 @@
                         <ComboBoxItem Content="Kapalı (önceki dublaj)" Tag="Off" IsSelected="True" />
                         <ComboBoxItem Content="Dengeli (metinden duygu)" Tag="Balanced" />
                         <ComboBoxItem Content="Sinematik (güçlü vurgu)" Tag="Cinematic" />
+                        <ComboBoxItem Content="Ses destekli (PS5 deneysel)" Tag="Acoustic" />
                     </ComboBox>
-                    <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Konuşma sesinin duygusunu henüz dinleyerek tanımaz. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
+                    <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Ses destekli mod, PS5 karışık ses akışının şiddetini ölçer; konuşmayı müzik ve efektlerden ayıramaz. PC modunda metin tabanlı devam eder. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
                                Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,7,0,0" />
                 </StackPanel>
                 <StackPanel x:Name="DownloadPanel">

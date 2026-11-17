@@ -31,7 +31,7 @@ public enum DubbingEngine
     Fast,
 }
 
-public enum DubbingEmotionMode { Off, Balanced, Cinematic }
+public enum DubbingEmotionMode { Off, Balanced, Cinematic, Acoustic }
 
 public sealed record DubbingSettings
 {
@@ -103,6 +103,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private SubtitleServer? publishedOn;
 
     private readonly EmotionContinuity emotions = new();
+    public GameProsodyMeter? Prosody { get; set; }
     public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Balanced;
     public DubbingEngine Engine { get; set; } = DubbingEngine.Natural;
     public VoiceCast Cast { get; set; } = new();
@@ -307,6 +308,11 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         // Text-only analysis is intentionally inexpensive and never blocks OCR or audio capture.
         var emotion = EmotionMode == DubbingEmotionMode.Off || Engine == DubbingEngine.Fast
             ? null : emotions.Resolve(line, EmotionMode);
+        // Game audio is a mixed signal; it is NEVER authoritative for emotional state.
+        // It can only strengthen explicitly emphatic text, not invent emotion from SFX.
+        if (EmotionMode == DubbingEmotionMode.Acoustic && Engine == DubbingEngine.Natural &&
+            emotion is null && line.English.Contains('!') && Prosody?.RecentStrongEnergy() == true)
+            emotion = SpeechEmotion.Angry;
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
         return TrackSynth<(SpeechAudio, bool)?>(async engine =>
