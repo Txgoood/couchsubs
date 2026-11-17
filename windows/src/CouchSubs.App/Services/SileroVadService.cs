@@ -22,6 +22,7 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
     private Task? worker;
     private long lastSpeechTicks;
     private long lastEvaluationTicks;
+    private int generation;
 
     private readonly record struct AudioPacket(short[] Pcm, int Channels, int Rate);
 
@@ -46,7 +47,8 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
             });
             incoming = channel;
             cancellation = token;
-            worker = Task.Run(() => AnalyzeAsync(channel.Reader, token.Token));
+            var current = ++generation;
+            worker = Task.Run(() => AnalyzeAsync(channel.Reader, token.Token, current));
         }
     }
 
@@ -64,6 +66,7 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
         lock (lifecycle)
         {
             var token = cancellation;
+            generation++;
             cancellation = null;
             var channel = incoming;
             incoming = null;
@@ -79,7 +82,7 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
         }
     }
 
-    private async Task AnalyzeAsync(ChannelReader<AudioPacket> reader, CancellationToken cancellationToken)
+    private async Task AnalyzeAsync(ChannelReader<AudioPacket> reader, CancellationToken cancellationToken, int current)
     {
         try
         {
@@ -133,6 +136,8 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
                         outputs[1].GetTensorDataAsSpan<float>().CopyTo(state);
                         Array.Copy(modelInput, 512, context, 0, 64);
                         filled = 0;
+                        if (cancellationToken.IsCancellationRequested || current != Volatile.Read(ref generation))
+                            return; // Ignore results from a prior PS5 connection.
                         var now = Environment.TickCount64;
                         Interlocked.Exchange(ref lastEvaluationTicks, now);
                         if (probability >= 0.62f)
