@@ -2,6 +2,8 @@
 package com.couchsubs.tv;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.SharedPreferences;
 import android.content.Intent;
 import android.graphics.Color;
 import android.media.tv.TvContract;
@@ -10,6 +12,10 @@ import android.media.tv.TvInputManager;
 import android.media.tv.TvView;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
+import android.text.InputType;
+import android.widget.EditText;
+import android.widget.Toast;
+import android.webkit.WebViewClient;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -33,12 +39,19 @@ public class MainActivity extends Activity {
     private TvView tvView;
     private WebView webView;
     private String launchParams = "";
+    private static final String PREFS = "couchsubs.androidtv";
+    private static final String SERVER_IP = "windows_ip";
+    private boolean pairingDialogOpen = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         launchParams = paramsOf(getIntent());
+        if (launchParams.isEmpty()) {
+            String saved = getPreferencesStore().getString(SERVER_IP, "");
+            if (!saved.isEmpty()) launchParams = serverParams(saved);
+        }
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -70,6 +83,15 @@ public class MainActivity extends Activity {
         // Ölçek fiziksel piksel başına yüzde: 1920 CSS pikseli ekranın tam genişliğine sığar (1080p'de %100).
         webView.setInitialScale(fitScalePercent());
         webView.addJavascriptInterface(new Bridge(), "AndroidTV");
+        webView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                try {
+                    android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+                    String label = "v" + info.versionName + " · Build #" + info.versionCode;
+                    evaluate("document.getElementById(\"app-version\").textContent=" + quoted(label));
+                } catch (Exception ignored) { }
+            }
+        });
         root.addView(webView);
         setContentView(root);
         webView.loadUrl("file:///android_asset/tv/index.html");
@@ -79,10 +101,66 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         String params = paramsOf(intent);
         if (!params.isEmpty()) {
             launchParams = params;
             evaluate("window.__onRelaunch(" + quoted(params) + ")");
+        }
+    }
+
+    private SharedPreferences getPreferencesStore() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE);
+    }
+
+    private static String serverParams(String ip) {
+        return "{\"server\":\"http://" + ip + ":8787\"}";
+    }
+
+    /** Android TV'ye özgü bağlantı yolu: MENU / ayarlar / OK uzun bas. webOS'a dokunmaz. */
+    private void showPairingDialog() {
+        if (pairingDialogOpen || isFinishing()) return;
+        pairingDialogOpen = true;
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        input.setHint("192.168.1.100");
+        input.setText(getPreferencesStore().getString(SERVER_IP, ""));
+        input.setSelectAllOnFocus(true);
+        new AlertDialog.Builder(this)
+            .setTitle("CouchSubs · Windows bağlantısı")
+            .setMessage("Bilgisayarın yerel IPv4 adresini girin. PC ve Android TV aynı ağda olmalı. Port: 8787")
+            .setView(input)
+            .setPositiveButton("Bağlan", (dialog, which) -> {
+                String ip = input.getText().toString().trim();
+                if (!isValidLocalIpv4(ip)) {
+                    Toast.makeText(this, "Geçerli bir yerel IPv4 adresi girin", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                getPreferencesStore().edit().putString(SERVER_IP, ip).apply();
+                launchParams = serverParams(ip);
+                evaluate("window.__onRelaunch(" + quoted(launchParams) + ")");
+                Toast.makeText(this, "CouchSubs Windows: " + ip + ":8787", Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("İptal", (dialog, which) -> { })
+            .setOnDismissListener(dialog -> pairingDialogOpen = false)
+            .show();
+    }
+
+    private static boolean isValidLocalIpv4(String ip) {
+        String[] parts = ip.split("\\.", -1);
+        if (parts.length != 4) return false;
+        try {
+            for (String part : parts) {
+                if (part.isEmpty() || part.length() > 3) return false;
+                int n = Integer.parseInt(part);
+                if (n < 0 || n > 255) return false;
+            }
+            return ip.startsWith("10.") || ip.startsWith("192.168.") ||
+                (Integer.parseInt(parts[0]) == 172 &&
+                 Integer.parseInt(parts[1]) >= 16 && Integer.parseInt(parts[1]) <= 31);
+        } catch (NumberFormatException ex) {
+            return false;
         }
     }
 
@@ -102,7 +180,17 @@ public class MainActivity extends Activity {
     /** Geri ve renk tuşlarını sayfaya bildirir; diğerleri WebView'e kendiliğinden gider. */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        int code = pageKey(event.getKeyCode());
+        int key = event.getKeyCode();
+        if ((key == KeyEvent.KEYCODE_MENU || key == KeyEvent.KEYCODE_SETTINGS) && event.getAction() == KeyEvent.ACTION_UP) {
+            showPairingDialog();
+            return true;
+        }
+        if (key == KeyEvent.KEYCODE_MENU || key == KeyEvent.KEYCODE_SETTINGS) return true;
+        if ((key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER) && event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 1) {
+            showPairingDialog();
+            return true;
+        }
+        int code = pageKey(key);
         if (code == 0) return super.dispatchKeyEvent(event);
         if (event.getAction() == KeyEvent.ACTION_DOWN) evaluate("window.__onKey(" + code + ")");
         return true;
