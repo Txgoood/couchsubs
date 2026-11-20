@@ -104,6 +104,8 @@ public interface IGameAudioOutput : IAudioOutput, IDisposable
     void PushGameAudio(short[] pcm, int channels, int sampleRate);
     /// <summary>Optional mixer settings; existing implementations remain compatible.</summary>
     void SetAtmosphereMix(int keepGamePercent, int voicePercent) { }
+    /// <summary>Optional spatial profile, ignored by legacy audio outputs.</summary>
+    void SetAtmosphereMode(AtmosphereMixMode mode) { }
 }
 
 /// <summary>Dublaj modeli: kurulu mu, indir, seslerin dosyaları, motor oluştur.</summary>
