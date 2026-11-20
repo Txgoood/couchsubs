@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.ComponentModel;
+using System.IO;
+using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Controls;
 using CouchSubs.Core;
@@ -61,6 +63,7 @@ public partial class DubbingCard : UserControl
         var settings = controller.Settings.Dubbing;
         Enabled.IsChecked = settings.Enabled;
         AutoSpeakerTracking.IsChecked = settings.AutoSpeakerTracking;
+        AutoGameLibrary.IsChecked = settings.AutoGameLibrary;
         foreach (ComboBoxItem item in EmotionModePicker.Items)
             item.IsSelected = string.Equals(item.Tag as string, settings.EmotionMode.ToString(), StringComparison.Ordinal);
         EnginePanel.Visibility = controller.FastDubbingAvailable ? Visibility.Visible : Visibility.Collapsed;
@@ -131,6 +134,101 @@ public partial class DubbingCard : UserControl
     {
         if (controller is null) return;
         controller.SelectGame(GameName.Text);
+    }
+
+    private void OnAutoGameLibrary(object sender, RoutedEventArgs e)
+    {
+        if (loading || controller is null) return;
+        Update(s => s with { Dubbing = s.Dubbing with { AutoGameLibrary = AutoGameLibrary.IsChecked == true } });
+    }
+
+    private void OnExportGame(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        var game = controller.Settings.Dubbing.ActiveGame;
+        var safe = string.Concat(game.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        var dialog = new SaveFileDialog
+        {
+            Title = "Karakter kütüphanesini yedekle",
+            Filter = "CouchSubs karakter kütüphanesi (*.json)|*.json",
+            DefaultExt = ".json",
+            FileName = safe + "-CouchSubs-karakterler.json",
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            File.WriteAllText(dialog.FileName, controller.ExportGameLibrary(game),
+                new System.Text.UTF8Encoding(false));
+            MessageBox.Show("Karakter kütüphanesi yedeklendi. Dosyayı güvenli bir yerde saklayın.",
+                "CouchSubs", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            MessageBox.Show(error.Message, "Dışarı aktarma hatası", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OnImportGame(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        var dialog = new OpenFileDialog
+        {
+            Title = "Karakter kütüphanesi yedeğini seç",
+            Filter = "CouchSubs karakter kütüphanesi (*.json)|*.json",
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            var file = new FileInfo(dialog.FileName);
+            if (file.Length > 2_000_000)
+                throw new InvalidDataException("Yedek dosyası boyut sınırını aşıyor.");
+            var json = File.ReadAllText(dialog.FileName);
+            string game;
+            try
+            {
+                game = controller.ImportGameLibrary(json, overwrite: false);
+            }
+            catch (InvalidOperationException error) when (error.Message.Contains("zaten", StringComparison.OrdinalIgnoreCase))
+            {
+                if (MessageBox.Show(
+                    "Bu oyunun kütüphanesi zaten mevcut. Yedekteki karakterlerle üzerine yazmak istiyor musun?\n" +
+                    "Mevcut kayıtlar değiştirilecektir.",
+                    "Kütüphane çakışması", MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                game = controller.ImportGameLibrary(json, overwrite: true);
+            }
+            MessageBox.Show(game + " karakter kütüphanesi içe aktarıldı.",
+                "CouchSubs", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or
+            InvalidDataException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            MessageBox.Show(error.Message, "İçe aktarma hatası", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OnDeleteGame(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        var game = controller.Settings.Dubbing.ActiveGame;
+        if (game == GameCastLibrary.DefaultGame)
+        {
+            MessageBox.Show("Genel profili silinemez. Silmek istediğin oyunu seç.",
+                "CouchSubs", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show(
+            game + " oyununa ait karakter kayıtları silinsin mi?\n" +
+            "Bu işlem geri alınamaz. Önce 'Dışarı aktar' ile JSON yedeği oluşturabilirsin.",
+            "Oyun kütüphanesini sil", MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        try { controller.DeleteGameLibrary(game); }
+        catch (InvalidOperationException error)
+        {
+            MessageBox.Show(error.Message, "Silme hatası", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void OnAddCharacter(object sender, RoutedEventArgs e)
