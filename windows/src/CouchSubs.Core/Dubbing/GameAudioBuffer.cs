@@ -7,12 +7,17 @@ namespace CouchSubs.Core.Dubbing;
 /// kapasite dolunca EN ESKİ örnekler atılır. Üretici ve tüketici farklı thread'lerde olabilir.
 /// Örnekler kanallar arasında interleaved PCM float'tır.
 /// </summary>
+public readonly record struct GameAudioBufferStats(int BufferedSamples, int PeakBufferedSamples, long DroppedSamples, long UnderrunSamples);
+
 public sealed class GameAudioBuffer
 {
     private readonly object gate = new();
     private readonly float[] samples;
     private int head;
     private int count;
+    private int peakCount;
+    private long droppedSamples;
+    private long underrunSamples;
 
     public GameAudioBuffer(int capacitySamples)
     {
@@ -27,6 +32,16 @@ public sealed class GameAudioBuffer
         get { lock (gate) return count; }
     }
 
+    /// <summary>Metadata-only diagnostics. No PCM is retained by the snapshot.</summary>
+    public GameAudioBufferStats Statistics
+    {
+        get
+        {
+            lock (gate)
+                return new GameAudioBufferStats(count, peakCount, droppedSamples, underrunSamples);
+        }
+    }
+
     /// <summary>Önceki en eski örnekleri atarak yeni akışı yaz (tahsis yok).</summary>
     public void Write(ReadOnlySpan<float> pcm)
     {
@@ -35,13 +50,16 @@ public sealed class GameAudioBuffer
             // Tek seferde kapasiteden büyük bir paket gelirse yalnız en güncel kısmı tut.
             if (pcm.Length >= samples.Length)
             {
+                droppedSamples += count + pcm.Length - samples.Length;
                 pcm = pcm[^samples.Length..];
                 pcm.CopyTo(samples);
                 head = 0;
                 count = samples.Length;
+                peakCount = samples.Length;
                 return;
             }
             var overflow = Math.Max(0, count + pcm.Length - samples.Length);
+            droppedSamples += overflow;
             head = (head + overflow) % samples.Length;
             count -= overflow;
             var tail = (head + count) % samples.Length;
@@ -51,6 +69,7 @@ public sealed class GameAudioBuffer
                 tail = (tail + 1) % samples.Length;
             }
             count += pcm.Length;
+            peakCount = Math.Max(peakCount, count);
         }
     }
 
@@ -61,6 +80,7 @@ public sealed class GameAudioBuffer
         lock (gate)
         {
             var read = Math.Min(destination.Length, count);
+            underrunSamples += destination.Length - read;
             for (var i = 0; i < read; i++)
             {
                 destination[i] = samples[head];
@@ -76,6 +96,17 @@ public sealed class GameAudioBuffer
         {
             head = 0;
             count = 0;
+        }
+    }
+
+    /// <summary>Reset counters without disturbing queued game audio.</summary>
+    public void ResetStatistics()
+    {
+        lock (gate)
+        {
+            peakCount = count;
+            droppedSamples = 0;
+            underrunSamples = 0;
         }
     }
 }

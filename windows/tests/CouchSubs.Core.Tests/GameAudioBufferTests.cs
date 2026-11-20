@@ -50,6 +50,49 @@ public class GameAudioBufferTests
     }
 
     [Fact]
+    public void DiagnosticsCountDroppedAndUnderrunSamplesWithoutChangingAudio()
+    {
+        var buffer = new GameAudioBuffer(4);
+        buffer.Write([1f, 2f, 3f]);
+        buffer.Write([4f, 5f, 6f]);
+        var snapshot = buffer.Statistics;
+        Assert.Equal(4, snapshot.BufferedSamples);
+        Assert.Equal(4, snapshot.PeakBufferedSamples);
+        Assert.Equal(2, snapshot.DroppedSamples);
+        Assert.Equal(0, snapshot.UnderrunSamples);
+
+        var output = new float[6];
+        buffer.Read(output);
+        Assert.Equal(new float[] { 3f, 4f, 5f, 6f, 0f, 0f }, output);
+        Assert.Equal(2, buffer.Statistics.UnderrunSamples);
+    }
+
+    [Fact]
+    public void HugePacketCountsDiscardedHistoryAndPreservesNewestSamples()
+    {
+        var buffer = new GameAudioBuffer(3);
+        buffer.Write([1f, 2f]);
+        buffer.Write([3f, 4f, 5f, 6f, 7f]);
+        Assert.Equal(4, buffer.Statistics.DroppedSamples);
+        var output = new float[3];
+        buffer.Read(output);
+        Assert.Equal(new float[] { 5f, 6f, 7f }, output);
+    }
+
+    [Fact]
+    public void ResetStatisticsKeepsActiveGameAudioIntact()
+    {
+        var buffer = new GameAudioBuffer(3);
+        buffer.Write([0.2f, 0.3f]);
+        buffer.ResetStatistics();
+        Assert.Equal(2, buffer.Statistics.PeakBufferedSamples);
+        Assert.Equal(0, buffer.Statistics.DroppedSamples);
+        var output = new float[2];
+        buffer.Read(output);
+        Assert.Equal(new float[] { 0.2f, 0.3f }, output);
+    }
+
+    [Fact]
     public void ClearRemovesStaleGameAudio()
     {
         var buffer = new GameAudioBuffer(4);
