@@ -80,6 +80,8 @@ internal sealed class FakeSender : ISubtitleSender
     public List<int> Durations { get; } = [];
     public List<TextBox?> Boxes { get; } = [];
     public int Clears { get; private set; }
+    public int ReplaceClears { get; private set; }
+    public void ClearForNewLine() => ReplaceClears++;
     public void SendSubtitle(string text, int durationMs = 15000, TextBox? box = null)
     {
         lock (Sent) { Sent.Add(text); Durations.Add(durationMs); Boxes.Add(box); }
@@ -248,7 +250,8 @@ public class SubtitlePipelineTests
             new FakeTranslator(), sender);
         await Run(pipeline, 2);
         Assert.Equal(["TR: First!", "TR: Second!"], sender.Sent);
-        Assert.Equal(1, sender.Clears);
+        Assert.Equal(2, sender.ReplaceClears);
+        Assert.Equal(0, sender.Clears);
     }
 
     [Theory]
