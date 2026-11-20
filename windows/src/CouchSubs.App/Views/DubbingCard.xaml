@@ -86,8 +86,9 @@
                             <ComboBoxItem Content="Orijinal stereo oyun sesi (%100)" Tag="SafeOriginal" />
                             <ComboBoxItem Content="Mekânsal dengeli (merkez hafif azalır)" Tag="SpatialBalanced" />
                             <ComboBoxItem Content="Sinematik (merkez biraz daha azalır)" Tag="Cinematic" />
+                            <ComboBoxItem Content="Akıllı dublaj (deneysel, oyun sesini koru)" Tag="AdaptiveDialogue" />
                         </ComboBox>
-                        <TextBlock Text="Yeni modlar orijinal sağ-sol ses farkını korur. İngilizce konuşmayı müzik/efektlerden ayrılamaz; Türkçe sesi otomatik olarak karakterin konumuna taşımaz. Varsayılan eski miks aynen korunur."
+                        <TextBlock Text="Akıllı dublaj, Türkçe konuşmanın ses düzeyine göre yalnız merkez stereo sesini sınırlı azaltır; sağ-sol yön farkını korur. İngilizce konuşmayı diğer seslerden ayırmaz. Varsayılan eski miks aynen korunur."
                                    Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,9" />
                         <TextBlock Text="Oyun sesi (dublaj sırasında en az)" Style="{StaticResource HintText}" />
                         <StackPanel Orientation="Horizontal">

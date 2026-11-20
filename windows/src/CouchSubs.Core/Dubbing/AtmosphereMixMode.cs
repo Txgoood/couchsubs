@@ -15,5 +15,7 @@ public enum AtmosphereMixMode
     /// <summary>Duck mainly the shared center (mid); preserve directional side (L-R).</summary>
     SpatialBalanced = 2,
     /// <summary>More aggressive center-only ducking; stereo side is preserved.</summary>
-    Cinematic = 3
+    Cinematic = 3,
+    /// <summary>Conservative signal-level adaptive center reduction while Turkish speech plays.</summary>
+    AdaptiveDialogue = 4
 }
