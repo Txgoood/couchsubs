@@ -62,6 +62,51 @@ public sealed class AtmosphereMixEnvelopeTests
     }
 
     [Fact]
+    public void InvalidDecoderSamplesNeverPoisonTheStereoOutput()
+    {
+        var mix = new AtmosphereMixEnvelope();
+        var damaged = mix.Step(float.NaN, 0.3f, float.PositiveInfinity, 0.1f);
+        Assert.True(float.IsFinite(damaged.Left));
+        Assert.True(float.IsFinite(damaged.Right));
+        Assert.Equal(1, mix.InvalidInputFrames);
+
+        var recovered = mix.Step(0.2f, -0.4f, 0f, 0f);
+        Assert.True(float.IsFinite(recovered.Left));
+        Assert.True(float.IsFinite(recovered.Right));
+        // The very first damaged frame may engage a tiny, intentional 35ms
+        // gain ramp. Recovery must stay finite and close to the clean input.
+        Assert.InRange(recovered.Left, 0.198f, 0.202f);
+        Assert.InRange(recovered.Right, -0.402f, -0.398f);
+        mix.Reset();
+        Assert.Equal(0, mix.InvalidInputFrames);
+    }
+
+    [Fact]
+    public void OversizedFiniteDecoderSamplesRemainBounded()
+    {
+        var mix = new AtmosphereMixEnvelope();
+        var output = mix.Step(float.MaxValue, float.MaxValue, float.MaxValue, float.MaxValue,
+            mode: AtmosphereMixMode.SpatialBalanced);
+        Assert.True(float.IsFinite(output.Left));
+        Assert.True(float.IsFinite(output.Right));
+        Assert.InRange(output.Left, -1f, 1f);
+        Assert.InRange(output.Right, -1f, 1f);
+    }
+
+    [Fact]
+    public void LimiterDiagnosticsCountOnlyActualPeakReduction()
+    {
+        var mix = new AtmosphereMixEnvelope();
+        mix.Step(0.1f, -0.1f, 0f, 0f);
+        Assert.Equal(0, mix.LimitedFrames);
+        for (var i = 0; i < 1000; i++)
+            mix.Step(0.95f, 0.95f, 1f, 1f, 1f, 1f);
+        Assert.True(mix.LimitedFrames > 0);
+        mix.Reset();
+        Assert.Equal(0, mix.LimitedFrames);
+    }
+
+    [Fact]
     public void GainRangeAndResetAreSafe()
     {
         var mix = new AtmosphereMixEnvelope();

@@ -11,6 +11,8 @@ public sealed class AtmosphereMixEnvelope
     private readonly int rate;
     private float gameGain = 1f;
     private float voiceGain;
+    private long invalidInputFrames;
+    private long limitedFrames;
     public AtmosphereMixEnvelope(int sampleRate = 48000)
     {
         if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
@@ -19,6 +21,9 @@ public sealed class AtmosphereMixEnvelope
 
     public float CurrentGameGain => gameGain;
     public float CurrentVoiceGain => voiceGain;
+    /// <summary>Only diagnostic counters; never stores raw audio or spoken words.</summary>
+    public long InvalidInputFrames => invalidInputFrames;
+    public long LimitedFrames => limitedFrames;
 
     /// <summary>Process one stereo frame. KeepGame=1 disables ducking entirely.</summary>
     public (float Left, float Right) Step(
@@ -26,6 +31,23 @@ public sealed class AtmosphereMixEnvelope
         float keepGame = 0.82f, float speechVolume = 0.85f,
         AtmosphereMixMode mode = AtmosphereMixMode.Legacy)
     {
+        // Broken drivers/decoders can supply non-finite samples; never let NaN or
+        // Infinity poison the render chain (which otherwise stays silent until reset).
+        if (!float.IsFinite(gameLeft) || !float.IsFinite(gameRight) ||
+            !float.IsFinite(speechLeft) || !float.IsFinite(speechRight))
+        {
+            invalidInputFrames++;
+            gameLeft = float.IsFinite(gameLeft) ? gameLeft : 0f;
+            gameRight = float.IsFinite(gameRight) ? gameRight : 0f;
+            speechLeft = float.IsFinite(speechLeft) ? speechLeft : 0f;
+            speechRight = float.IsFinite(speechRight) ? speechRight : 0f;
+        }
+        // PCM float samples outside [-1,1] are malformed and could overflow
+        // the mid/side calculation before the final peak limiter runs.
+        gameLeft = Math.Clamp(gameLeft, -1f, 1f);
+        gameRight = Math.Clamp(gameRight, -1f, 1f);
+        speechLeft = Math.Clamp(speechLeft, -1f, 1f);
+        speechRight = Math.Clamp(speechRight, -1f, 1f);
         keepGame = Math.Clamp(float.IsFinite(keepGame) ? keepGame : 1f, 0.35f, 1f);
         speechVolume = Math.Clamp(float.IsFinite(speechVolume) ? speechVolume : 0f, 0f, 1f);
         var speaking = MathF.Max(MathF.Abs(speechLeft), MathF.Abs(speechRight)) > 0.0001f;
@@ -62,6 +84,7 @@ public sealed class AtmosphereMixEnvelope
         }
         // Gentle shared limiter avoids clipping while preserving stereo balance.
         var highest = MathF.Max(1f, MathF.Max(MathF.Abs(left), MathF.Abs(right)));
+        if (highest > 1f) limitedFrames++;
         return (left / highest, right / highest);
     }
 
@@ -69,5 +92,7 @@ public sealed class AtmosphereMixEnvelope
     {
         gameGain = 1f;
         voiceGain = 0f;
+        invalidInputFrames = 0;
+        limitedFrames = 0;
     }
 }
