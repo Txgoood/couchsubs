@@ -30,6 +30,19 @@ public partial class SettingsWindow : Window
         var version = Assembly.GetEntryAssembly()?.GetName().Version;
         BuildInfo.Text = version is null ? "" : $"CouchSubs v{version.Major}.{version.Minor}.{version.Build} · Build #{version.Revision}";
         var settings = controller.Settings;
+        foreach (var virtualKey in Enumerable.Range(0x70, 12).Concat(new[] { 0x65, 0x69 }))
+        {
+            var label = virtualKey >= 0x70 ? "F" + (virtualKey - 0x6F) :
+                "Num " + (virtualKey - 0x60);
+            ScreenHotkeyPicker.Items.Add(new ComboBoxItem
+            {
+                Content = label, Tag = virtualKey, IsSelected = settings.ScreenHotkey == virtualKey
+            });
+            FreeAreaHotkeyPicker.Items.Add(new ComboBoxItem
+            {
+                Content = label, Tag = virtualKey, IsSelected = settings.FreeAreaHotkey == virtualKey
+            });
+        }
         TextSize.Value = Math.Clamp(settings.Style.FontSize, TextSize.Minimum, TextSize.Maximum);
         TextSizeValue.Text = ((int)TextSize.Value).ToString();
         Position.Value = settings.Style.BottomPercent;
@@ -53,6 +66,26 @@ public partial class SettingsWindow : Window
         ShowDeepL();
         if (controller.HasDeepLKey) _ = ShowDeepLUsageAsync();
         loading = false;
+    }
+
+    private void OnHotkeysChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || ScreenHotkeyPicker.SelectedItem is not ComboBoxItem { Tag: int screen } ||
+            FreeAreaHotkeyPicker.SelectedItem is not ComboBoxItem { Tag: int area }) return;
+        if (screen == area)
+        {
+            MessageBox.Show("İki işlev aynı kısayolu kullanamaz. Farklı tuşlar seçin.",
+                "Kısayol çakışması", MessageBoxButton.OK, MessageBoxImage.Warning);
+            loading = true;
+            var settings = controller.Settings;
+            ScreenHotkeyPicker.SelectedItem = ScreenHotkeyPicker.Items.Cast<ComboBoxItem>()
+                .First(item => (int)item.Tag == settings.ScreenHotkey);
+            FreeAreaHotkeyPicker.SelectedItem = FreeAreaHotkeyPicker.Items.Cast<ComboBoxItem>()
+                .First(item => (int)item.Tag == settings.FreeAreaHotkey);
+            loading = false;
+            return;
+        }
+        controller.Settings = controller.Settings with { ScreenHotkey = screen, FreeAreaHotkey = area };
     }
 
     private void ShowDeepL()
