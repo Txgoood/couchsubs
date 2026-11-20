@@ -132,6 +132,26 @@ public class DubberTests
     }
 
     [Fact]
+    public async Task TimingTracksDroppedLinesWithoutSavingDialogueText()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var synth = new FakeSynth { Gate = gate };
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        var dubber = new Dubber(new FakeModel(synth), audio, () => server, () => 8787, action => action())
+            { Output = DubbingOutput.Computer };
+        dubber.Speak([.. Enumerable.Range(1, 6).Select(i => new SpokenLine($"English {i}.", $"Türkçe {i}."))]);
+        await WaitUntil(() => { lock (synth.Calls) return synth.Calls.Count == 1; });
+        Assert.Equal(3, dubber.Timing.DroppedLines);
+        dubber.Speak([new SpokenLine("New.", "Yeni.")]);
+        Assert.True(dubber.Timing.InterruptedGenerations >= 1);
+        gate.SetResult();
+        await WaitUntil(() => audio.Played == 1);
+        Assert.Equal(0, dubber.Timing.PendingLines);
+        await dubber.DisposeAsync();
+    }
+
+    [Fact]
     public async Task AgonProfilePlaysThroughWindowsAudioOutput()
     {
         var audio = new FakeAudio();
