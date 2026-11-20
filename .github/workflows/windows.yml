@@ -176,7 +176,7 @@ jobs:
           $props = Get-Content windows/Directory.Build.props -Raw
           $tv = Get-Content tv-webos/appinfo.json -Raw | ConvertFrom-Json
           $js = Get-Content tv-webos/app.js -Raw
-          if ($props -notmatch '<AssemblyVersion>0\\.1\\.7\\.131</AssemblyVersion>') { throw "Windows Build #131 bulunamadı" }
+          if ($props -notmatch '<AssemblyVersion>0\.1\.7\.131</AssemblyVersion>') { throw "Windows Build #131 bulunamadı" }
           if ($tv.version -ne '0.9.9') { throw "webOS v0.9.9 bulunamadı" }
           if ($js -notmatch 'APP_BUILD = 131') { throw "webOS Build #131 bulunamadı" }
           if (-not (Test-Path dist/tv-app/com.couchsubs.tv_0.9.9_all.ipk)) { throw "webOS IPK üretilemedi" }
