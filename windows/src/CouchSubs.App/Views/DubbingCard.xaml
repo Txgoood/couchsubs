@@ -46,6 +46,15 @@
                     <CheckBox x:Name="AutoSpeakerTracking" Margin="0,9,0,5" Checked="OnSpeakerTracking"
                               Unchecked="OnSpeakerTracking"
                               Content="Konuşmacı adını bulamazsa sesinden otomatik eşleştir (deneysel)" />
+                    <CheckBox x:Name="InterruptionGuard" Checked="OnInterruptionGuard"
+                              Unchecked="OnInterruptionGuard" Margin="0,6,0,5"
+                              Content="Söz kesme durumunda yanlış karakter sesini engelle (deneysel)" />
+                    <TextBlock Text="Konuşmacı kısa sürede değişirse ses ataması geçici olarak belirsiz kabul edilir. Bu yöntem iki ayrı sesi ayırmaz; yalnız yanlış kişiye dublaj yapılma riskini azaltır. Varsayılan kapalıdır."
+                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,1,0,6" />
+                    <TextBlock x:Name="InterruptionStats" Style="{StaticResource HintText}"
+                               TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <Button Content="Söz kesme sayacını yenile" Click="OnRefreshInterruption"
+                            HorizontalAlignment="Left" Margin="0,0,0,8" />
                     <TextBlock Text="Ses tanıma modeli PS5 karışık sesinden çalışır; müzik, efekt, üst üste konuşma ve kısa replikler tanımayı yanıltabilir. Emin olunmayan satırlarda anlatıcı/karşılıklı seslere döner."
                                Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,2,0,8" />
                     <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Ses destekli mod, PS5 sesindeki konuşmaya benzer hareketlilik en az kısa bir süre devam ederse duygu sürekliliğine yardımcı olur. Müzik ve efektlerden konuşmayı kesin olarak ayıramaz. Yapay zekâ modu yerel Silero ONNX ile konuşma olup olmadığını tahmin eder; müzik/efekti ayırmaz ve duyguyu sesten sınıflandırmaz. PC modunda metin tabanlı devam eder. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
