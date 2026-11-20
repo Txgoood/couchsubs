@@ -13,20 +13,19 @@ public sealed class SherpaSpeakerTests
         var modelPath = Environment.GetEnvironmentVariable("COUCHSUBS_SPEAKER_SMOKE_MODEL");
         if (string.IsNullOrWhiteSpace(modelPath)) return;
         Assert.True(File.Exists(modelPath), "Pinned speaker model is missing.");
+
+        // Build #147: real Windows Event 1026 recorded an unrecoverable
+        // native access violation in SpeakerEmbeddingExtractor.get_Dim().
+        // Never invoke that native API during CI or inside CouchSubs.exe.
+        // Package integrity was already verified via pinned SHA256 by CI.
+        Assert.False(NativeSpeakerSafetyPolicy.InProcessInferenceAllowed);
         var engine = new SherpaSpeakerService(modelPath);
         engine.Start();
-        try
-        {
-            var deadline = DateTime.UtcNow.AddSeconds(15);
-            while (!engine.ModelReady && DateTime.UtcNow < deadline)
-                await Task.Delay(50);
-            Assert.True(engine.ModelReady, "Sherpa ONNX speaker extractor did not initialize.");
-            Assert.Null(engine.Latest.Name);
-            var silence = new short[1920];
-            for (int i = 0; i < 20; i++)
-                engine.Push(silence, 2, 48000, speechConfirmed: false);
-            Assert.Null(engine.Latest.Name);
-        }
-        finally { engine.Stop(); }
+        await Task.Yield();
+        Assert.False(engine.ModelReady);
+        Assert.Null(engine.Latest.Name);
+        engine.Push(new short[1920], 2, 48000, speechConfirmed: true);
+        Assert.Null(engine.Latest.Name);
+        engine.Stop();
     }
 }
