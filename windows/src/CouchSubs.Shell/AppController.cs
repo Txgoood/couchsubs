@@ -77,6 +77,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
+    private bool manualGamePinned;
+    private readonly HashSet<string> suppressedAutoGames = new(StringComparer.OrdinalIgnoreCase);
+    private CancellationTokenSource? gameProbeCancellation;
     private int pulseChannels = 2;
     private int pulseSampleRate = 48000;
     private string? updateVersion;
@@ -844,6 +847,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             stream.FrameReceived += HandleFrame;
             stream.Start();
             session = stream;
+            if (settings.Dubbing.AutoGameLibrary)
+            {
+                gameProbeCancellation = new CancellationTokenSource();
+                _ = PollPs5GameTitleAsync(gameProbeCancellation.Token);
+            }
             if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
 
             // TV uygulamasını başlat ve açık tut; TV kapalıysa açıldığında bağlanır.
@@ -914,6 +922,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void Stop()
     {
+        gameProbeCancellation?.Cancel();
+        gameProbeCancellation = null;
+        manualGamePinned = false;
         pcCaptureCancellation?.Cancel();
         pcCaptureCancellation = null;
         worldWork.Cancel();
@@ -1017,6 +1028,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 LastSource = source;
                 LastTranslation = translation;
+                AutoSelectRecognizedGame(source);
                 if (box is not null) lastSubtitleBox = box;
                 if (settings.Source == GameSource.Pc)
                     PcSubtitleReady?.Invoke(translation, SubtitlePipeline.ReadingTime(translation), settings.PcDisplayId);
@@ -1432,9 +1444,88 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>İsim verilmezse Genel; eski oyun sesleri saklanır.</summary>
     public void SelectGame(string name)
     {
+        manualGamePinned = true;
+        suppressedAutoGames.Remove(GameCastLibrary.Normalize(name));
         var selected = GameCastLibrary.Switch(settings.Dubbing, name);
         if (ReferenceEquals(selected, settings.Dubbing)) return;
         Settings = settings with { Dubbing = selected };
+        Changed(nameof(KnownGames));
+    }
+
+    /// <summary>Conservative OCR title-screen hint. Never assume game name from console IP.</summary>
+    private void AutoSelectRecognizedGame(string text)
+    {
+        if (!settings.Dubbing.AutoGameLibrary || manualGamePinned) return;
+        var game = GameTitleDetector.Detect(text);
+        if (game is null || suppressedAutoGames.Contains(game) ||
+            string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase))
+            return;
+        var switched = GameCastLibrary.Switch(settings.Dubbing, game);
+        Settings = settings with { Dubbing = switched };
+        Changed(nameof(KnownGames));
+    }
+
+    private async Task PollPs5GameTitleAsync(CancellationToken stop)
+    {
+        string? previous = null;
+        var confirmations = 0;
+        while (!stop.IsCancellationRequested)
+        {
+            try
+            {
+                var running = await Ps5RunningGameDiscovery.ProbeAsync(console?.Host ?? "", stop).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(running))
+                {
+                    var title = GameTitleDetector.Detect(running) ?? GameCastLibrary.Normalize(running);
+                    if (string.Equals(previous, title, StringComparison.OrdinalIgnoreCase))
+                        confirmations++;
+                    else
+                    {
+                        previous = title;
+                        confirmations = 1;
+                    }
+                    // Require two independent console observations before switching.
+                    if (confirmations >= 2)
+                        post(() => AutoSelectDiscoveredGame(title));
+                }
+                else { previous = null; confirmations = 0; }
+                await Task.Delay(confirmations >= 2 ? TimeSpan.FromSeconds(25) :
+                    TimeSpan.FromSeconds(3), stop).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { break; }
+            catch { /* Discovery is advisory; do not interrupt game audio. */ }
+        }
+    }
+
+    private void AutoSelectDiscoveredGame(string game)
+    {
+        if (!isRunning || !settings.Dubbing.AutoGameLibrary || manualGamePinned) return;
+        if (suppressedAutoGames.Contains(game) ||
+            string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase)) return;
+        var switched = GameCastLibrary.Switch(settings.Dubbing, game);
+        Settings = settings with { Dubbing = switched };
+        Changed(nameof(KnownGames));
+    }
+
+    public string ExportGameLibrary(string game) => GameCastLibrary.ExportJson(settings.Dubbing, game);
+
+    public string ImportGameLibrary(string json, bool overwrite)
+    {
+        var restored = GameCastLibrary.ImportJson(settings.Dubbing, json, overwrite);
+        Settings = settings with { Dubbing = restored };
+        Changed(nameof(KnownGames));
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var imported = doc.RootElement.GetProperty("Game").GetString() ?? GameCastLibrary.DefaultGame;
+        suppressedAutoGames.Remove(imported);
+        return imported;
+    }
+
+    public void DeleteGameLibrary(string game)
+    {
+        var cleaned = GameCastLibrary.Delete(settings.Dubbing, game);
+        suppressedAutoGames.Add(GameCastLibrary.Normalize(game));
+        manualGamePinned = false; // Allow the detected game to become active again after deletion.
+        Settings = settings with { Dubbing = cleaned };
         Changed(nameof(KnownGames));
     }
 

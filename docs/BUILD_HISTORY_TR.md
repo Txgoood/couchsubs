@@ -18,6 +18,17 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 - Ses izi kümeleri oturum içindedir; adlandırma/ses kimliği henüz oyunlar arasında biyometrik şablon olarak kalıcılaştırılmıyor.
 - Windows: **v0.1.8, Build #132**; webOS: **v0.9.10, Build #132**. TV yalnız eş sürüme güncellenir; model bilgisayarda çalışır.
 
+| **#133** | **v0.1.9** | **v0.9.11** | **Oyun başlığından otomatik GTA5/GTA6 profili, JSON dışarı/içe aktarma ve ayrı silme işlemleri** | **CI doğrulaması bekleniyor** |
+
+## Build #133 — Oyun kütüphanesi yönetimi
+
+- PS5 yerel ağ DDP sorgusunda `running-app-name` alanı varsa iki ardışık tutarlı yanıtla oyun profili oluşturulur ve seçilir. Yanıt yoksa ekran OCR yalnız tam GTA5/GTA6 başlık metnini yakalarsa profil seçer. Kullanıcı o oturumda elle oyun seçmişse bu tercih korunur.
+- Oyun seçici menüsünde **Dışarı aktar** karakter/ses eşleşmelerini JSON'a yazar.
+- **İçe aktar** JSON yedeğini doğrular; aynı oyun varsa kullanıcı açıkça onay vermeden üzerine yazılmaz.
+- **Oyunu sil** işlemi iki aşamalı onayla yapılır; yalnız seçilen oyunun eşleşmelerini siler. Ortak model ve diğer oyunlar korunur.
+- Bu JSON dosyası ses modeli, PCM veya oturumluk konuşmacı embeddinglerini içermez. İleride ses modelini de yedeklemek için bağımsız onaylı bir özellik gerekir.
+- Windows **v0.1.9 / Build #133**, webOS **v0.9.11 / Build #133**.
+
 ## Build #131 paketleri
 
 - Windows: Actions `couchsubs-windows-installer` içindeki `CouchSubs-windows-Setup.exe`.
