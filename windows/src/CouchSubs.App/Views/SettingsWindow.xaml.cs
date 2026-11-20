@@ -54,6 +54,10 @@ public partial class SettingsWindow : Window
         ShowPlacement(settings.Style.Placement);
         BackgroundOpacity.Value = settings.Style.Background;
         Bold.IsChecked = settings.Style.Bold;
+        SubtitleColor.SelectedItem = SubtitleColor.Items.Cast<ComboBoxItem>()
+            .First(item => (string)item.Tag == settings.Style.TextColor.ToString());
+        SubtitleTiming.SelectedItem = SubtitleTiming.Items.Cast<ComboBoxItem>()
+            .First(item => (string)item.Tag == settings.Style.Timing.ToString());
         // Yalnız çeviri modeli olan diller listelenir; tek dil varsa seçim gösterilmez.
         foreach (var (code, name) in Languages.Where(l => controller.SupportsLanguage(l.Code)))
             GameLanguage.Items.Add(new ComboBoxItem { Content = Localizer.Current[name], Tag = code, IsSelected = code == settings.SourceLanguage });
@@ -219,6 +223,18 @@ public partial class SettingsWindow : Window
 
     private void OnBackground(object sender, RoutedPropertyChangedEventArgs<double> e) =>
         Update(s => s with { Style = s.Style with { Background = (int)Math.Round(e.NewValue) } });
+
+    private void OnSubtitleColor(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || SubtitleColor.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        Update(s => s with { Style = s.Style with { TextColor = Enum.Parse<SubtitleTextColor>(tag) } });
+    }
+
+    private void OnSubtitleTiming(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || SubtitleTiming.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        Update(s => s with { Style = s.Style with { Timing = Enum.Parse<SubtitleTimingMode>(tag) } });
+    }
 
     private void OnBold(object sender, RoutedEventArgs e) =>
         Update(s => s with { Style = s.Style with { Bold = Bold.IsChecked == true } });
