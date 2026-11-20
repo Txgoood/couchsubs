@@ -22,7 +22,7 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 ## Build #133 — Oyun kütüphanesi yönetimi
 
-- PS5 Remote Play bağlantısı hangi oyunun çalıştığını doğrudan bildirmez. Ekran OCR, yalnız açık GTA5/GTA6 oyun başlığıyla eşleşirse otomatik profil açar. Ad bulunamadığında manuel seçilen kayıt korunur; oyunun adı tahmin edilmez.
+- PS5 yerel ağ DDP sorgusunda `running-app-name` alanı varsa iki ardışık tutarlı yanıtla oyun profili oluşturulur ve seçilir. Yanıt yoksa ekran OCR yalnız tam GTA5/GTA6 başlık metnini yakalarsa profil seçer. Kullanıcı o oturumda elle oyun seçmişse bu tercih korunur.
 - Oyun seçici menüsünde **Dışarı aktar** karakter/ses eşleşmelerini JSON'a yazar.
 - **İçe aktar** JSON yedeğini doğrular; aynı oyun varsa kullanıcı açıkça onay vermeden üzerine yazılmaz.
 - **Oyunu sil** işlemi iki aşamalı onayla yapılır; yalnız seçilen oyunun eşleşmelerini siler. Ortak model ve diğer oyunlar korunur.
