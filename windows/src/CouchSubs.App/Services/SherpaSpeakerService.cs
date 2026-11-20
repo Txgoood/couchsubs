@@ -45,6 +45,9 @@ internal sealed class SherpaSpeakerService(string? overrideModelPath = null) : I
 
     public void Start()
     {
+        // Second fail-closed gate if a different caller constructs this service.
+        // Intentionally do not call any Sherpa native API in this process.
+        if (!NativeSpeakerSafetyPolicy.InProcessInferenceAllowed) return;
         lock (gate)
         {
             if (cancellation is not null || !File.Exists(LocalModelPath)) return;

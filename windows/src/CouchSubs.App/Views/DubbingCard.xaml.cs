@@ -62,7 +62,11 @@ public partial class DubbingCard : UserControl
         loading = true;
         var settings = controller.Settings.Dubbing;
         Enabled.IsChecked = settings.Enabled;
-        AutoSpeakerTracking.IsChecked = settings.AutoSpeakerTracking;
+        // Native Sherpa can crash the entire .NET process with 0xC0000005.
+        // Display an unavailable choice instead of a misleading checked toggle.
+        AutoSpeakerTracking.IsEnabled = NativeSpeakerSafetyPolicy.InProcessInferenceAllowed;
+        AutoSpeakerTracking.IsChecked = settings.AutoSpeakerTracking &&
+            NativeSpeakerSafetyPolicy.InProcessInferenceAllowed;
         InterruptionGuard.IsChecked = settings.InterruptionGuard;
         InterruptionStats.Text = controller.InterruptionGuardSummary;
         foreach (ComboBoxItem item in SpeechDetectionPicker.Items)
