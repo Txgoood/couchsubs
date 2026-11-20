@@ -30,18 +30,22 @@ public partial class SettingsWindow : Window
         var version = Assembly.GetEntryAssembly()?.GetName().Version;
         BuildInfo.Text = version is null ? "" : $"CouchSubs v{version.Major}.{version.Minor}.{version.Build} · Build #{version.Revision}";
         var settings = controller.Settings;
-        foreach (var virtualKey in Enumerable.Range(0x70, 12).Concat(new[] { 0x65, 0x69 }))
+        // Every action is editable. The previous F11/F12 and Num 0/1/2/3/8
+        // values remain the defaults for existing settings files.
+        var hotkeyValues = HotkeyAssignments.From(settings).AllKeys();
+        var pickers = AllHotkeyPickers;
+        for (int i = 0; i < pickers.Length; i++)
         {
-            var label = virtualKey >= 0x70 ? "F" + (virtualKey - 0x6F) :
-                "Num " + (virtualKey - 0x60);
-            ScreenHotkeyPicker.Items.Add(new ComboBoxItem
+            foreach (var key in Enumerable.Range(0x70, 12).Concat(Enumerable.Range(0x60, 10)))
             {
-                Content = label, Tag = virtualKey, IsSelected = settings.ScreenHotkey == virtualKey
-            });
-            FreeAreaHotkeyPicker.Items.Add(new ComboBoxItem
-            {
-                Content = label, Tag = virtualKey, IsSelected = settings.FreeAreaHotkey == virtualKey
-            });
+                var label = key >= 0x70 ? "F" + (key - 0x6F) : "Num " + (key - 0x60);
+                pickers[i].Items.Add(new ComboBoxItem
+                {
+                    Content = label,
+                    Tag = key,
+                    IsSelected = hotkeyValues[i] == key
+                });
+            }
         }
         TextSize.Value = Math.Clamp(settings.Style.FontSize, TextSize.Minimum, TextSize.Maximum);
         TextSizeValue.Text = ((int)TextSize.Value).ToString();
@@ -68,24 +72,43 @@ public partial class SettingsWindow : Window
         loading = false;
     }
 
+    private ComboBox[] AllHotkeyPickers =>
+        [ScreenHotkeyPicker, FreeAreaHotkeyPicker, PauseHotkeyPicker,
+         Region1HotkeyPicker, Region2HotkeyPicker, Region3HotkeyPicker, SnapshotHotkeyPicker];
+
     private void OnHotkeysChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (loading || ScreenHotkeyPicker.SelectedItem is not ComboBoxItem { Tag: int screen } ||
-            FreeAreaHotkeyPicker.SelectedItem is not ComboBoxItem { Tag: int area }) return;
-        if (screen == area)
+        if (loading) return;
+        var pickers = AllHotkeyPickers;
+        if (pickers.Any(p => p.SelectedItem is not ComboBoxItem { Tag: int })) return;
+
+        var selected = pickers.Select(p => (int)((ComboBoxItem)p.SelectedItem).Tag).ToArray();
+        var mapping = new HotkeyAssignments(
+            selected[0], selected[1], selected[2], selected[3],
+            selected[4], selected[5], selected[6]);
+
+        if (!mapping.IsValid)
         {
-            MessageBox.Show("İki işlev aynı kısayolu kullanamaz. Farklı tuşlar seçin.",
-                "Kısayol çakışması", MessageBoxButton.OK, MessageBoxImage.Warning);
+            // Never save conflicting bindings: Windows RegisterHotKey would silently
+            // leave one action unreachable. Restore ALL seven previous assignments.
             loading = true;
-            var settings = controller.Settings;
-            ScreenHotkeyPicker.SelectedItem = ScreenHotkeyPicker.Items.Cast<ComboBoxItem>()
-                .First(item => (int)item.Tag == settings.ScreenHotkey);
-            FreeAreaHotkeyPicker.SelectedItem = FreeAreaHotkeyPicker.Items.Cast<ComboBoxItem>()
-                .First(item => (int)item.Tag == settings.FreeAreaHotkey);
-            loading = false;
+            try
+            {
+                var prior = HotkeyAssignments.From(controller.Settings).AllKeys();
+                for (int i = 0; i < pickers.Length; i++)
+                {
+                    var key = prior[i];
+                    pickers[i].SelectedItem = pickers[i].Items.Cast<ComboBoxItem>()
+                        .FirstOrDefault(item => item.Tag is int value && value == key);
+                }
+            }
+            finally { loading = false; }
+            MessageBox.Show(
+                "Tuş çakışması veya geçersiz kısayol. Her işlev için farklı bir F1-F12 veya Num 0-9 tuşu seç.",
+                "Kısayol çakışması", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        controller.Settings = controller.Settings with { ScreenHotkey = screen, FreeAreaHotkey = area };
+        controller.Settings = mapping.ApplyTo(controller.Settings);
     }
 
     private void ShowDeepL()
