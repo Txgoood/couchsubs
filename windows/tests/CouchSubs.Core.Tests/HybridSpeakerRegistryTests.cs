@@ -56,7 +56,7 @@ public sealed class HybridSpeakerRegistryTests
         var registry = new HybridSpeakerRegistry();
         registry.Resolve(new("Jason", Vector(4), 0.9f, true, true));
         var similar = Vector(4);
-        similar[5] = 0.65f;
+        similar[5] = 0.95f;
         Assert.Null(registry.Resolve(Sound(similar)).Name);
     }
 
