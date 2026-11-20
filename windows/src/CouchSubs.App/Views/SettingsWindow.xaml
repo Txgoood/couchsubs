@@ -230,7 +230,7 @@
                             </StackPanel>
                         </Border>
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Text="{t:T 'Num 0 pauses or resumes the live subtitle translation, which helps when you translate areas.'}" />
+                                   Text="Altyazıyı duraklatma veya sürdürme için yukarıda atadığın tuşu kullan." />
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
                                    Text="{t:T 'Atadığın kısayollar yalnız çeviri açıkken çalışır. Num kısayolları için Num Lock açık olmalı.'}" />
                     </StackPanel>
