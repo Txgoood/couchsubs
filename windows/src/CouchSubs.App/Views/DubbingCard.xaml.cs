@@ -63,6 +63,9 @@ public partial class DubbingCard : UserControl
         var settings = controller.Settings.Dubbing;
         Enabled.IsChecked = settings.Enabled;
         AutoSpeakerTracking.IsChecked = settings.AutoSpeakerTracking;
+        foreach (ComboBoxItem item in SpeechDetectionPicker.Items)
+            item.IsSelected = string.Equals(item.Tag as string, settings.SpeechDetection.ToString(), StringComparison.Ordinal);
+        AiPerformanceInfo.Text = controller.AiPerformanceSummary;
         AutoGameLibrary.IsChecked = settings.AutoGameLibrary;
         foreach (ComboBoxItem item in EmotionModePicker.Items)
             item.IsSelected = string.Equals(item.Tag as string, settings.EmotionMode.ToString(), StringComparison.Ordinal);
@@ -359,6 +362,20 @@ public partial class DubbingCard : UserControl
     private static string DisplayName(string name) =>
         string.Join(' ', name.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
+
+    private void OnSpeechDetection(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || controller is null ||
+            SpeechDetectionPicker.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        if (Enum.TryParse<SpeechDetectionEngine>(tag, out var mode))
+            Update(s => s with { Dubbing = s.Dubbing with { SpeechDetection = mode } });
+    }
+
+    private void OnRefreshAiPerformance(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        AiPerformanceInfo.Text = controller.AiPerformanceSummary;
+    }
 
     private void OnSpeakerTracking(object sender, RoutedEventArgs e)
     {

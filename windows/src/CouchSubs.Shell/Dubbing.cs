@@ -33,11 +33,15 @@ public enum DubbingEngine
 
 public enum DubbingEmotionMode { Off, Balanced, Cinematic, Acoustic, Neural }
 
+/// <summary>Optional game audio speech activity engine; legacy/installed defaults preserved.</summary>
+public enum SpeechDetectionEngine { Automatic, SileroOnnx, TextOnly }
+
 public sealed record DubbingSettings
 {
     public bool Enabled { get; init; }
     /// <summary>Experimental speaker embeddings for PS5 audio without subtitle names.</summary>
     public bool AutoSpeakerTracking { get; init; } = true;
+    public SpeechDetectionEngine SpeechDetection { get; init; } = SpeechDetectionEngine.Automatic;
     /// <summary>Auto-create/select library only when a recognizable game title is observed.</summary>
     public bool AutoGameLibrary { get; init; } = true;
     /// <summary>Opt-in emotional speech. Never affects subtitle OCR or translation.</summary>
@@ -72,6 +76,7 @@ public interface IAudioOutput
 /// <summary>İsteğe bağlı oyun+dublaj miks çıkışı; sıradan TV/PC modları bu arayüzü kullanmaz.</summary>
 public interface INeuralSpeechDetector
 {
+    AiPerformanceSnapshot Statistics => default;
     bool Ready { get; }
     bool RecentSpeech { get; }
     void Start();
@@ -82,6 +87,7 @@ public interface INeuralSpeechDetector
 /// <summary>Optional local speaker-embedding inference. Must never block the game-audio callback.</summary>
 public interface IAutomaticSpeakerDetector
 {
+    AiPerformanceSnapshot Statistics => default;
     SpeakerIdentityResult Latest { get; }
     void Start();
     void Push(short[] pcm, int channels, int rate, bool speechConfirmed);

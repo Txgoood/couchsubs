@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System.IO;
+using System.Diagnostics;
 using System.Threading.Channels;
 using CouchSubs.Core.Dubbing;
 using CouchSubs.Shell;
@@ -21,6 +22,8 @@ internal sealed class SherpaSpeakerService(string? overrideModelPath = null) : I
     private int modelReady;
     public bool ModelReady => Volatile.Read(ref modelReady) == 1;
     private readonly object gate = new();
+    private readonly AiPerformanceMetrics performance = new();
+    public AiPerformanceSnapshot Statistics => performance.Snapshot();
     private readonly HybridSpeakerRegistry identities = new();
     private Channel<AudioPacket>? channel;
     private CancellationTokenSource? cancellation;
@@ -45,6 +48,7 @@ internal sealed class SherpaSpeakerService(string? overrideModelPath = null) : I
         lock (gate)
         {
             if (cancellation is not null || !File.Exists(LocalModelPath)) return;
+            performance.Reset();
             latest = new(null, SpeakerIdentitySource.Uncertain, 0);
             latestTicks = 0;
             Interlocked.Exchange(ref modelReady, 0);
@@ -63,6 +67,7 @@ internal sealed class SherpaSpeakerService(string? overrideModelPath = null) : I
     {
         if (channels is < 1 or > 2 || (rate != 16000 && rate != 48000) ||
             pcm.Length is < 1 or > 96000) return;
+        if (speechConfirmed) performance.RecordPacket();
         channel?.Writer.TryWrite(new AudioPacket(pcm, channels, rate, speechConfirmed));
     }
 
@@ -128,7 +133,9 @@ internal sealed class SherpaSpeakerService(string? overrideModelPath = null) : I
                             stream.InputFinished();
                             if (extractor.IsReady(stream))
                             {
+                                var started = Stopwatch.GetTimestamp();
                                 var embedding = extractor.Compute(stream);
+                                performance.RecordInference(started);
                                 if (cancel.IsCancellationRequested || gen != Volatile.Read(ref generation)) return;
                                 // Model confidence isn't calibrated: only repeated, unambiguous
                                 // cosine matches are admitted by HybridSpeakerRegistry.
@@ -154,6 +161,7 @@ internal sealed class SherpaSpeakerService(string? overrideModelPath = null) : I
         catch (OperationCanceledException) { }
         catch (Exception)
         {
+            performance.RecordError();
             lock (gate)
             {
                 if (gen == generation)

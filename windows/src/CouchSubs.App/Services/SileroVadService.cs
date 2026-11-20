@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System.IO;
+using System.Diagnostics;
 using System.Threading.Channels;
 using CouchSubs.Shell;
 using Microsoft.ML.OnnxRuntime;
@@ -17,6 +18,8 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
     public static bool IsBundled => File.Exists(ModelPath);
     private string LocalModelPath => overrideModelPath ?? ModelPath;
     private readonly object lifecycle = new();
+    private readonly AiPerformanceMetrics performance = new();
+    public AiPerformanceSnapshot Statistics => performance.Snapshot();
     private CancellationTokenSource? cancellation;
     private Channel<AudioPacket>? incoming;
     private Task? worker;
@@ -36,6 +39,7 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
         lock (lifecycle)
         {
             if (cancellation is not null || !File.Exists(LocalModelPath)) return;
+            performance.Reset();
             Interlocked.Exchange(ref lastSpeechTicks, 0);
             Interlocked.Exchange(ref lastEvaluationTicks, 0);
             var token = new CancellationTokenSource();
@@ -58,6 +62,7 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
         // Data already has its own fresh allocation from StreamSession.OnAudioPcm.
         if (channels is < 1 or > 2 || (rate != 16000 && rate != 48000) ||
             pcm.Length == 0 || pcm.Length > 96000) return;
+        performance.RecordPacket();
         incoming?.Writer.TryWrite(new AudioPacket(pcm, channels, rate));
     }
 
@@ -137,8 +142,10 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
                         using var input = OrtValue.CreateTensorValueFromMemory(modelInput, [1L, 576L]);
                         using var stateInput = OrtValue.CreateTensorValueFromMemory(state, [2L, 1L, 128L]);
                         using var srInput = OrtValue.CreateTensorValueFromMemory(sampleRate, Array.Empty<long>());
+                        var started = Stopwatch.GetTimestamp();
                         using var outputs = session.Run(runOptions,
                             ["input", "state", "sr"], [input, stateInput, srInput], ["output", "stateN"]);
+                        performance.RecordInference(started);
                         float probability = outputs[0].GetTensorDataAsSpan<float>()[0];
                         outputs[1].GetTensorDataAsSpan<float>().CopyTo(state);
                         Array.Copy(modelInput, 512, context, 0, 64);
@@ -161,6 +168,7 @@ internal sealed class SileroVadService(string? overrideModelPath = null) : INeur
         catch (OperationCanceledException) { }
         catch (Exception)
         {
+            performance.RecordError();
             // Missing/corrupt/unsupported model must NEVER interrupt gameplay or dubbing.
             Interlocked.Exchange(ref lastSpeechTicks, 0);
             Interlocked.Exchange(ref lastEvaluationTicks, 0);
