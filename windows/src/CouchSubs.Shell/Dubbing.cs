@@ -136,6 +136,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     // Prepare ve Next tarafından başlatılan TÜM ses işlemleri takip edilir.
     private int activeSynthOperations;
     private TaskCompletionSource? synthIdle;
+    private CancellationTokenSource? activeLineCancellation;
     private bool disposed;
     private bool working;
     private int generation;
@@ -175,6 +176,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         {
             // Yeni altyazı geldiyse öncekilerin cümleleri artık geç kalmıştır: bekleyenler atılır, çalan da kesilir.
             // Ses yazının gerisinde kalıp oyunu karıştırmasın; dublaj hep ekrandaki altyazıyı söyler.
+            activeLineCancellation?.Cancel();
             queue.Clear();
             foreach (var line in lines) queue.Enqueue((line, null));
             while (queue.Count > Backlog) queue.Dequeue();
@@ -211,6 +213,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     {
         lock (gate)
         {
+            activeLineCancellation?.Cancel();
             queue.Clear();
             working = false;
             generation++;
@@ -323,11 +326,14 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     {
         SpokenLine line;
         DubbingVoice? preview;
+        CancellationTokenSource operationCancellation;
         lock (gate)
         {
             // Geç başlayan eski döngü yeni altyazının cümlesini alıp atmasın.
             if (disposed || queue.Count == 0 || number != generation) return null;
             (line, preview) = queue.Dequeue();
+            operationCancellation = new CancellationTokenSource();
+            activeLineCancellation = operationCancellation;
         }
         DubbingVoice voice;
         if (preview is { } chosen)
@@ -365,13 +371,29 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         {
             try
             {
-                return ((await engine.SynthesizeAsync(text, url)).Tightened().SoftEdges(), preview is not null);
+                var token = operationCancellation.Token;
+                return ((await engine.SynthesizeAsync(text, url, token)).Tightened().SoftEdges(),
+                    preview is not null);
+            }
+            catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
+            {
+                // Outdated dialogue cancelled by a newer subtitle: not a user error.
+                return null;
             }
             // Motor ne olursa olsun (pocket-tts, Windows sesi) bir cümlenin hatası dublajı durdurmaz.
             catch (Exception error)
             {
                 ReportFailure(error);
                 return null;
+            }
+            finally
+            {
+                lock (gate)
+                {
+                    if (ReferenceEquals(activeLineCancellation, operationCancellation))
+                        activeLineCancellation = null;
+                }
+                operationCancellation.Dispose();
             }
         });
     }

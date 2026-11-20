@@ -370,7 +370,10 @@
   // --- Sunucu bağlantısı (Server-Sent Events) ---
 
   function onEvent(name, handler) {
+    var subscribedSource = eventSource;
     eventSource.addEventListener(name, function (e) {
+      // Old SSE callbacks must not repaint the new session or restart old audio.
+      if (eventSource !== subscribedSource) return;
       var data;
       try {
         data = JSON.parse(e.data);
@@ -389,6 +392,9 @@
   function connect(address) {
     if (demoRunning()) stopDemo();
     if (eventSource) eventSource.close();
+    eventSource = null;
+    clearTimeout(dropTimer);
+    dropTimer = null;
     stopSpeech(); // Never keep stale TTS from an earlier computer/server.
     server = address;
     $('waiting').className = 'hidden';
@@ -399,13 +405,16 @@
     }
     setStatus('st-conn', t('connecting'), 'muted');
     eventSource = new EventSource(address + '/events');
+    var currentSource = eventSource;
     eventSource.onopen = function () {
+      if (currentSource !== eventSource) return;
       clearTimeout(scanTimer);
       clearTimeout(dropTimer);
       dropTimer = null;
       setStatus('st-conn', t('connected'), 'ok');
     };
     eventSource.onerror = function () {
+      if (currentSource !== eventSource) return;
       // Bağlantı kısa süre içinde geri gelmezse eski altyazı ekranda asılı kalmasın. Bir anlık kopma yazıyı silmez.
       diag.drops++;
       renderDiag();
@@ -414,6 +423,7 @@
           dropTimer = null;
           hideSubtitle('drop');
           hideScreen();
+          stopSpeech(); // Prevent stale Turkish voice continuing after prolonged outage.
         }, DROP_HIDE_MS);
       }
       setStatus('st-conn', t('reconnecting'), 'bad');
@@ -439,6 +449,8 @@
 
   var speech = null;
   var speechGeneration = 0;
+  var speechSafetyTimer = null;
+  var MAX_SPEECH_MS = 45000; // Safety against broken webOS audio end events.
 
   // Audio elements are short lived; generation prevents an old failed playback
   // callback from clearing a newer sentence. The TV's HDMI/game volume is NEVER
@@ -447,6 +459,12 @@
     stopSpeech();
     var current = ++speechGeneration;
     diag.speech = 'loading';
+    clearTimeout(speechSafetyTimer);
+    speechSafetyTimer = setTimeout(function () {
+      if (current !== speechGeneration) return;
+      noteError('tts: playback timeout');
+      stopSpeech();
+    }, MAX_SPEECH_MS);
     renderDiag();
     try {
       var player = new Audio();
@@ -459,13 +477,17 @@
       };
       player.onended = function () {
         if (current !== speechGeneration) return;
+        clearTimeout(speechSafetyTimer);
+        speechSafetyTimer = null;
         speech = null;
+        player.onplaying = player.onended = player.onerror = null;
+        try { player.removeAttribute('src'); } catch (e) { /* webOS2 */ }
         diag.speech = 'ended';
         renderDiag();
       };
       player.onerror = function () {
         if (current !== speechGeneration) return;
-        speech = null;
+        stopSpeech();
         diag.speech = 'error';
         noteError('tts: audio load failed');
       };
@@ -473,13 +495,13 @@
       var played = player.play();
       if (played && played.catch) played.catch(function (error) {
         if (current !== speechGeneration) return;
-        speech = null;
+        stopSpeech();
         diag.speech = 'blocked';
         noteError('tts: playback blocked');
       });
     } catch (e) {
       if (current !== speechGeneration) return;
-      speech = null;
+      stopSpeech();
       diag.speech = 'exception';
       noteError('tts: ' + e.message);
     }
@@ -487,10 +509,13 @@
 
   function stopSpeech() {
     ++speechGeneration;
+    clearTimeout(speechSafetyTimer);
+    speechSafetyTimer = null;
     var old = speech;
     speech = null;
     if (!old) return;
     try {
+      old.onplaying = old.onended = old.onerror = null;
       old.pause();
       old.removeAttribute('src');
       old.load();
@@ -503,7 +528,7 @@
   // Bilgisayar TV uygulamasını açamıyorsa adres gelmez. Adresini söyleyebilen TV'lerde uygulama aynı ağı tarar.
 
   var SERVER_PORT = 8787;
-  var SCAN_PARALLEL = 24;
+  var SCAN_PARALLEL = 8; // webOS 2.0: cap simultaneous network sockets and allocations.
   var SCAN_TIMEOUT_MS = 1200;
   var SCAN_PAUSE_MS = 30000;
   var scanTimer = null;
@@ -536,7 +561,7 @@
   }
 
   function scanForServer() {
-    if (scanning || !platform.localAddress) return;
+    if (scanning || !platform.localAddress || (eventSource && eventSource.readyState === 1)) return;
     platform.localAddress(function (ip) {
       var match = /^(\d+\.\d+\.\d+)\.\d+$/.exec(ip || '');
       if (!match) return scheduleScan();
@@ -556,6 +581,11 @@
         probe(address, function (ok) {
           active--;
           if (found) return;
+          if (eventSource && eventSource.readyState === 1) {
+            found = true;
+            scanning = false;
+            return;
+          }
           if (!ok) return pump();
           found = true;
           scanning = false;
