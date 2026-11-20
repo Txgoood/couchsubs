@@ -181,6 +181,7 @@ public interface IAppServices
     IGameAudioOutput? GameAudio => null;
     /// <summary>Optional neural voice activity detector; never called on UI or audio callback for inference.</summary>
     INeuralSpeechDetector? NeuralSpeech => null;
+    IAutomaticSpeakerDetector? SpeakerDetector => null;
     /// <summary>Uygulama güncellemesi; geliştirici derlemesinde null.</summary>
     IUpdater? Updater => null;
     /// <summary>Windows Güvenlik Duvarı izni; Windows dışında ve testlerde null (hiçbir şey önerilmez).</summary>
