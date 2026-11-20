@@ -18,6 +18,7 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     private const int Rate = 48000;
     private const int Channels = 2;
     private readonly GameAudioBuffer game = new(Rate * Channels / 4); // 250 ms max
+    private readonly SeparatedAudioFrameRouter stemRouter = new();
     private readonly object speechGate = new();
     private float[]? speech;
     private int speechPosition;
@@ -100,6 +101,24 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
             }
         }
         game.Write(converted);
+    }
+
+    /// <summary>
+    /// Optional future model integration: caller supplies already-resampled,
+    /// frame-aligned 48kHz stereo game + dialogue PCM. Missing or unsafe stems
+    /// always preserve the original game sound. Standard PushGameAudio is untouched.
+    /// Only a dedicated model worker should call this (never a live audio callback).
+    /// </summary>
+    public void PushSeparatedGameAudio(long frameId, float[] gamePcm, float[]? dialogueStem,
+        float confidence, int ageMilliseconds, bool turkishDubActive)
+    {
+        if (gamePcm is null || gamePcm.Length == 0 || gamePcm.Length % Channels != 0 ||
+            gamePcm.Length > Rate * Channels) return;
+        var safe = new float[gamePcm.Length];
+        stemRouter.Process(frameId, gamePcm,
+            dialogueStem is null ? ReadOnlySpan<float>.Empty : dialogueStem,
+            safe, confidence, ageMilliseconds, turkishDubActive);
+        game.Write(safe);
     }
 
     /// <summary>Yeni Türkçe cümle önceki sesin yerine geçer; arka plan oyun sesi kesilmez.</summary>
