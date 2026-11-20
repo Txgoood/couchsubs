@@ -63,6 +63,8 @@ public partial class DubbingCard : UserControl
         var settings = controller.Settings.Dubbing;
         Enabled.IsChecked = settings.Enabled;
         AutoSpeakerTracking.IsChecked = settings.AutoSpeakerTracking;
+        InterruptionGuard.IsChecked = settings.InterruptionGuard;
+        InterruptionStats.Text = controller.InterruptionGuardSummary;
         foreach (ComboBoxItem item in SpeechDetectionPicker.Items)
             item.IsSelected = string.Equals(item.Tag as string, settings.SpeechDetection.ToString(), StringComparison.Ordinal);
         AiPerformanceInfo.Text = controller.AiPerformanceSummary;
@@ -375,6 +377,19 @@ public partial class DubbingCard : UserControl
     {
         if (controller is null) return;
         AiPerformanceInfo.Text = controller.AiPerformanceSummary;
+    }
+
+    private void OnInterruptionGuard(object sender, RoutedEventArgs e)
+    {
+        if (loading || controller is null) return;
+        Update(s => s with { Dubbing = s.Dubbing with
+        { InterruptionGuard = InterruptionGuard.IsChecked == true } });
+    }
+
+    private void OnRefreshInterruption(object sender, RoutedEventArgs e)
+    {
+        if (controller is null) return;
+        InterruptionStats.Text = controller.InterruptionGuardSummary;
     }
 
     private void OnSpeakerTracking(object sender, RoutedEventArgs e)

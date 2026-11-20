@@ -2,7 +2,7 @@
 # Windows uygulaması: yerel DLL'i (libchiaki + FFmpeg) MSYS2 ile derler, .NET testlerini koşar,
 # uygulamayı tek klasör olarak yayınlar.
 name: windows
-# Paired Windows v0.2.2 (Build #136) + webOS v0.9.14 (Build #136).
+# Paired Windows v0.2.3 (Build #137) + webOS v0.9.15 (Build #137).
 
 on:
   push:
@@ -207,7 +207,7 @@ jobs:
       # Always expose the standalone IPK separately from the Windows EXE artifact.
       - uses: actions/upload-artifact@v4
         with:
-          name: couchsubs-webos-v0.9.14-build136-ipk
+          name: couchsubs-webos-v0.9.15-build137-ipk
           path: dist/tv-app/*.ipk
           if-no-files-found: error
 
@@ -215,7 +215,7 @@ jobs:
       - name: Yayınla
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.2.2-dev.${GITHUB_RUN_NUMBER}"; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.2.3-dev.${GITHUB_RUN_NUMBER}"; fi
           dotnet publish windows/src/CouchSubs.App -c Release -r win-x64 --self-contained -o publish/CouchSubs -p:Version="$VERSION"
 
       # MIT-licensed Silero v6.2.1: small local neural speech-activity model.
@@ -267,7 +267,7 @@ jobs:
       - name: Kurulum dosyası
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.2.2-dev.$env:GITHUB_RUN_NUMBER" }
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.2.3-dev.$env:GITHUB_RUN_NUMBER" }
           Copy-Item -Recurse publish/CouchSubs pack
           Copy-Item LICENSE, THIRD-PARTY-NOTICES.md pack/
           dotnet tool install -g vpk --version 1.2.161
