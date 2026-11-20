@@ -23,13 +23,14 @@ public sealed class AtmosphereMixEnvelope
     /// <summary>Process one stereo frame. KeepGame=1 disables ducking entirely.</summary>
     public (float Left, float Right) Step(
         float gameLeft, float gameRight, float speechLeft, float speechRight,
-        float keepGame = 0.82f, float speechVolume = 0.85f)
+        float keepGame = 0.82f, float speechVolume = 0.85f,
+        AtmosphereMixMode mode = AtmosphereMixMode.Legacy)
     {
         keepGame = Math.Clamp(float.IsFinite(keepGame) ? keepGame : 1f, 0.35f, 1f);
         speechVolume = Math.Clamp(float.IsFinite(speechVolume) ? speechVolume : 0f, 0f, 1f);
         var speaking = MathF.Max(MathF.Abs(speechLeft), MathF.Abs(speechRight)) > 0.0001f;
         // Downward gain takes ~35ms, release ~180ms to avoid pumping/abrupt ambient loss.
-        var target = speaking ? keepGame : 1f;
+        var target = speaking && mode != AtmosphereMixMode.SafeOriginal ? keepGame : 1f;
         var limit = 1f / (rate * (target < gameGain ? 0.035f : 0.180f));
         gameGain += Math.Clamp(target - gameGain, -limit, limit);
         // Ramps TTS start/stop independently so sudden words don't click.
@@ -37,8 +38,28 @@ public sealed class AtmosphereMixEnvelope
         var voiceStep = 1f / (rate * (voiceTarget > voiceGain ? 0.012f : 0.045f));
         voiceGain += Math.Clamp(voiceTarget - voiceGain, -voiceStep, voiceStep);
 
-        var left = gameLeft * gameGain + speechLeft * voiceGain;
-        var right = gameRight * gameGain + speechRight * voiceGain;
+        float left;
+        float right;
+        if (mode is AtmosphereMixMode.SpatialBalanced or AtmosphereMixMode.Cinematic)
+        {
+            // A game stereo mix contains a mid (shared L+R) and a side (L-R)
+            // component. Reduce the shared center only; retain positional side.
+            // This does NOT separate English speech or know speaker positions.
+            var center = (gameLeft + gameRight) * 0.5f;
+            var side = (gameLeft - gameRight) * 0.5f;
+            var midGain = mode == AtmosphereMixMode.Cinematic
+                ? MathF.Max(0.35f, gameGain - 0.12f * (1f - gameGain))
+                : gameGain;
+            var centerMixed = center * midGain;
+            left = centerMixed + side + speechLeft * voiceGain;
+            right = centerMixed - side + speechRight * voiceGain;
+        }
+        else
+        {
+            // Preserve the exact legacy mix and its stereo behavior.
+            left = gameLeft * gameGain + speechLeft * voiceGain;
+            right = gameRight * gameGain + speechRight * voiceGain;
+        }
         // Gentle shared limiter avoids clipping while preserving stereo balance.
         var highest = MathF.Max(1f, MathF.Max(MathF.Abs(left), MathF.Abs(right)));
         return (left / highest, right / highest);
