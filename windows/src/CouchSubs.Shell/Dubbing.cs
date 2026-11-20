@@ -54,6 +54,8 @@ public sealed record DubbingSettings
     public int GameAtmospherePercent { get; init; } = 82;
     /// <summary>Turkish voice level on shared PULSE 3D output; other outputs are unaffected.</summary>
     public int TurkishVoicePercent { get; init; } = 85;
+    /// <summary>Legacy by default: previous user audio settings are never reinterpreted.</summary>
+    public AtmosphereMixMode AtmosphereMode { get; init; } = AtmosphereMixMode.Legacy;
     /// <summary>Geçerli oyunun sesleri; önceki sürümlerin Cast ayarıyla uyumludur.</summary>
     public VoiceCast Cast { get; init; } = new();
     /// <summary>Karakterler oyun adına göre ayrılır, oyun başına sınırsız giriş saklanabilir.</summary>
