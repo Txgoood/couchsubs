@@ -26,6 +26,7 @@ public sealed class LiveServices : IAppServices
     public IAudioOutput? Audio { get; } = new WindowsAudioOutput();
     public IGameAudioOutput? GameAudio { get; } = new Pulse3DAudioOutput();
     public INeuralSpeechDetector? NeuralSpeech { get; } = SileroVadService.IsBundled ? new SileroVadService() : null;
+    public IAutomaticSpeakerDetector? SpeakerDetector { get; } = SherpaSpeakerService.IsBundled ? new SherpaSpeakerService() : null;
     public IGameScreenCapture? GameScreen { get; } = new WindowsGameScreenCapture();
     public IUpdater? Updater { get; } = new Updater();
     public IFirewall? Firewall { get; } = new WindowsFirewall();
