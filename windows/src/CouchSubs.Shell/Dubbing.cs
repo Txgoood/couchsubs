@@ -75,6 +75,15 @@ public interface INeuralSpeechDetector
     void Stop();
 }
 
+/// <summary>Optional local speaker-embedding inference. Must never block the game-audio callback.</summary>
+public interface IAutomaticSpeakerDetector
+{
+    SpeakerIdentityResult Latest { get; }
+    void Start();
+    void Push(short[] pcm, int channels, int rate, bool speechConfirmed);
+    void Stop();
+}
+
 public interface IGameAudioOutput : IAudioOutput, IDisposable
 {
     void Start();
