@@ -53,6 +53,16 @@ public sealed class AtmosphereMixEnvelope
         var speaking = MathF.Max(MathF.Abs(speechLeft), MathF.Abs(speechRight)) > 0.0001f;
         // Downward gain takes ~35ms, release ~180ms to avoid pumping/abrupt ambient loss.
         var target = speaking && mode != AtmosphereMixMode.SafeOriginal ? keepGame : 1f;
+        if (mode == AtmosphereMixMode.AdaptiveDialogue && speaking)
+        {
+            // Conservative and bounded center attenuation; the stereo side stays intact.
+            // A center-heavy game is not proof of English dialogue, so we NEVER
+            // try to erase it. Avoid hard level switching and keep the user floor.
+            var centerLevel = MathF.Abs((gameLeft + gameRight) * 0.5f);
+            var voiceLevel = MathF.Max(MathF.Abs(speechLeft), MathF.Abs(speechRight)) * speechVolume;
+            var requestedReduction = 0.22f * (voiceLevel / (voiceLevel + centerLevel + 0.05f));
+            target = MathF.Max(keepGame, 1f - requestedReduction);
+        }
         var limit = 1f / (rate * (target < gameGain ? 0.035f : 0.180f));
         gameGain += Math.Clamp(target - gameGain, -limit, limit);
         // Ramps TTS start/stop independently so sudden words don't click.
@@ -62,7 +72,7 @@ public sealed class AtmosphereMixEnvelope
 
         float left;
         float right;
-        if (mode is AtmosphereMixMode.SpatialBalanced or AtmosphereMixMode.Cinematic)
+        if (mode is AtmosphereMixMode.SpatialBalanced or AtmosphereMixMode.Cinematic or AtmosphereMixMode.AdaptiveDialogue)
         {
             // A game stereo mix contains a mid (shared L+R) and a side (L-R)
             // component. Reduce the shared center only; retain positional side.
