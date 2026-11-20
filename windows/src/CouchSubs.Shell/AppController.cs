@@ -849,7 +849,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (settings.Dubbing.AutoGameLibrary)
             {
                 gameProbeCancellation = new CancellationTokenSource();
-                _ = PollPs5GameTitleAsync(console.Host, gameProbeCancellation.Token);
+                _ = PollPs5GameTitleAsync(gameProbeCancellation.Token);
             }
             if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
 
@@ -1462,7 +1462,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         Changed(nameof(KnownGames));
     }
 
-    private async Task PollPs5GameTitleAsync(string host, CancellationToken stop)
+    private async Task PollPs5GameTitleAsync(CancellationToken stop)
     {
         string? previous = null;
         var confirmations = 0;
@@ -1470,7 +1470,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             try
             {
-                var running = await Ps5RunningGameDiscovery.ProbeAsync(host, stop).ConfigureAwait(false);
+                var running = await Ps5RunningGameDiscovery.ProbeAsync(console?.Host ?? "", stop).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(running))
                 {
                     var title = GameTitleDetector.Detect(running) ?? GameCastLibrary.Normalize(running);
@@ -1517,6 +1517,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public void DeleteGameLibrary(string game)
     {
         var cleaned = GameCastLibrary.Delete(settings.Dubbing, game);
+        manualGamePinned = false; // Allow the detected game to become active again after deletion.
         Settings = settings with { Dubbing = cleaned };
         Changed(nameof(KnownGames));
     }
