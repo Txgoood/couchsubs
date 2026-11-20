@@ -57,6 +57,10 @@ public sealed record UserSettings
     public string SourceLanguage { get; init; } = "en";
     public string TargetLanguage { get; init; } = "tr";
     public DubbingSettings Dubbing { get; init; } = new();
+    /// <summary>Global screen translator shortcut, default F11 (VK 0x7A).</summary>
+    public int ScreenHotkey { get; init; } = 0x7A;
+    /// <summary>Global free-area translator shortcut, default F12 (VK 0x7B).</summary>
+    public int FreeAreaHotkey { get; init; } = 0x7B;
     /// <summary>Anahtar girildiyse çeviri DeepL'le yapılır; kapalıysa ya da DeepL'e ulaşılamazsa cihaz üstü model.</summary>
     public bool OnlineTranslation { get; init; }
 

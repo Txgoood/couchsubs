@@ -22,6 +22,17 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#134** | **v0.2.0** | **v0.9.12** | **Yapay zekâ çalışma süresi ölçümü, otomatik Silero/metin tabanlı güvenli seçim, eski motorlara dönüş** | **GitHub CI kontrolünde** |
 
+| **#135** | **v0.2.1** | **v0.9.13** | **F11 tam ekran çevirisi, F12 serbest alan; ayardan değiştirebilen kalıcı iki kısayol** | **CI testinde** |
+
+## Build #135 — Kısayolları kayıpsız güncelle
+
+- Ekranı çevir: **F11** (eski Num9). Tekrar basınca çeviriyi kaldırır.
+- Serbest alan: **F12** (eski Num5). Esc ile kapanır.
+- Windows Ayarlar'da iki ayrı ComboBox ile **F1..F12** veya **Num5/Num9** atanabilir. Diğer Num 0,1,2,3,8 kısayolları ayrılmıştır, değiştirilmez.
+- Seçimler kalıcı `settings.json` içine yazılır; canlı çeviri açıksa Windows kısayolları yeniden kaydedilir. Aynı tuşu iki işleve atamak yasaktır.
+- Windows v0.2.1 Build #135; LG webOS eş paket v0.9.13 Build #135. TV'nin kısayol girişi yoktur; değişiklik yalnız bilgisayara uygulanır.
+- Önceki Silero, Sherpa, Türkçe dublaj, karakter hafızası ve oyun çeviri özelliklerine dokunulmadı.
+
 ## Build #134 — Kayıpsız yapay zekâ altyapısı
 
 - **Önceki tüm özellikler korunur:** GTA oyun adı, JSON yedekleme, karakter sesleri, Sherpa ses izi, Silero VAD, oyun atmosferinin korunması, webOS ses çıktısı.
