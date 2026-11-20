@@ -24,6 +24,18 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#135** | **v0.2.1** | **v0.9.13** | **F11 tam ekran çevirisi, F12 serbest alan; ayardan değiştirebilen kalıcı iki kısayol** | **CI testinde** |
 
+| **#136** | **v0.2.2** | **v0.9.14** | **Num0/1/2/3/8, F11 ve F12 dahil 7 kısayolun tamamı tek panelden değiştirilebilir; çakışma kontrolü** | **GitHub CI doğrulaması bekleniyor** |
+
+## Build #136 — Tam kısayol özelleştirme
+
+- Windows ayarlarında **Klavye kısayolları - hepsini değiştir** panelinde 7 işlevin ayrı açılır listesi bulunur.
+- F1..F12 ve NumPad0..9 kullanılabilir; bir tuş iki farklı işleve atanamaz.
+- Varsayılanlar: F11 ekran çevir, F12 serbest alan, Num0 durdur/devam, Num1/2/3 ek bölge, Num8 önizleme.
+- Değişiklikler kalıcı UserSettings içine yazılır, çeviri sürerken Windows hotkey kaydı yeniden yapılır.
+- Eski Build #135 F11/F12 tercihleri korunur. Diğer eski kısayolların varsayılanı değişmez.
+- **Windows v0.2.2 / Build #136**, **LG webOS v0.9.14 / Build #136**. TV'nin klavye ayarları değiştirilmez.
+- Silero, Sherpa, GTA karakter hafızası, dışarı/içe aktar/sil, dublaj ve oyun atmosferi ile PS5 bağlantısı korunur.
+
 ## Build #135 — Kısayolları kayıpsız güncelle
 
 - Ekranı çevir: **F11** (eski Num9). Tekrar basınca çeviriyi kaldırır.
