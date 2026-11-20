@@ -161,6 +161,13 @@ jobs:
           name: couchsubs-android
           path: android-apk
 
+      - name: webOS 2.0 JavaScript sözdizimi ve TV sürümü
+        shell: pwsh
+        run: |
+          node --check tv-webos/app.js
+          node --check tv-webos/platform.js
+        continue-on-error: false
+
       - name: TV paketleri
         shell: bash
         run: |
