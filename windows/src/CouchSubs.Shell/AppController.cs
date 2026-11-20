@@ -813,11 +813,16 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             }
 
             bool acousticMode = settings.Dubbing.Enabled && settings.Dubbing.EmotionMode == DubbingEmotionMode.Acoustic;
+            // Safe model registry v1: Automatic/explicit Silero use the existing
+            // verified model. TextOnly disables neural capture and returns to the
+            // pre-existing text/acoustic dubbing without changing the game soundtrack.
+            bool speechModelEnabled = settings.Dubbing.SpeechDetection != SpeechDetectionEngine.TextOnly
+                && services.NeuralSpeech is not null;
             bool autoSpeaker = settings.Dubbing.Enabled && settings.Dubbing.AutoSpeakerTracking
-                && services.SpeakerDetector is not null && services.NeuralSpeech is not null;
+                && services.SpeakerDetector is not null && speechModelEnabled;
             bool neuralMode = settings.Dubbing.Enabled &&
                 (settings.Dubbing.EmotionMode == DubbingEmotionMode.Neural || autoSpeaker)
-                && services.NeuralSpeech is not null;
+                && speechModelEnabled;
             if (neuralMode) services.NeuralSpeech?.Start();
             if (autoSpeaker) services.SpeakerDetector?.Start();
             bool captureAudio = pulseAudioActive || acousticMode || neuralMode;
@@ -1441,6 +1446,23 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public IReadOnlyList<string> KnownGames => GameCastLibrary.Games(settings.Dubbing);
 
+    /// <summary>Snapshot only: counts/timing, never game audio or dialogue text.</summary>
+    public string AiPerformanceSummary
+    {
+        get
+        {
+            if (settings.Dubbing.SpeechDetection == SpeechDetectionEngine.TextOnly)
+                return "Konuşma yapay zekâsı kapalı · Metin tabanlı dublaj etkin";
+            var vad = services.NeuralSpeech?.Statistics ?? default;
+            var speaker = services.SpeakerDetector?.Statistics ?? default;
+            static string Show(string label, AiPerformanceSnapshot x) =>
+                $"{label}: {x.InferenceCalls} işlem · ort. {x.AverageInferenceMs:F1} ms · " +
+                $"en yüksek {x.PeakInferenceMs:F1} ms · hata {x.InferenceErrors}";
+            return Show("Silero", vad) + Environment.NewLine + Show("Konuşmacı", speaker);
+        }
+    }
+
+
     /// <summary>İsim verilmezse Genel; eski oyun sesleri saklanır.</summary>
     public void SelectGame(string name)
     {
@@ -1616,9 +1638,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (now.GameAtmospherePercent != old.GameAtmospherePercent ||
             now.TurkishVoicePercent != old.TurkishVoicePercent)
             services.GameAudio?.SetAtmosphereMix(now.GameAtmospherePercent, now.TurkishVoicePercent);
-        if (now.AutoSpeakerTracking != old.AutoSpeakerTracking && isRunning &&
+        if ((now.AutoSpeakerTracking != old.AutoSpeakerTracking ||
+             now.SpeechDetection != old.SpeechDetection) && isRunning &&
             settings.Source == GameSource.Ps5)
-            DubbingError = "Otomatik ses tanımayı değiştirdiniz. PS5 bağlantısını yeniden başlatın.";
+            DubbingError = "Konuşma algılama ayarı değişti. PS5 bağlantısını durdurup yeniden başlatın.";
         if (now.EmotionMode != old.EmotionMode)
         {
             dubber.EmotionMode = now.EmotionMode;
