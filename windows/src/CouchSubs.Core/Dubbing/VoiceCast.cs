@@ -65,6 +65,18 @@ public sealed class VoiceCast
         {
             var key = Key(line.Speaker);
             if (Assignments.TryGetValue(key, out var known)) return known;
+            // Anonymous voices come from the acoustic embedding model, not a gender guess.
+            // Distribute across the six licensed preset voices instead of collapsing
+            // every new unnamed GTA character to narrator/partner.
+            if (key.StartsWith("SES ", StringComparison.Ordinal))
+            {
+                var index = Assignments.Keys.Count(x => x.StartsWith("SES ", StringComparison.Ordinal)) %
+                    DubbingVoices.All.Length;
+                var acousticVoice = DubbingVoices.All[index];
+                Assignments[key] = acousticVoice;
+                assigned = true;
+                return acousticVoice;
+            }
             var gender = NameGender.Guess(line.Speaker);
             var voice = gender switch
             {
