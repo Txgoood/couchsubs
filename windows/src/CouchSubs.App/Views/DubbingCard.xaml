@@ -86,7 +86,7 @@
                         <TextBlock x:Name="GameInfo" Style="{StaticResource HintText}" Margin="0,8,0,0" />
                         <CheckBox x:Name="AutoGameLibrary" Content="Oyun başlığı görülürse karakter kütüphanesini otomatik oluştur / seç"
                                   Checked="OnAutoGameLibrary" Unchecked="OnAutoGameLibrary" Margin="0,8,0,4" />
-                        <TextBlock Text="PS5 oyunun adını bağlantıdan bildirmiyor. GTA 5 / GTA 6 başlık ekranı OCR ile okunursa otomatik seçilir; algılanamazsa buradan elle seçebilirsin."
+                        <TextBlock Text="PS5 yerel ağ yanıtı çalışan oyunun adını bildirirse kütüphane otomatik seçilir; yanıt gelmezse GTA 5 / GTA 6 başlık ekranından OCR denenir. İkisi de bulunamazsa elle seçim korunur."
                                    Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                             <Button Content="Dışarı aktar (JSON)" Click="OnExportGame" Margin="0,0,8,0" />
