@@ -121,7 +121,10 @@
                         <CheckBox x:Name="UseArea" Content="{t:T 'Use this area'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,12"
                                   Visibility="Collapsed" Checked="OnUseArea" Unchecked="OnUseArea" />
                         <StackPanel x:Name="ExtraTargetPanel" Visibility="Collapsed" Margin="0,0,0,12">
-                            <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
+                            <TextBlock Text="Serbest alan tuşu" Margin="0,0,0,4" />
+                        <ComboBox x:Name="FreeAreaHotkeyPicker" Width="155" HorizontalAlignment="Left"
+                                  SelectionChanged="OnHotkeysChanged" Margin="0,0,0,12" />
+                        <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
                             <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal">
                                     <RadioButton x:Name="ExtraTv" Content="{t:T 'On the TV'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Tv" />
@@ -146,9 +149,14 @@
                     </StackPanel>
                 </c:Card>
 
-                <c:Card Title="{t:T 'Translate the screen (Num 9)'}" Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                               Text="{t:T 'Press Num 9 while playing: every text on the screen is translated once and shown on the TV in its own place. Press again to remove the translations.'}" />
+                <c:Card Title="Ekranı çevir (F11)" Margin="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
+                                   Text="Oynarken F11'e basın: ekrandaki bütün yazılar bir kez çevrilir; tekrar basınca kaldırılır." />
+                        <TextBlock Text="Ekranı çevir tuşu" Margin="0,9,0,4" />
+                        <ComboBox x:Name="ScreenHotkeyPicker" Width="155" HorizontalAlignment="Left"
+                                  SelectionChanged="OnHotkeysChanged" />
+                    </StackPanel>
                 </c:Card>
 
                 <c:Card Title="{t:T 'OBS overlay'}" Margin="0,16,0,0">
@@ -164,10 +172,10 @@
                     </StackPanel>
                 </c:Card>
 
-                <c:Card Title="{t:T 'Free area (Num 5)'}" Margin="0,16,0,0">
+                <c:Card Title="Serbest alan (F12)" Margin="0,16,0,0">
                     <StackPanel>
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                                   Text="{t:T 'Press Num 5 while playing: the picture freezes on the PC, drag over any part of it to translate that part once. Esc closes.'}" />
+                                   Text="Oynarken F12'ye basın: görüntü bilgisayarda donar, çevirmek istediğiniz yeri fareyle seçin. Esc kapatır." />
                         <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
                         <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal">
@@ -179,7 +187,7 @@
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8"
                                    Text="{t:T 'Num 0 pauses or resumes the live subtitle translation, which helps when you translate areas.'}" />
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                   Text="{t:T 'The Num shortcuts work only while translating, so the number keys stay free in other apps. Keep Num Lock on.'}" />
+                                   Text="{t:T 'F11/F12 ve Num kısayolları yalnız çeviri açıkken çalışır. Num kısayolları için Num Lock açık olmalı.'}" />
                     </StackPanel>
                 </c:Card>
 
