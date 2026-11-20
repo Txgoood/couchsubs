@@ -27,7 +27,8 @@
   // Çevirinin yeri: oyundaki İngilizce altyazının üstünü örterek (cover), üstünde (above), altında (below)
   // ya da sabit yükseklikte (fixed). Yeri bildirmeyen eski CouchSubs sürümlerinde sabit kalır.
   var PLACEMENTS = { cover: 1, above: 1, below: 1, fixed: 1 };
-  var placement = 'fixed';
+  var placement = 'cover';
+  var subtitleTiming = 'adaptive';
   // Gösterilen satırın oyundaki İngilizce altyazının yeri (ekrana oranla), bilinmiyorsa null.
   var currentBox = null;
 
@@ -41,7 +42,7 @@
 
   // Bilgisayarın "temizle" olayı satırı bundan erken kaldırmaz: oyundaki satır çeviri gelirken kalkmışsa yazı TV'de
   // bir an görünüp kayboluyordu. Süre, bilgisayarın okuma süresi kuralıyla aynıdır; üst sınırı daha kısadır.
-  var HOLD_MAX_MS = 5000;
+  var HOLD_MAX_MS = 8000;
   var holdUntil = 0;
   // Bağlantı bir an koptuğunda yazı silinmez; ancak bu süre içinde geri gelmezse silinir.
   var DROP_HIDE_MS = 6000;
@@ -158,7 +159,9 @@
     // da ikinci çeviri gibi duruyordu. Yeni satır eskisinin yerine geçer.
     hidePrevious();
     shownAt = Date.now();
-    holdUntil = shownAt + Math.min(HOLD_MAX_MS, 2000 + text.length * 60);
+    var readingMs = Math.max(2500, Math.min(8000, 2000 + text.length * 60));
+    holdUntil = shownAt + (subtitleTiming === 'matchenglish' ? 0 :
+      subtitleTiming === 'extended' ? Math.min(10000, readingMs + 2200) : readingMs);
     currentBox = validBox(box);
     $('subtitle-text').textContent = text;
     $('subtitle-text').style.whiteSpace = paragraphs ? 'pre-line' : '';
@@ -169,7 +172,12 @@
     notePlace();
     clearTimeout(hideTimer);
     // Geçersiz ya da çok kısa süre yazıyı gösterir göstermez kaldırmasın.
-    var ms = duration > 0 ? Math.max(1000, duration) : Math.min(8000, 2000 + text.length * 60);
+    // Timer is a safety upper bound; the source English line's clear event
+    // determines when an ordinary subtitle ends. Never expire mid-sentence.
+    var ms = duration > 0 ? Math.max(1500, duration) : readingMs;
+    if (subtitleTiming === 'matchenglish') ms = 15000;
+    else if (subtitleTiming === 'extended') ms = Math.max(ms, readingMs + 2200);
+    else ms = Math.max(ms, readingMs);
     hideTimer = setTimeout(function () { hideSubtitle('timer'); }, ms);
   }
 
@@ -199,10 +207,17 @@
   function onClear() {
     diag.clears++;
     renderDiag();
-    var left = holdUntil - Date.now();
+    // Match-English mode follows the OCR clear immediately. Adaptive mode
+    // retains short translated lines until legible, but never on a new line.
+    var left = subtitleTiming === 'matchenglish' ? 0 : holdUntil - Date.now();
     if (left <= 0 || $('subtitle').className === 'hidden') return hideSubtitle('clear');
     clearTimeout(hideTimer);
     hideTimer = setTimeout(function () { hideSubtitle('clear-held'); }, left);
+  }
+
+  function onReplaceClear() {
+    // English changed; never leave the previous Turkish subtitle on top.
+    hideSubtitle('new-line');
   }
 
   function showPrevious(text) {
@@ -341,6 +356,11 @@
       $('subtitle-prev-text').style.fontSize = Math.round(style.fontSize * 0.8) + 'px';
     }
     if (PLACEMENTS[style.placement]) placement = style.placement;
+    if (style.timing === 'adaptive' || style.timing === 'matchenglish' || style.timing === 'extended')
+      subtitleTiming = style.timing;
+    if (style.textColor === 'yellow') $('subtitle-text').style.color = '#FFD84A';
+    else if (style.textColor === 'cyan') $('subtitle-text').style.color = '#83EFFF';
+    else if (style.textColor === 'white') $('subtitle-text').style.color = '#FFFFFF';
     if (typeof style.background === 'number') {
       var alpha = Math.max(0, Math.min(100, style.background)) / 100;
       $('subtitle-text').style.background = 'rgba(0, 0, 0, ' + alpha + ')';
@@ -436,6 +456,7 @@
       if (data.text) showSubtitle(data.text, data.duration, data.box, data.paragraphs === true);
     });
     onEvent('clear', onClear);
+    onEvent('replace-clear', onReplaceClear);
     onEvent('screen', function (data) { showScreen(data.items, data.duration); });
     onEvent('screen-clear', hideScreen);
     onEvent('style', applyStyle);
