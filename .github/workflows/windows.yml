@@ -2,7 +2,7 @@
 # Windows uygulaması: yerel DLL'i (libchiaki + FFmpeg) MSYS2 ile derler, .NET testlerini koşar,
 # uygulamayı tek klasör olarak yayınlar.
 name: windows
-# Paired Windows v0.1.7 (Build #131) + webOS v0.9.9 (Build #131).
+# Paired Windows v0.1.8 (Build #132) + webOS v0.9.10 (Build #132).
 
 on:
   push:
@@ -176,16 +176,16 @@ jobs:
           $props = Get-Content windows/Directory.Build.props -Raw
           $tv = Get-Content tv-webos/appinfo.json -Raw | ConvertFrom-Json
           $js = Get-Content tv-webos/app.js -Raw
-          if ($props -notmatch '<AssemblyVersion>0\.1\.7\.131</AssemblyVersion>') { throw "Windows Build #131 bulunamadı" }
-          if ($tv.version -ne '0.9.9') { throw "webOS v0.9.9 bulunamadı" }
+          if ($props -notmatch '<AssemblyVersion>0\.1\.8\.132</AssemblyVersion>') { throw "Windows Build #132 bulunamadı" }
+          if ($tv.version -ne '0.9.10') { throw "webOS v0.9.10 bulunamadı" }
           $platform = Get-Content tv-webos/platform.js -Raw
-          if ($platform -notmatch 'appBuild: 131') { throw "webOS Build #131 bulunamadı" }
-          if (-not (Test-Path dist/tv-app/com.couchsubs.tv_0.9.9_all.ipk)) { throw "webOS IPK üretilemedi" }
+          if ($platform -notmatch 'appBuild: 132') { throw "webOS Build #132 bulunamadı" }
+          if (-not (Test-Path dist/tv-app/com.couchsubs.tv_0.9.10_all.ipk)) { throw "webOS IPK üretilemedi" }
 
       # Always expose the standalone IPK separately from the Windows EXE artifact.
       - uses: actions/upload-artifact@v4
         with:
-          name: couchsubs-webos-v0.9.9-build131-ipk
+          name: couchsubs-webos-v0.9.10-build132-ipk
           path: dist/tv-app/*.ipk
           if-no-files-found: error
 
@@ -193,7 +193,7 @@ jobs:
       - name: Yayınla
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.1.7-dev.${GITHUB_RUN_NUMBER}"; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.1.8-dev.${GITHUB_RUN_NUMBER}"; fi
           dotnet publish windows/src/CouchSubs.App -c Release -r win-x64 --self-contained -o publish/CouchSubs -p:Version="$VERSION"
 
       # MIT-licensed Silero v6.2.1: small local neural speech-activity model.
@@ -217,6 +217,24 @@ jobs:
           COUCHSUBS_SILERO_SMOKE_MODEL: ${{ github.workspace }}/publish/CouchSubs/vad/silero_vad.onnx
         run: dotnet test windows/tests/CouchSubs.Shell.Tests/CouchSubs.Shell.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~SileroVadTests.BundledOnnxModelLoadsAndRejectsSilentPcm"
 
+      # Official sherpa-onnx English VoxCeleb speaker embedding model.
+      # CI verifies exact SHA256: an upstream replacement must fail the build.
+      - name: Konuşmacı ses izi ONNX modelini paketle
+        shell: bash
+        run: |
+          mkdir -p publish/CouchSubs/speaker
+          curl -fL --retry 4 --retry-delay 4 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx" \
+            -o publish/CouchSubs/speaker/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx
+          echo "c59158379255ad66e161679cca6af8d52d51e389e3224ab7d7a7baae295c2db5  publish/CouchSubs/speaker/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx" | sha256sum -c -
+
+      # Verify actual speaker model can initialize before packing Windows EXE.
+      - name: Konuşmacı tanıma modeli gerçek ONNX testi
+        shell: pwsh
+        env:
+          COUCHSUBS_SPEAKER_SMOKE_MODEL: ${{ github.workspace }}/publish/CouchSubs/speaker/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx
+        run: dotnet test windows/tests/CouchSubs.Shell.Tests/CouchSubs.Shell.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~SherpaSpeakerTests.BundledSpeakerModelInitializesWithoutGameAudio"
+
       # Türkçe dublajın ses motoru (Kyutai pocket-tts, MIT): sabit sürüm, özeti denetlenir.
       - name: Dublaj ses motoru
         shell: bash
@@ -227,7 +245,7 @@ jobs:
       - name: Kurulum dosyası
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.1.7-dev.$env:GITHUB_RUN_NUMBER" }
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.1.8-dev.$env:GITHUB_RUN_NUMBER" }
           Copy-Item -Recurse publish/CouchSubs pack
           Copy-Item LICENSE, THIRD-PARTY-NOTICES.md pack/
           dotnet tool install -g vpk --version 1.2.161
@@ -259,6 +277,7 @@ jobs:
           if (-not (Test-Path publish/CouchSubs/couchsubs_native.dll)) { throw "couchsubs_native.dll yayın klasöründe yok" }
           if (-not (Test-Path publish/CouchSubs/tts/pocket-tts.exe)) { throw "pocket-tts.exe yayın klasöründe yok" }
           if (-not (Test-Path publish/CouchSubs/vad/silero_vad.onnx)) { throw "Silero ONNX modeli yayın klasöründe yok" }
+          if (-not (Test-Path publish/CouchSubs/speaker/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx)) { throw "Speaker ONNX modeli yayın klasöründe yok" }
 
       - uses: actions/upload-artifact@v4
         with:

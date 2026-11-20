@@ -60,6 +60,7 @@ public partial class DubbingCard : UserControl
         loading = true;
         var settings = controller.Settings.Dubbing;
         Enabled.IsChecked = settings.Enabled;
+        AutoSpeakerTracking.IsChecked = settings.AutoSpeakerTracking;
         foreach (ComboBoxItem item in EmotionModePicker.Items)
             item.IsSelected = string.Equals(item.Tag as string, settings.EmotionMode.ToString(), StringComparison.Ordinal);
         EnginePanel.Visibility = controller.FastDubbingAvailable ? Visibility.Visible : Visibility.Collapsed;
@@ -260,6 +261,12 @@ public partial class DubbingCard : UserControl
     private static string DisplayName(string name) =>
         string.Join(' ', name.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
+
+    private void OnSpeakerTracking(object sender, RoutedEventArgs e)
+    {
+        if (loading || controller is null) return;
+        Update(s => s with { Dubbing = s.Dubbing with { AutoSpeakerTracking = AutoSpeakerTracking.IsChecked == true } });
+    }
 
     private void OnEmotionMode(object sender, SelectionChangedEventArgs e)
     {

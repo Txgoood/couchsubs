@@ -13,6 +13,7 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="2.0.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +24,7 @@
     <ProjectReference Include="..\..\src\CouchSubs.Shell\CouchSubs.Shell.csproj" />
     <!-- Compile the actual app neural VAD implementation in tests, not a mocked copy. -->
     <Compile Include="..\..\src\CouchSubs.App\Services\SileroVadService.cs" Link="SileroVadService.cs" />
+    <Compile Include="..\..\src\CouchSubs.App\Services\SherpaSpeakerService.cs" Link="SherpaSpeakerService.cs" />
   </ItemGroup>
 
 </Project>

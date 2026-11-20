@@ -810,9 +810,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             }
 
             bool acousticMode = settings.Dubbing.Enabled && settings.Dubbing.EmotionMode == DubbingEmotionMode.Acoustic;
-            bool neuralMode = settings.Dubbing.Enabled && settings.Dubbing.EmotionMode == DubbingEmotionMode.Neural
+            bool autoSpeaker = settings.Dubbing.Enabled && settings.Dubbing.AutoSpeakerTracking
+                && services.SpeakerDetector is not null && services.NeuralSpeech is not null;
+            bool neuralMode = settings.Dubbing.Enabled &&
+                (settings.Dubbing.EmotionMode == DubbingEmotionMode.Neural || autoSpeaker)
                 && services.NeuralSpeech is not null;
             if (neuralMode) services.NeuralSpeech?.Start();
+            if (autoSpeaker) services.SpeakerDetector?.Start();
             bool captureAudio = pulseAudioActive || acousticMode || neuralMode;
             gameProsody.Clear();
             var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
@@ -829,6 +833,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     var rate = Volatile.Read(ref pulseSampleRate);
                     if (acousticMode) gameProsody.Push(pcm, channels, rate);
                     if (neuralMode) services.NeuralSpeech?.Push(pcm, channels, rate);
+                    if (autoSpeaker) services.SpeakerDetector?.Push(pcm, channels, rate,
+                        services.NeuralSpeech?.RecentSpeech == true);
                     if (pulseAudioActive && services.GameAudio is { } mixer)
                         mixer.PushGameAudio(pcm, channels, rate);
                 };
@@ -924,6 +930,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         pulseAudioActive = false;
         services.GameAudio?.Dispose();
         services.NeuralSpeech?.Stop();
+        services.SpeakerDetector?.Stop();
         keeper?.Stop();
         keeper = null;
         pipeline?.Reset();
@@ -1485,7 +1492,16 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private void Speak(IReadOnlyList<SpokenLine> lines)
     {
         if (!settings.Dubbing.Enabled || !DubbingInstalled) return;
-        MakeDubber()?.Speak(lines);
+        // Subtitle labels win. When absent, use only a fresh high-confidence
+        // voice embedding result; never invent a real character name.
+        var recent = services.SpeakerDetector?.Latest;
+        if (settings.Source == GameSource.Ps5 && settings.Dubbing.AutoSpeakerTracking &&
+            recent is { Name: not null, Source: SpeakerIdentitySource.VoiceEmbedding, Confidence: >= 0.83f })
+            MakeDubber()?.Speak(lines.Select(line =>
+                string.IsNullOrWhiteSpace(line.Speaker)
+                    ? line with { Speaker = recent.Name } : line).ToArray());
+        else
+            MakeDubber()?.Speak(lines);
     }
 
     private void DubbingSettingsChanged(DubbingSettings old)
@@ -1509,6 +1525,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (now.GameAtmospherePercent != old.GameAtmospherePercent ||
             now.TurkishVoicePercent != old.TurkishVoicePercent)
             services.GameAudio?.SetAtmosphereMix(now.GameAtmospherePercent, now.TurkishVoicePercent);
+        if (now.AutoSpeakerTracking != old.AutoSpeakerTracking && isRunning &&
+            settings.Source == GameSource.Ps5)
+            DubbingError = "Otomatik ses tanımayı değiştirdiniz. PS5 bağlantısını yeniden başlatın.";
         if (now.EmotionMode != old.EmotionMode)
         {
             dubber.EmotionMode = now.EmotionMode;
