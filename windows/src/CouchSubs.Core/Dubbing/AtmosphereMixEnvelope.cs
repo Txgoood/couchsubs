@@ -42,6 +42,12 @@ public sealed class AtmosphereMixEnvelope
             speechLeft = float.IsFinite(speechLeft) ? speechLeft : 0f;
             speechRight = float.IsFinite(speechRight) ? speechRight : 0f;
         }
+        // PCM float samples outside [-1,1] are malformed and could overflow
+        // the mid/side calculation before the final peak limiter runs.
+        gameLeft = Math.Clamp(gameLeft, -1f, 1f);
+        gameRight = Math.Clamp(gameRight, -1f, 1f);
+        speechLeft = Math.Clamp(speechLeft, -1f, 1f);
+        speechRight = Math.Clamp(speechRight, -1f, 1f);
         keepGame = Math.Clamp(float.IsFinite(keepGame) ? keepGame : 1f, 0.35f, 1f);
         speechVolume = Math.Clamp(float.IsFinite(speechVolume) ? speechVolume : 0f, 0f, 1f);
         var speaking = MathF.Max(MathF.Abs(speechLeft), MathF.Abs(speechRight)) > 0.0001f;
