@@ -78,6 +78,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
     private bool manualGamePinned;
+    private readonly HashSet<string> suppressedAutoGames = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? gameProbeCancellation;
     private int pulseChannels = 2;
     private int pulseSampleRate = 48000;
@@ -1444,6 +1445,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public void SelectGame(string name)
     {
         manualGamePinned = true;
+        suppressedAutoGames.Remove(GameCastLibrary.Normalize(name));
         var selected = GameCastLibrary.Switch(settings.Dubbing, name);
         if (ReferenceEquals(selected, settings.Dubbing)) return;
         Settings = settings with { Dubbing = selected };
@@ -1455,7 +1457,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         if (!settings.Dubbing.AutoGameLibrary || manualGamePinned) return;
         var game = GameTitleDetector.Detect(text);
-        if (game is null || string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase))
+        if (game is null || suppressedAutoGames.Contains(game) ||
+            string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase))
             return;
         var switched = GameCastLibrary.Switch(settings.Dubbing, game);
         Settings = settings with { Dubbing = switched };
@@ -1497,7 +1500,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private void AutoSelectDiscoveredGame(string game)
     {
         if (!isRunning || !settings.Dubbing.AutoGameLibrary || manualGamePinned) return;
-        if (string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase)) return;
+        if (suppressedAutoGames.Contains(game) ||
+            string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase)) return;
         var switched = GameCastLibrary.Switch(settings.Dubbing, game);
         Settings = settings with { Dubbing = switched };
         Changed(nameof(KnownGames));
@@ -1511,12 +1515,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         Settings = settings with { Dubbing = restored };
         Changed(nameof(KnownGames));
         using var doc = System.Text.Json.JsonDocument.Parse(json);
-        return doc.RootElement.GetProperty("Game").GetString() ?? GameCastLibrary.DefaultGame;
+        var imported = doc.RootElement.GetProperty("Game").GetString() ?? GameCastLibrary.DefaultGame;
+        suppressedAutoGames.Remove(imported);
+        return imported;
     }
 
     public void DeleteGameLibrary(string game)
     {
         var cleaned = GameCastLibrary.Delete(settings.Dubbing, game);
+        suppressedAutoGames.Add(GameCastLibrary.Normalize(game));
         manualGamePinned = false; // Allow the detected game to become active again after deletion.
         Settings = settings with { Dubbing = cleaned };
         Changed(nameof(KnownGames));
