@@ -28,6 +28,19 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#137** | **v0.2.3** | **v0.9.15** | **Deneysel söz kesme güvenlik koruması: hızlı ses izi değişiminde yanlış karakter atamasını geçici olarak önle; dublaj/çeviri sürsün** | **CI kontrolünde** |
 
+| **#138** | **v0.2.4** | **v0.9.16** | **Oyun stereo konumunu koruyan yeni PULSE 3D mekânsal miks profilleri; eski miks varsayılan kalır** | **CI doğrulaması bekleniyor** |
+
+## Build #138 — Mekânsal atmosfer koruma
+
+- **Windows:** v0.2.4 Build #138. **LG webOS:** v0.9.16 Build #138, aynı `com.couchsubs.tv` App ID.
+- Yalnız Windows/PULSE 3D ortak ses çıkışına uygulanan, kullanıcı tarafından seçilebilir dört profil: Önceki miks, Orijinal stereo, Mekânsal dengeli ve Sinematik.
+- Mekânsal miks, stereo `mid=(L+R)/2` bileşenini hafif kısarken yön içeren `side=(L-R)/2` bileşenini korur. Bu stereo kulaklıkta sağ/sol efektlerin korunmasına yardımcı olabilir.
+- Güvenli profil, oyun sesini azaltmadan Türkçe TTS ekler; tek tek İngilizce konuşmaları ayırmaz.
+- Mekânsal dengeli seçildiğinde önceki varsayılan atmosfer %82 ise başlangıçta %90'a geçilir; Türkçe ses %85 kalır. Önceden özelleştirilmiş yüzdeler değiştirilmez.
+- Eski kullanıcıların davranışı değişmesin diye varsayılan `AtmosphereMixMode.Legacy` olarak tutulur.
+- Bu sürüm **konuşmacı sesini otomatik 3D konumlandırmaz** ve **kaynak konuşma/efekt ayrıştırması içermez**. Bunun için ayrı güvenilir model gerekir; oyun atmosferine zarar veren sahnede geri dönüş seçilebilir.
+- Testler: stereo `L-R` farkı, önceki miks davranışı, orijinal ses modu, sessiz sahnede sabit ses ve kırpma koruması. Silero, Sherpa, GTA oyun kütüphanesi, JSON yedekleri, tüm tuşlar, söz kesme koruması korunur.
+
 ## Build #137 — Söz kesme için güvenli başlangıç
 
 - Hedef: İsimsiz altyazı + oyun sesinde bir konuşmacıdan diğerine **1,5 saniye içinde** geçiş olduğunda yanlış karakter atamasını azaltmak.
