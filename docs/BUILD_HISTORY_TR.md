@@ -26,6 +26,19 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#136** | **v0.2.2** | **v0.9.14** | **Num0/1/2/3/8, F11 ve F12 dahil 7 kısayolun tamamı tek panelden değiştirilebilir; çakışma kontrolü** | **GitHub CI doğrulaması bekleniyor** |
 
+| **#137** | **v0.2.3** | **v0.9.15** | **Deneysel söz kesme güvenlik koruması: hızlı ses izi değişiminde yanlış karakter atamasını geçici olarak önle; dublaj/çeviri sürsün** | **CI kontrolünde** |
+
+## Build #137 — Söz kesme için güvenli başlangıç
+
+- Hedef: İsimsiz altyazı + oyun sesinde bir konuşmacıdan diğerine **1,5 saniye içinde** geçiş olduğunda yanlış karakter atamasını azaltmak.
+- `SpeakerTurnGuard`, yalnız gerçek Sherpa ses izi eşleşmesinden gelen ve yeterince güvenilir kimlikleri değerlendirir. Şüpheli hızlı geçişte 1,8 saniye otomatik isimsiz kimlik atamaz; normal Türkçe çeviri ve anlatıcı/karşılıklı seslendirme devam eder.
+- Kadın/erkek kimliği otomatik varsayılmaz. İsmi altyazıda açıkça bulunan karakterin adı korunur.
+- Menü seçeneği **deneysel, varsayılan kapalı**; kullanıcı isterse devreye alır.
+- İstatistikler: hızlı ses geçişleri ve güvenli belirsiz bırakılan kimlik sayısı; ham oyun sesi veya metin saklanmaz.
+- **Önemli sınır:** Bu **gerçek overlap diarization / iki sesi ayırma modeli değildir**. Hızlı konuşmacı değişimi yalnızca olası söz kesme işaretidir. Gerçek iki sesin aynı anda ayrıştırılması ve paralel Türkçe dublaj sonraki onaylı model/işleme aşamasına aittir.
+- Windows **v0.2.3 Build #137**; LG webOS **v0.9.15 Build #137**. Paket ID değişmez, TV yalnız eş build olur.
+- Önceki tüm kısayollar, GTA karakter hafızası, JSON dışarı/içe aktar, Silero, Sherpa, Türkçe dublaj ve ses atmosferi korunur.
+
 ## Build #136 — Tam kısayol özelleştirme
 
 - Windows ayarlarında **Klavye kısayolları - hepsini değiştir** panelinde 7 işlevin ayrı açılır listesi bulunur.
