@@ -228,6 +228,13 @@ jobs:
             -o publish/CouchSubs/speaker/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx
           echo "c59158379255ad66e161679cca6af8d52d51e389e3224ab7d7a7baae295c2db5  publish/CouchSubs/speaker/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx" | sha256sum -c -
 
+      # Verify actual speaker model can initialize before packing Windows EXE.
+      - name: Konuşmacı tanıma modeli gerçek ONNX testi
+        shell: pwsh
+        env:
+          COUCHSUBS_SPEAKER_SMOKE_MODEL: ${{ github.workspace }}/publish/CouchSubs/speaker/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx
+        run: dotnet test windows/tests/CouchSubs.Shell.Tests/CouchSubs.Shell.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~SherpaSpeakerTests.BundledSpeakerModelInitializesWithoutGameAudio"
+
       # Türkçe dublajın ses motoru (Kyutai pocket-tts, MIT): sabit sürüm, özeti denetlenir.
       - name: Dublaj ses motoru
         shell: bash
