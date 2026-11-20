@@ -323,16 +323,16 @@ public sealed class FileSettingsStore : ISettingsStore
 {
     private static readonly string FilePath = Path.Combine(AppPaths.Data, "settings.json");
 
+    private readonly object settingsGate = new();
+
     public UserSettings Load()
     {
-        try { return JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(FilePath)) ?? new UserSettings(); }
-        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException) { return new UserSettings(); }
+        lock (settingsGate) return SettingsFilePersistence.Load(FilePath);
     }
 
     public void Save(UserSettings settings)
     {
-        Directory.CreateDirectory(AppPaths.Data);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(settings));
+        lock (settingsGate) SettingsFilePersistence.Save(FilePath, settings);
     }
 }
 
