@@ -77,6 +77,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
+    private bool manualGamePinned;
     private int pulseChannels = 2;
     private int pulseSampleRate = 48000;
     private string? updateVersion;
@@ -1017,6 +1018,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 LastSource = source;
                 LastTranslation = translation;
+                AutoSelectRecognizedGame(source);
                 if (box is not null) lastSubtitleBox = box;
                 if (settings.Source == GameSource.Pc)
                     PcSubtitleReady?.Invoke(translation, SubtitlePipeline.ReadingTime(translation), settings.PcDisplayId);
@@ -1432,9 +1434,40 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>İsim verilmezse Genel; eski oyun sesleri saklanır.</summary>
     public void SelectGame(string name)
     {
+        manualGamePinned = true;
         var selected = GameCastLibrary.Switch(settings.Dubbing, name);
         if (ReferenceEquals(selected, settings.Dubbing)) return;
         Settings = settings with { Dubbing = selected };
+        Changed(nameof(KnownGames));
+    }
+
+    /// <summary>Conservative OCR title-screen hint. Never assume game name from console IP.</summary>
+    private void AutoSelectRecognizedGame(string text)
+    {
+        if (!settings.Dubbing.AutoGameLibrary || manualGamePinned) return;
+        var game = GameTitleDetector.Detect(text);
+        if (game is null || string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase))
+            return;
+        var switched = GameCastLibrary.Switch(settings.Dubbing, game);
+        Settings = settings with { Dubbing = switched };
+        Changed(nameof(KnownGames));
+    }
+
+    public string ExportGameLibrary(string game) => GameCastLibrary.ExportJson(settings.Dubbing, game);
+
+    public string ImportGameLibrary(string json, bool overwrite)
+    {
+        var restored = GameCastLibrary.ImportJson(settings.Dubbing, json, overwrite);
+        Settings = settings with { Dubbing = restored };
+        Changed(nameof(KnownGames));
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty("Game").GetString() ?? GameCastLibrary.DefaultGame;
+    }
+
+    public void DeleteGameLibrary(string game)
+    {
+        var cleaned = GameCastLibrary.Delete(settings.Dubbing, game);
+        Settings = settings with { Dubbing = cleaned };
         Changed(nameof(KnownGames));
     }
 
