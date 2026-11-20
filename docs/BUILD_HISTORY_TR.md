@@ -30,7 +30,7 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#138** | **v0.2.4** | **v0.9.16** | **Oyun stereo konumunu koruyan yeni PULSE 3D mekânsal miks profilleri; eski miks varsayılan kalır** | **CI doğrulaması bekleniyor** |
 
-| **#140** | **v0.2.6** | **v0.9.18** | **Eski konuşma oynatma beklemesini nesil geçişinde en geç 50ms içinde sonlandırma; kuyruk düşme/kesilme ve son TTS süresi ölçümleri** | **CI doğrulaması bekleniyor** |\n\n| **#139** | **v0.2.5** | **v0.9.17** | **Kritik stabilite: ayar dosyası atomik kaydet/yedek kurtarma, eski ses üretimini iptal, webOS SSE + dublaj temizliği, düşük bellekli ağ taraması** | **CI doğrulaması bekleniyor** |
+| **#141** | **v0.2.7** | **v0.9.19** | **Bozuk PCM ses örneklerini güvenli hale getirme, limiter olayları ve veri bozulması sayaçları, ses regresyon testleri** | **CI doğrulaması bekleniyor** |\n\n| **#140** | **v0.2.6** | **v0.9.18** | **Eski konuşma oynatma beklemesini nesil geçişinde en geç 50ms içinde sonlandırma; kuyruk düşme/kesilme ve son TTS süresi ölçümleri** | **CI doğrulaması bekleniyor** |\n\n| **#139** | **v0.2.5** | **v0.9.17** | **Kritik stabilite: ayar dosyası atomik kaydet/yedek kurtarma, eski ses üretimini iptal, webOS SSE + dublaj temizliği, düşük bellekli ağ taraması** | **CI doğrulaması bekleniyor** |
 
 ## Build #139 — Windows + LG webOS 2.0 stabilizasyonu
 
