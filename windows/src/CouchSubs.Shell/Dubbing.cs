@@ -36,6 +36,8 @@ public enum DubbingEmotionMode { Off, Balanced, Cinematic, Acoustic, Neural }
 public sealed record DubbingSettings
 {
     public bool Enabled { get; init; }
+    /// <summary>Experimental speaker embeddings for PS5 audio without subtitle names.</summary>
+    public bool AutoSpeakerTracking { get; init; } = true;
     /// <summary>Opt-in emotional speech. Never affects subtitle OCR or translation.</summary>
     public DubbingEmotionMode EmotionMode { get; init; } = DubbingEmotionMode.Balanced;
     public DubbingEngine Engine { get; init; } = DubbingEngine.Natural;
