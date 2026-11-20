@@ -103,6 +103,9 @@ public interface IGameAudioOutput : IAudioOutput, IDisposable
 {
     void Start();
     void PushGameAudio(short[] pcm, int channels, int sampleRate);
+    /// <summary>Optional pre-aligned 48kHz stereo frame + model dialogue stem; legacy outputs ignore stems.</summary>
+    void PushSeparatedGameAudio(long frameId, float[] gamePcm, float[]? dialogueStem,
+        float confidence, int ageMilliseconds, bool turkishDubActive) { }
     /// <summary>Optional mixer settings; existing implementations remain compatible.</summary>
     void SetAtmosphereMix(int keepGamePercent, int voicePercent) { }
     /// <summary>Optional spatial profile, ignored by legacy audio outputs.</summary>
