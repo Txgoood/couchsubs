@@ -6,12 +6,15 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.9';
+  var APP_VERSION = '0.9.8';
   // Build is paired with CouchSubs Windows Build #131; keep explicit for handoff.
-  var APP_BUILD = 131;
+  var APP_BUILD = 0;
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
+  // Platform-specific version avoids changing Android TV/Tizen release numbering.
+  APP_VERSION = platform.appVersion || APP_VERSION;
+  APP_BUILD = platform.appBuild || APP_BUILD;
   var KEY = { RED: 403, GREEN: 404, BLUE: 406, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: platform.backKey };
 
   var server = null;
@@ -713,7 +716,7 @@
   showHdmi(hdmiPort);
   if (!savedPort) autoSelectConsole();
 
-  $('app-version').textContent = 'v' + APP_VERSION + ' · Build #' + APP_BUILD;
+  $('app-version').textContent = 'v' + APP_VERSION + (APP_BUILD ? ' · Build #' + APP_BUILD : '');
   renderDiag();
   var initial = parseParams(platform.launchParams());
   var address = initial.server || load('server') || config.server;
