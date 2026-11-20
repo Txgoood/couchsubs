@@ -20,6 +20,19 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#133** | **v0.1.9** | **v0.9.11** | **Oyun başlığından otomatik GTA5/GTA6 profili, JSON dışarı/içe aktarma ve ayrı silme işlemleri** | **CI doğrulaması bekleniyor** |
 
+| **#134** | **v0.2.0** | **v0.9.12** | **Yapay zekâ çalışma süresi ölçümü, otomatik Silero/metin tabanlı güvenli seçim, eski motorlara dönüş** | **GitHub CI kontrolünde** |
+
+## Build #134 — Kayıpsız yapay zekâ altyapısı
+
+- **Önceki tüm özellikler korunur:** GTA oyun adı, JSON yedekleme, karakter sesleri, Sherpa ses izi, Silero VAD, oyun atmosferinin korunması, webOS ses çıktısı.
+- **Yeni Windows sürümü:** v0.2.0 Build #134. **webOS:** v0.9.12 Build #134; paket kimliği değişmez.
+- **Seçilebilir konuşma algılama:** Otomatik (mevcut yerel Silero), açık Silero ONNX, yapay zekâ kapalı (metin tabanlı).
+- **Performans ölçümü:** Silero ve Sherpa işlem sayısı, ortalama/en yüksek çıkarım gecikmesi ve hata sayısı. Ham ses veya replik tutulmaz.
+- **Varsayılan:** önceki kurulumların davranışını bozmadan Otomatik/Silero.
+- **TextOnly:** yalnız neural konuşma analizi kapatılır; OCR, Marian/DeepL çeviri, mevcut ses motoru, oyun atmosferi ve çevrimdışı modeller silinmez.
+- **TEN VAD, FireRedVAD, yeni ASR/TTS:** henüz pakete bağlı değil; kullanıcıya çalışıyor gibi gösterilmez.
+- **Testler:** varsayılanların korunması, çok iş parçacıklı sayaçlar, metin gizliliği ve mevcut temel test paketi.
+
 ## Build #133 — Oyun kütüphanesi yönetimi
 
 - PS5 yerel ağ DDP sorgusunda `running-app-name` alanı varsa iki ardışık tutarlı yanıtla oyun profili oluşturulur ve seçilir. Yanıt yoksa ekran OCR yalnız tam GTA5/GTA6 başlık metnini yakalarsa profil seçer. Kullanıcı o oturumda elle oyun seçmişse bu tercih korunur.
