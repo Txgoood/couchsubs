@@ -175,12 +175,34 @@ jobs:
         run: |
           $props = Get-Content windows/Directory.Build.props -Raw
           $tv = Get-Content tv-webos/appinfo.json -Raw | ConvertFrom-Json
-          $js = Get-Content tv-webos/app.js -Raw
-          if ($props -notmatch '<AssemblyVersion>0\.2\.0\.134</AssemblyVersion>') { throw "Windows Build #134 bulunamadı" }
-          if ($tv.version -ne '0.9.12') { throw "webOS v0.9.12 bulunamadı" }
           $platform = Get-Content tv-webos/platform.js -Raw
-          if ($platform -notmatch 'appBuild: 134') { throw "webOS Build #134 bulunamadı" }
-          if (-not (Test-Path dist/tv-app/com.couchsubs.tv_0.9.12_all.ipk)) { throw "webOS IPK üretilemedi" }
+          # Read version/build from the actual binaries' source of truth rather than
+          # duplicating literal versions here (previous Build #133/#134 CI failure).
+          if ($props -notmatch '<AssemblyVersion>(\d+\.\d+\.\d+)\.(\d+)</AssemblyVersion>') {
+            throw "Windows AssemblyVersion okunamadı"
+          }
+          $windowsVersion = $Matches[1]
+          $buildNumber = [int]$Matches[2]
+          if (-not $props.Contains("<Version>$windowsVersion</Version>")) {
+            throw "Windows Version/AssemblyVersion uyuşmuyor"
+          }
+          if (-not $props.Contains("<FileVersion>$windowsVersion.$buildNumber</FileVersion>")) {
+            throw "Windows FileVersion/AssemblyVersion uyuşmuyor"
+          }
+          if ($platform -notmatch "appVersion: '([^']+)'") {
+            throw "webOS appVersion okunamadı"
+          }
+          $platformVersion = $Matches[1]
+          if ([string]$tv.version -ne $platformVersion) {
+            throw "webOS appinfo ve platform sürümleri farklı"
+          }
+          if ($platform -notmatch 'appBuild:\s*(\d+)') { throw "webOS appBuild okunamadı" }
+          if ([int]$Matches[1] -ne $buildNumber) {
+            throw "Windows ve webOS Build numaraları eşit değil"
+          }
+          $expectedIpk = "dist/tv-app/com.couchsubs.tv_${($tv.version)}_all.ipk"
+          if (-not (Test-Path $expectedIpk)) { throw "webOS IPK üretilmedi: $expectedIpk" }
+          Write-Host "Paired Windows v$windowsVersion ve webOS v$($tv.version) · Build #$buildNumber doğrulandı"
 
       # Always expose the standalone IPK separately from the Windows EXE artifact.
       - uses: actions/upload-artifact@v4
