@@ -71,6 +71,20 @@
                                     ValueChanged="OnBackground" PreviewMouseDown="OnPositionStart" />
                             <TextBlock Grid.Column="2" Text="{t:T 'Solid'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
                         </Grid>
+                        <TextBlock Text="Türkçe altyazı rengi" Margin="0,0,0,8" />
+                        <ComboBox x:Name="SubtitleColor" SelectionChanged="OnSubtitleColor" Margin="0,0,0,16">
+                            <ComboBoxItem Content="Beyaz" Tag="White" />
+                            <ComboBoxItem Content="Sarı" Tag="Yellow" />
+                            <ComboBoxItem Content="Açık mavi" Tag="Cyan" />
+                        </ComboBox>
+                        <TextBlock Text="Altyazı süresi" Margin="0,0,0,8" />
+                        <ComboBox x:Name="SubtitleTiming" SelectionChanged="OnSubtitleTiming" Margin="0,0,0,8">
+                            <ComboBoxItem Content="Akıllı: konuşma ve okuma hızına göre" Tag="Adaptive" />
+                            <ComboBoxItem Content="İngilizce altyazıyla aynı süre" Tag="MatchEnglish" />
+                            <ComboBoxItem Content="Ek okuma süresi" Tag="Extended" />
+                        </ComboBox>
+                        <TextBlock Text="Yeni İngilizce konuşma başladığında önceki Türkçe altyazı kaldırılır. İngilizce altyazının kapatılması, oyunun metin katmanını silmez: Türkçe kutu metnin üzerini örter."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,16" />
                         <CheckBox x:Name="Bold" Content="{t:T 'Bold text'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,16"
                                   Checked="OnBold" Unchecked="OnBold" />
                         <Button Content="{t:T 'Send test subtitle'}" Click="OnTest" />
