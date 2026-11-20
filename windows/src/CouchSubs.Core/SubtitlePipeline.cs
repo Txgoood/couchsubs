@@ -84,7 +84,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 case StabilizerKind.Translate:
                     // English switched to a NEW line: remove the previous
                     // translated subtitle before a delayed translation arrives.
-                    if (lineOnScreen is not null) sender.ClearForNewLine();
+                    sender.ClearForNewLine();
                     var number = ++lastRequested;
                     var current = session;
                     lineOnScreen = number;
