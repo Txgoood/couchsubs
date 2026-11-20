@@ -5,7 +5,18 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 | Çift Build | Windows EXE sürümü | LG webOS IPK sürümü | İçerik | Durum |
 | --- | --- | --- | --- | --- |
 | #130 | v0.1.6 | v0.9.8 | Silero ONNX VAD, duygu hafızası, doğal ses koruma | Başarılı GitHub Run #186 |
-| **#131** | **v0.1.7** | **v0.9.9** | TV dublaj ses oynatma tanılaması, eski sesin temizlenmesi, webOS panelinde eşleşen Build no, IPK'nin bağımsız artifact olarak sunulması | GitHub Actions testi gerekli |
+| #131 | v0.1.7 | v0.9.9 | TV dublaj ses oynatma tanılaması, eski sesin temizlenmesi, webOS panelinde eşleşen Build no, IPK'nin bağımsız artifact olarak sunulması | GitHub Actions testi gerekli |
+
+| **#132** | **v0.1.8** | **v0.9.10** | **Deneysel Sherpa ONNX konuşmacı ses izi + Silero konuşma algılama; isimli altyazı öncelikli, ses kimliği ikinci** | **CI ve gerçek cihaz doğrulaması bekleniyor** |
+
+## Build #132 – dinamik GTA6 konuşmacı algılama
+
+- Altyazıda karakter adı varsa bu isim kesinlikle önceliklidir.
+- Ad yoksa sadece Silero'nun doğruladığı PS5 konuşmasından ONNX ses izi çıkarılır. Aynı konuşmacı sesiyle güvenli eşleşme bulunursa geçici `Ses 1` / `Ses 2` kimliği atanır.
+- Ses modeli çalışmazsa, konuşmalar çakışırsa veya eşleşme belirsizse mevcut Türkçe dublaj ve çeviri devam eder; karakter ismi uydurulmaz.
+- İlk ses kimliği için en az iki ayrı, yeterli uzunlukta gözlem gerekir. Kısa konuşmalar ve karışık oyun sesleri yanlış eşleşmeye yol açabilir.
+- Ses izi kümeleri oturum içindedir; adlandırma/ses kimliği henüz oyunlar arasında biyometrik şablon olarak kalıcılaştırılmıyor.
+- Windows: **v0.1.8, Build #132**; webOS: **v0.9.10, Build #132**. TV yalnız eş sürüme güncellenir; model bilgisayarda çalışır.
 
 ## Build #131 paketleri
 
