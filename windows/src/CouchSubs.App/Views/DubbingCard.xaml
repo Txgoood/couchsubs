@@ -79,6 +79,16 @@
                     <TextBlock x:Name="OutputHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
                     <StackPanel x:Name="AtmospherePanel" Margin="0,0,0,16">
                         <TextBlock Text="Oyun atmosferini koru – PULSE 3D" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="Ses karıştırma modu" Margin="0,4,0,5" />
+                        <ComboBox x:Name="AtmosphereModePicker" Width="320" HorizontalAlignment="Left"
+                                  SelectionChanged="OnAtmosphereModeChange" Margin="0,0,0,8">
+                            <ComboBoxItem Content="Önceki güvenli miks (mevcut ayar)" Tag="Legacy" />
+                            <ComboBoxItem Content="Orijinal stereo oyun sesi (%100)" Tag="SafeOriginal" />
+                            <ComboBoxItem Content="Mekânsal dengeli (merkez hafif azalır)" Tag="SpatialBalanced" />
+                            <ComboBoxItem Content="Sinematik (merkez biraz daha azalır)" Tag="Cinematic" />
+                        </ComboBox>
+                        <TextBlock Text="Yeni modlar orijinal sağ-sol ses farkını korur. İngilizce konuşmayı müzik/efektlerden ayrılamaz; Türkçe sesi otomatik olarak karakterin konumuna taşımaz. Varsayılan eski miks aynen korunur."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,9" />
                         <TextBlock Text="Oyun sesi (dublaj sırasında en az)" Style="{StaticResource HintText}" />
                         <StackPanel Orientation="Horizontal">
                             <Slider x:Name="GameAtmosphere" Width="260" Minimum="35" Maximum="100" ValueChanged="OnAtmosphereChange"
