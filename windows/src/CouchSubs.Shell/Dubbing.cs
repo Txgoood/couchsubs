@@ -107,6 +107,8 @@ public interface IGameAudioOutput : IAudioOutput, IDisposable
     void SetAtmosphereMix(int keepGamePercent, int voicePercent) { }
     /// <summary>Optional spatial profile, ignored by legacy audio outputs.</summary>
     void SetAtmosphereMode(AtmosphereMixMode mode) { }
+    /// <summary>Optional trusted speaker-location metadata, center fallback.</summary>
+    void SetNextSpeechPosition(float pan, float confidence) { }
 }
 
 /// <summary>Dublaj modeli: kurulu mu, indir, seslerin dosyaları, motor oluştur.</summary>
