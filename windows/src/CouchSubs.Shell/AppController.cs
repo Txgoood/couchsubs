@@ -78,6 +78,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
     private bool manualGamePinned;
+    private CancellationTokenSource? gameProbeCancellation;
     private int pulseChannels = 2;
     private int pulseSampleRate = 48000;
     private string? updateVersion;
@@ -845,6 +846,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             stream.FrameReceived += HandleFrame;
             stream.Start();
             session = stream;
+            if (settings.Dubbing.AutoGameLibrary)
+            {
+                gameProbeCancellation = new CancellationTokenSource();
+                _ = PollPs5GameTitleAsync(console.Host, gameProbeCancellation.Token);
+            }
             if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
 
             // TV uygulamasını başlat ve açık tut; TV kapalıysa açıldığında bağlanır.
@@ -915,6 +921,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void Stop()
     {
+        gameProbeCancellation?.Cancel();
+        gameProbeCancellation = null;
+        manualGamePinned = false;
         pcCaptureCancellation?.Cancel();
         pcCaptureCancellation = null;
         worldWork.Cancel();
@@ -1448,6 +1457,47 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var game = GameTitleDetector.Detect(text);
         if (game is null || string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase))
             return;
+        var switched = GameCastLibrary.Switch(settings.Dubbing, game);
+        Settings = settings with { Dubbing = switched };
+        Changed(nameof(KnownGames));
+    }
+
+    private async Task PollPs5GameTitleAsync(string host, CancellationToken stop)
+    {
+        string? previous = null;
+        var confirmations = 0;
+        while (!stop.IsCancellationRequested)
+        {
+            try
+            {
+                var running = await Ps5RunningGameDiscovery.ProbeAsync(host, stop).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(running))
+                {
+                    var title = GameTitleDetector.Detect(running) ?? GameCastLibrary.Normalize(running);
+                    if (string.Equals(previous, title, StringComparison.OrdinalIgnoreCase))
+                        confirmations++;
+                    else
+                    {
+                        previous = title;
+                        confirmations = 1;
+                    }
+                    // Require two independent console observations before switching.
+                    if (confirmations >= 2)
+                        post(() => AutoSelectDiscoveredGame(title));
+                }
+                else { previous = null; confirmations = 0; }
+                await Task.Delay(confirmations >= 2 ? TimeSpan.FromSeconds(25) :
+                    TimeSpan.FromSeconds(3), stop).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { break; }
+            catch { /* Discovery is advisory; do not interrupt game audio. */ }
+        }
+    }
+
+    private void AutoSelectDiscoveredGame(string game)
+    {
+        if (!isRunning || !settings.Dubbing.AutoGameLibrary || manualGamePinned) return;
+        if (string.Equals(settings.Dubbing.ActiveGame, game, StringComparison.OrdinalIgnoreCase)) return;
         var switched = GameCastLibrary.Switch(settings.Dubbing, game);
         Settings = settings with { Dubbing = switched };
         Changed(nameof(KnownGames));
