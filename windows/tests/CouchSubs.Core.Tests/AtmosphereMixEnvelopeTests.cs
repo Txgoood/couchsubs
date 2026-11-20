@@ -80,6 +80,18 @@ public sealed class AtmosphereMixEnvelopeTests
     }
 
     [Fact]
+    public void OversizedFiniteDecoderSamplesRemainBounded()
+    {
+        var mix = new AtmosphereMixEnvelope();
+        var output = mix.Step(float.MaxValue, float.MaxValue, float.MaxValue, float.MaxValue,
+            mode: AtmosphereMixMode.SpatialBalanced);
+        Assert.True(float.IsFinite(output.Left));
+        Assert.True(float.IsFinite(output.Right));
+        Assert.InRange(output.Left, -1f, 1f);
+        Assert.InRange(output.Right, -1f, 1f);
+    }
+
+    [Fact]
     public void LimiterDiagnosticsCountOnlyActualPeakReduction()
     {
         var mix = new AtmosphereMixEnvelope();
