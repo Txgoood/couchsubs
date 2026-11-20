@@ -12,11 +12,14 @@ namespace CouchSubs.App.Services;
 /// Requires Silero VAD confirmation: game soundtrack and effects are unseparated.
 /// Inference runs on a bounded worker, never on PS5 audio callback/UI.
 /// </summary>
-internal sealed class SherpaSpeakerService : IAutomaticSpeakerDetector
+internal sealed class SherpaSpeakerService(string? overrideModelPath = null) : IAutomaticSpeakerDetector
 {
     public static string ModelPath => Path.Combine(AppContext.BaseDirectory, "speaker",
         "3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx");
     public static bool IsBundled => File.Exists(ModelPath);
+    private string LocalModelPath => overrideModelPath ?? ModelPath;
+    private int modelReady;
+    public bool ModelReady => Volatile.Read(ref modelReady) == 1;
     private readonly object gate = new();
     private readonly HybridSpeakerRegistry identities = new();
     private Channel<AudioPacket>? channel;
@@ -41,9 +44,10 @@ internal sealed class SherpaSpeakerService : IAutomaticSpeakerDetector
     {
         lock (gate)
         {
-            if (cancellation is not null || !IsBundled) return;
+            if (cancellation is not null || !File.Exists(LocalModelPath)) return;
             latest = new(null, SpeakerIdentitySource.Uncertain, 0);
             latestTicks = 0;
+            Interlocked.Exchange(ref modelReady, 0);
             identities.Reset();
             cancellation = new CancellationTokenSource();
             var current = ++generation;
@@ -79,6 +83,7 @@ internal sealed class SherpaSpeakerService : IAutomaticSpeakerDetector
             latest = new(null, SpeakerIdentitySource.Uncertain, 0);
             latestTicks = 0;
             identities.Reset();
+            Interlocked.Exchange(ref modelReady, 0);
         }
     }
 
@@ -88,9 +93,11 @@ internal sealed class SherpaSpeakerService : IAutomaticSpeakerDetector
         {
             var cfg = new SpeakerEmbeddingExtractorConfig
             {
-                Model = ModelPath, NumThreads = 1, Debug = 0, Provider = "cpu"
+                Model = LocalModelPath, NumThreads = 1, Debug = 0, Provider = "cpu"
             };
             using var extractor = new SpeakerEmbeddingExtractor(cfg);
+            if (extractor.Dim <= 0) return;
+            Interlocked.Exchange(ref modelReady, 1);
             var samples = new float[32000]; // 2s at 16 kHz, no raw audio persisted
             var filled = 0;
             while (await reader.WaitToReadAsync(cancel).ConfigureAwait(false))
