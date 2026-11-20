@@ -95,6 +95,8 @@ public partial class DubbingCard : UserControl
         }).IsChecked = true;
         AtmospherePanel.Visibility = settings.Output == DubbingOutput.Headset
             ? Visibility.Visible : Visibility.Collapsed;
+        foreach (ComboBoxItem option in AtmosphereModePicker.Items)
+            option.IsSelected = string.Equals(option.Tag as string, settings.AtmosphereMode.ToString(), StringComparison.Ordinal);
         GameAtmosphere.Value = Math.Clamp(settings.GameAtmospherePercent, 35, 100);
         TurkishVoiceVolume.Value = Math.Clamp(settings.TurkishVoicePercent, 0, 100);
         GameAtmosphereValue.Text = $"{(int)GameAtmosphere.Value}%";
@@ -403,6 +405,28 @@ public partial class DubbingCard : UserControl
         if (loading || controller is null || EmotionModePicker.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
         if (Enum.TryParse<DubbingEmotionMode>(tag, out var mode))
             Update(s => s with { Dubbing = s.Dubbing with { EmotionMode = mode } });
+    }
+
+    private void OnAtmosphereModeChange(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || controller is null ||
+            AtmosphereModePicker.SelectedItem is not ComboBoxItem { Tag: string tag } ||
+            !Enum.TryParse<AtmosphereMixMode>(tag, out var mode)) return;
+
+        // The initial 90/85 mix is a preference of the spatial preset only;
+        // never silently overwrite custom levels in legacy installations.
+        var current = controller.Settings.Dubbing;
+        var keep = mode switch
+        {
+            AtmosphereMixMode.SafeOriginal => 100,
+            AtmosphereMixMode.SpatialBalanced when current.GameAtmospherePercent == 82 => 90,
+            _ => current.GameAtmospherePercent
+        };
+        Update(settings => settings with { Dubbing = settings.Dubbing with
+        {
+            AtmosphereMode = mode,
+            GameAtmospherePercent = keep
+        } });
     }
 
     private void OnAtmosphereChange(object sender, RoutedPropertyChangedEventArgs<double> e)
