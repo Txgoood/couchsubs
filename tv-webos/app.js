@@ -7,9 +7,14 @@
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
   var APP_VERSION = '0.9.8';
+  // Build is paired with CouchSubs Windows Build #131; keep explicit for handoff.
+  var APP_BUILD = 0;
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
+  // Platform-specific version avoids changing Android TV/Tizen release numbering.
+  APP_VERSION = platform.appVersion || APP_VERSION;
+  APP_BUILD = platform.appBuild || APP_BUILD;
   var KEY = { RED: 403, GREEN: 404, BLUE: 406, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: platform.backKey };
 
   var server = null;
@@ -43,7 +48,7 @@
   var dropTimer = null;
 
   // Panelde görünen tanı bilgisi: "yazı TV'ye gelmiyor" bildirimlerinde sebebi buradan okuruz.
-  var diag = { subtitles: 0, clears: 0, drops: 0, backgrounded: 0, lastHide: '-', place: '-', error: '' };
+  var diag = { subtitles: 0, clears: 0, drops: 0, backgrounded: 0, lastHide: '-', place: '-', error: '', speech: '-' };
 
   function $(id) { return document.getElementById(id); }
 
@@ -52,6 +57,7 @@
     if (!el) return;
     el.textContent = 'sub ' + diag.subtitles + ' · clear ' + diag.clears + ' · drop ' + diag.drops +
       ' · bg ' + diag.backgrounded + ' · hide ' + diag.lastHide + ' · ' + diag.place +
+      ' · tts ' + diag.speech +
       (window.__screenSaverStatus ? ' · saver ' + window.__screenSaverStatus : '') +
       (diag.error ? ' · err ' + diag.error : '');
   }
@@ -383,6 +389,7 @@
   function connect(address) {
     if (demoRunning()) stopDemo();
     if (eventSource) eventSource.close();
+    stopSpeech(); // Never keep stale TTS from an earlier computer/server.
     server = address;
     $('waiting').className = 'hidden';
     setStatus('st-server', address);
@@ -431,22 +438,65 @@
   // bu ses bitince gönderir; yine de üst üste gelirse eskisi kesilir.
 
   var speech = null;
+  var speechGeneration = 0;
 
+  // Audio elements are short lived; generation prevents an old failed playback
+  // callback from clearing a newer sentence. The TV's HDMI/game volume is NEVER
+  // changed here; only the separate Turkish voice is started or stopped.
   function playSpeech(url) {
     stopSpeech();
+    var current = ++speechGeneration;
+    diag.speech = 'loading';
+    renderDiag();
     try {
-      speech = new Audio(url);
-      var played = speech.play();
-      if (played && played.catch) played.catch(function () { speech = null; });
+      var player = new Audio();
+      speech = player;
+      player.preload = 'auto';
+      player.onplaying = function () {
+        if (current !== speechGeneration) return;
+        diag.speech = 'playing';
+        renderDiag();
+      };
+      player.onended = function () {
+        if (current !== speechGeneration) return;
+        speech = null;
+        diag.speech = 'ended';
+        renderDiag();
+      };
+      player.onerror = function () {
+        if (current !== speechGeneration) return;
+        speech = null;
+        diag.speech = 'error';
+        noteError('tts: audio load failed');
+      };
+      player.src = url;
+      var played = player.play();
+      if (played && played.catch) played.catch(function (error) {
+        if (current !== speechGeneration) return;
+        speech = null;
+        diag.speech = 'blocked';
+        noteError('tts: playback blocked');
+      });
     } catch (e) {
+      if (current !== speechGeneration) return;
       speech = null;
+      diag.speech = 'exception';
+      noteError('tts: ' + e.message);
     }
   }
 
   function stopSpeech() {
-    if (!speech) return;
-    try { speech.pause(); } catch (e) { /* yok */ }
+    ++speechGeneration;
+    var old = speech;
     speech = null;
+    if (!old) return;
+    try {
+      old.pause();
+      old.removeAttribute('src');
+      old.load();
+    } catch (e) { /* Older webOS browsers may not implement load(). */ }
+    diag.speech = 'stopped';
+    renderDiag();
   }
 
   // --- Bilgisayarı ağda bulma ---
@@ -666,7 +716,7 @@
   showHdmi(hdmiPort);
   if (!savedPort) autoSelectConsole();
 
-  $('app-version').textContent = APP_VERSION;
+  $('app-version').textContent = 'v' + APP_VERSION + (APP_BUILD ? ' · Build #' + APP_BUILD : '');
   renderDiag();
   var initial = parseParams(platform.launchParams());
   var address = initial.server || load('server') || config.server;

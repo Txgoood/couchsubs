@@ -2,7 +2,7 @@
 # Windows uygulaması: yerel DLL'i (libchiaki + FFmpeg) MSYS2 ile derler, .NET testlerini koşar,
 # uygulamayı tek klasör olarak yayınlar.
 name: windows
-# Pocket TTS Unicode profil düzeltmesi: v0.1.1-dev, CI test paketi.
+# Paired Windows v0.1.7 (Build #131) + webOS v0.9.9 (Build #131).
 
 on:
   push:
@@ -169,11 +169,31 @@ jobs:
           ./scripts/package-tizen.sh
           if [ -d android-apk ]; then ./scripts/bundle-android-apk.sh "$(ls android-apk/*.apk | head -1)"; fi
 
+      # Keep paired release numbers aligned without affecting Android/Tizen versions.
+      - name: Windows ve webOS build numaraları uyumlu mu
+        shell: pwsh
+        run: |
+          $props = Get-Content windows/Directory.Build.props -Raw
+          $tv = Get-Content tv-webos/appinfo.json -Raw | ConvertFrom-Json
+          $js = Get-Content tv-webos/app.js -Raw
+          if ($props -notmatch '<AssemblyVersion>0\.1\.7\.131</AssemblyVersion>') { throw "Windows Build #131 bulunamadı" }
+          if ($tv.version -ne '0.9.9') { throw "webOS v0.9.9 bulunamadı" }
+          $platform = Get-Content tv-webos/platform.js -Raw
+          if ($platform -notmatch 'appBuild: 131') { throw "webOS Build #131 bulunamadı" }
+          if (-not (Test-Path dist/tv-app/com.couchsubs.tv_0.9.9_all.ipk)) { throw "webOS IPK üretilemedi" }
+
+      # Always expose the standalone IPK separately from the Windows EXE artifact.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: couchsubs-webos-v0.9.9-build131-ipk
+          path: dist/tv-app/*.ipk
+          if-no-files-found: error
+
       # Sürüm etiketten gelir (v0.1.0-beta.10 → 0.1.0-beta.10); uygulama içi güncelleme bununla karşılaştırır.
       - name: Yayınla
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.1.6-dev.${GITHUB_RUN_NUMBER}"; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.1.7-dev.${GITHUB_RUN_NUMBER}"; fi
           dotnet publish windows/src/CouchSubs.App -c Release -r win-x64 --self-contained -o publish/CouchSubs -p:Version="$VERSION"
 
       # MIT-licensed Silero v6.2.1: small local neural speech-activity model.
@@ -207,7 +227,7 @@ jobs:
       - name: Kurulum dosyası
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.1.6-dev.$env:GITHUB_RUN_NUMBER" }
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.1.7-dev.$env:GITHUB_RUN_NUMBER" }
           Copy-Item -Recurse publish/CouchSubs pack
           Copy-Item LICENSE, THIRD-PARTY-NOTICES.md pack/
           dotnet tool install -g vpk --version 1.2.161
