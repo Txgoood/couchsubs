@@ -34,6 +34,8 @@
   var timer = null;
   var placement = 'cover';
   var lastStyle = {};
+  var timing = 'adaptive';
+  var holdUntil = 0;
 
   function apply(style) {
     style = style || {};
@@ -46,6 +48,11 @@
     if (typeof bg === 'number' && !isNaN(bg)) line.style.background = 'rgba(0, 0, 0, ' + Math.max(0, Math.min(100, bg)) / 100 + ')';
     if (typeof style.bold === 'boolean') line.style.fontWeight = style.bold ? '700' : '600';
     if (style.placement) placement = style.placement;
+    if (style.timing === 'adaptive' || style.timing === 'matchenglish' || style.timing === 'extended')
+      timing = style.timing;
+    if (style.textColor === 'yellow') line.style.color = '#FFD84A';
+    else if (style.textColor === 'cyan') line.style.color = '#83EFFF';
+    else if (style.textColor === 'white') line.style.color = '#FFFFFF';
   }
 
   function hide() {
@@ -53,7 +60,16 @@
     line.className = '';
   }
 
+  function onClear() {
+    var remaining = timing === 'matchenglish' ? 0 : holdUntil - Date.now();
+    if (remaining <= 0) hide();
+    else { clearTimeout(timer); timer = setTimeout(hide, remaining); }
+  }
+
   function show(text, duration, box) {
+    var readMs = Math.max(2500, Math.min(8000, 2000 + text.length * 60));
+    holdUntil = Date.now() + (timing === 'matchenglish' ? 0 :
+      timing === 'extended' ? Math.min(10000, readMs + 2200) : readMs);
     clearTimeout(timer);
     line.textContent = text;
     var cover = box && placement === 'cover' && !fixed.bottom;
@@ -70,7 +86,7 @@
       apply(lastStyle);
     }
     line.className = text ? (cover ? 'on cover' : 'on') : '';
-    timer = setTimeout(hide, Math.max(1000, duration || 8000));
+    timer = setTimeout(hide, Math.max(readMs, duration || 8000));
   }
 
   apply({});
@@ -80,7 +96,8 @@
   events.addEventListener('subtitle', function (e) {
     try { var d = JSON.parse(e.data); show(d.text, d.duration, d.box); } catch (err) {}
   });
-  events.addEventListener('clear', hide);
+  events.addEventListener('clear', onClear);
+  events.addEventListener('replace-clear', hide);
 })();
 </script>
 </body>

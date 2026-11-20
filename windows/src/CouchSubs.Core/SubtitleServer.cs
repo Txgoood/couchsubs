@@ -27,12 +27,20 @@ public enum SubtitlePlacement
 /// <param name="FontSize">36 (küçük), 46 (orta), 58 (büyük), 72 (çok büyük)</param>
 /// <param name="BottomPercent">Sabit yerleşimde altyazının ekranın altından uzaklığı, yüzde.</param>
 /// <param name="Background">Yazının arkasındaki siyah zeminin koyuluğu, yüzde (0: zemin yok).</param>
+[JsonConverter(typeof(JsonStringEnumConverter<SubtitleTimingMode>))]
+public enum SubtitleTimingMode { Adaptive, MatchEnglish, Extended }
+
+[JsonConverter(typeof(JsonStringEnumConverter<SubtitleTextColor>))]
+public enum SubtitleTextColor { White, Yellow, Cyan }
+
 public sealed record SubtitleStyle(
-    int FontSize = 46,
+    int FontSize = 28,
     int BottomPercent = 7,
     SubtitlePlacement Placement = SubtitlePlacement.Cover,
-    int Background = 72,
-    bool Bold = false);
+    int Background = 85,
+    bool Bold = false,
+    SubtitleTimingMode Timing = SubtitleTimingMode.Adaptive,
+    SubtitleTextColor TextColor = SubtitleTextColor.Yellow);
 
 /// <summary>Altyazıları TV'ye ileten taraf (gerçekte <see cref="SubtitleServer"/>).</summary>
 public interface ISubtitleSender
@@ -40,6 +48,8 @@ public interface ISubtitleSender
     /// <param name="box">Oyundaki İngilizce altyazının ekrandaki yeri (kenarlara oranla); TV çeviriyi buna göre yerleştirir.</param>
     void SendSubtitle(string text, int durationMs = 15000, TextBox? box = null);
     void Clear();
+    /// <summary>New English line arrived: discard the old Turkish line immediately.</summary>
+    void ClearForNewLine() => Clear();
 }
 
 /// <summary>
@@ -146,6 +156,7 @@ public sealed class SubtitleServer(int port = 8787) : ISubtitleSender, IDisposab
         Math.Round((decimal)Math.Clamp(value, 0, 1), 4) / 1.000000000000000000000000000000000m;
 
     public void Clear() => Broadcast(Frame("clear", new SortedDictionary<string, object>()));
+    public void ClearForNewLine() => Broadcast(Frame("replace-clear", new SortedDictionary<string, object>()));
 
     /// <summary>
     /// "Ekranı çevir" sonuçları: <c>screen</c> olayı her çeviriyi yazının yeri (<c>box</c>), tipik satır yüksekliği
@@ -375,6 +386,8 @@ public sealed class SubtitleServer(int port = 8787) : ISubtitleSender, IDisposab
             ["bottomPercent"] = style.BottomPercent,
             ["fontSize"] = style.FontSize,
             ["placement"] = style.Placement.ToString().ToLowerInvariant(),
+            ["timing"] = style.Timing.ToString().ToLowerInvariant(),
+            ["textColor"] = style.TextColor.ToString().ToLowerInvariant(),
         });
 
     private static string Frame(string name, SortedDictionary<string, object> json) =>

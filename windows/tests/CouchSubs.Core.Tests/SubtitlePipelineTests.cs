@@ -80,6 +80,8 @@ internal sealed class FakeSender : ISubtitleSender
     public List<int> Durations { get; } = [];
     public List<TextBox?> Boxes { get; } = [];
     public int Clears { get; private set; }
+    public int ReplaceClears { get; private set; }
+    public void ClearForNewLine() => ReplaceClears++;
     public void SendSubtitle(string text, int durationMs = 15000, TextBox? box = null)
     {
         lock (Sent) { Sent.Add(text); Durations.Add(durationMs); Boxes.Add(box); }
@@ -233,11 +235,33 @@ public class SubtitlePipelineTests
         var translator = new GatedTranslator();
         var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!"), translator, sender);
         await Run(pipeline, 2, waitEach: false);
+        // The first translation is stale once a newer English line appears.
         await translator.Release("Hold the gate.");
-        await WaitUntil(() => sender.Sent.Count == 1);
         await translator.Release("Run!");
         await pipeline.WaitForTranslationsAsync();
-        Assert.Equal(["TR: Hold the gate.", "TR: Run!"], sender.Sent);
+        Assert.Equal(["TR: Run!"], sender.Sent);
+    }
+
+    [Fact]
+    public async Task NewEnglishLineClearsOldTurkishImmediately()
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader("First!", "Second!"),
+            new FakeTranslator(), sender);
+        await Run(pipeline, 2);
+        Assert.Equal(["TR: First!", "TR: Second!"], sender.Sent);
+        Assert.Equal(2, sender.ReplaceClears);
+        Assert.Equal(0, sender.Clears);
+    }
+
+    [Theory]
+    [InlineData(SubtitleTimingMode.Adaptive, 2500)]
+    [InlineData(SubtitleTimingMode.Extended, 4700)]
+    [InlineData(SubtitleTimingMode.MatchEnglish, 15000)]
+    public void TimingsRespectSelectedMode(SubtitleTimingMode mode, int minimum)
+    {
+        var duration = SubtitlePipeline.SubtitleDuration("Go!", mode);
+        Assert.True(duration >= minimum);
     }
 
     /// Yeni satırın çevirisi zaten gösterildiyse eski satırınki onun üstüne yazılmaz.

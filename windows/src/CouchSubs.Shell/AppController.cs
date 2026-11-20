@@ -184,6 +184,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (old.Source != value.Source && value.Source == GameSource.Ps5 && !HasPairedPs5)
                 Step = OnboardingStep.Welcome;
             server.SendStyle(value.Style);
+            if (old.Style.Timing != value.Style.Timing && pipeline is not null)
+                pipeline.TimingMode = value.Style.Timing;
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
                               || old.OnlineTranslation != value.OnlineTranslation || old.AutoWorldText != value.AutoWorldText))
@@ -1029,7 +1031,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         activeReader = reader;
         OcrMissing = reader is null || !services.HasOcrLanguage(settings.SourceLanguage);
         if (reader is null) return;
-        var built = new SubtitlePipeline(reader, MakeTranslator(), server, new ReadScheduler());
+        var built = new SubtitlePipeline(reader, MakeTranslator(), server, new ReadScheduler())
+        {
+            TimingMode = settings.Style.Timing
+        };
         built.PairShown += (source, translation) =>
         {
             var box = built.LastBox;

@@ -4,8 +4,8 @@
   'use strict';
 
   window.COUCHSUBS_PLATFORM = {
-    appVersion: '0.9.25',
-    appBuild: 147,
+    appVersion: '0.9.26',
+    appBuild: 148,
     backKey: 461,
 
     // Oyun kumandayla oynanır, TV kumandasına dokunulmaz; TV bunu boşta sanıp ekran koruyucuya ve sonra uykuya
