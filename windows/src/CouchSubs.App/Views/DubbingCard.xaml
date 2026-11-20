@@ -84,6 +84,17 @@
                             <Button Content="Oyunu seç / ekle" Click="OnSelectGame" />
                         </StackPanel>
                         <TextBlock x:Name="GameInfo" Style="{StaticResource HintText}" Margin="0,8,0,0" />
+                        <CheckBox x:Name="AutoGameLibrary" Content="Oyun başlığı görülürse karakter kütüphanesini otomatik oluştur / seç"
+                                  Checked="OnAutoGameLibrary" Unchecked="OnAutoGameLibrary" Margin="0,8,0,4" />
+                        <TextBlock Text="PS5 oyunun adını bağlantıdan bildirmiyor. GTA 5 / GTA 6 başlık ekranı OCR ile okunursa otomatik seçilir; algılanamazsa buradan elle seçebilirsin."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="Dışarı aktar (JSON)" Click="OnExportGame" Margin="0,0,8,0" />
+                            <Button Content="İçe aktar" Click="OnImportGame" Margin="0,0,8,0" />
+                            <Button Content="Oyunu sil" Click="OnDeleteGame" />
+                        </StackPanel>
+                        <TextBlock Text="Silme yalnız seçilen oyunun karakter eşleşmelerini temizler. Önce dışarı aktarırsan ileride JSON dosyasından geri yükleyebilirsin; ortak ses modelleri silinmez."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,0" />
                         <TextBlock Text="Elle karakter ekle" FontWeight="SemiBold" Margin="0,12,0,6" />
                         <StackPanel Orientation="Horizontal">
                             <TextBox x:Name="CharacterName" Width="205" Margin="0,0,8,0"
