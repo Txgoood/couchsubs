@@ -30,6 +30,19 @@
                         <ComboBoxItem Content="Ses destekli (PS5 deneysel)" Tag="Acoustic" />
                         <ComboBoxItem Content="Yapay zekâ konuşma tespiti (Silero ONNX)" Tag="Neural" />
                     </ComboBox>
+                    <TextBlock Text="Konuşma algılama motoru" FontWeight="SemiBold" Margin="0,8,0,6" />
+                    <ComboBox x:Name="SpeechDetectionPicker" Width="320" HorizontalAlignment="Left"
+                              SelectionChanged="OnSpeechDetection">
+                        <ComboBoxItem Content="Otomatik (mevcut Silero, önerilen)" Tag="Automatic" />
+                        <ComboBoxItem Content="Silero ONNX (yerel)" Tag="SileroOnnx" />
+                        <ComboBoxItem Content="Yapay zekâ kapalı (metin tabanlı)" Tag="TextOnly" />
+                    </ComboBox>
+                    <TextBlock Text="Diğer yapay zekâ motorları henüz paketlenmedi. Metin tabanlı mod orijinal OCR, çeviri ve Türkçe dublajı korur; ses iziyle konuşmacı ayrıştırma devreden çıkar."
+                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,5,0,8" />
+                    <TextBlock Text="Yapay zekâ performansı" FontWeight="SemiBold" Margin="0,8,0,5" />
+                    <TextBlock x:Name="AiPerformanceInfo" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,5" />
+                    <Button Content="Performans ölçümlerini yenile" Click="OnRefreshAiPerformance"
+                            HorizontalAlignment="Left" Margin="0,0,0,10" />
                     <CheckBox x:Name="AutoSpeakerTracking" Margin="0,9,0,5" Checked="OnSpeakerTracking"
                               Unchecked="OnSpeakerTracking"
                               Content="Konuşmacı adını bulamazsa sesinden otomatik eşleştir (deneysel)" />
