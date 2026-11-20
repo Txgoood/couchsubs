@@ -113,18 +113,15 @@
                         <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton Content="{t:T 'Subtitles'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="0" IsChecked="True" />
-                                <RadioButton Content="{t:T 'Area 1 (Num 1)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="1" />
-                                <RadioButton Content="{t:T 'Area 2 (Num 2)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="2" />
-                                <RadioButton Content="{t:T 'Area 3 (Num 3)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="3" />
+                                <RadioButton Content="{t:T 'Area 1'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="1" />
+                                <RadioButton Content="{t:T 'Area 2'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="2" />
+                                <RadioButton Content="{t:T 'Area 3'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="3" />
                             </StackPanel>
                         </Border>
                         <CheckBox x:Name="UseArea" Content="{t:T 'Use this area'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,12"
                                   Visibility="Collapsed" Checked="OnUseArea" Unchecked="OnUseArea" />
                         <StackPanel x:Name="ExtraTargetPanel" Visibility="Collapsed" Margin="0,0,0,12">
-                            <TextBlock Text="Serbest alan tuşu" Margin="0,0,0,4" />
-                        <ComboBox x:Name="FreeAreaHotkeyPicker" Width="155" HorizontalAlignment="Left"
-                                  SelectionChanged="OnHotkeysChanged" Margin="0,0,0,12" />
-                        <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
+                            <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
                             <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal">
                                     <RadioButton x:Name="ExtraTv" Content="{t:T 'On the TV'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Tv" />
