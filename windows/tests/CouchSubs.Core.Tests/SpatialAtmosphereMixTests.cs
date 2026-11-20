@@ -54,6 +54,42 @@ public sealed class SpatialAtmosphereMixTests
     }
 
     [Fact]
+    public void AdaptiveDialogueKeepsStereoSideAndRespectsGameFloor()
+    {
+        var mixer = new AtmosphereMixEnvelope(48000);
+        (float Left, float Right) result = default;
+        for (var i = 0; i < 48000; i++)
+            result = mixer.Step(0.4f, -0.2f, 0.4f, 0.4f, 0.85f, 0.85f,
+                AtmosphereMixMode.AdaptiveDialogue);
+        Assert.Equal(0.6f, result.Left - result.Right, 3);
+        Assert.InRange(mixer.CurrentGameGain, 0.85f, 1f);
+    }
+
+    [Fact]
+    public void AdaptiveDialogueDoesNotDuckWithoutSpeech()
+    {
+        var mixer = new AtmosphereMixEnvelope(48000);
+        for (var i = 0; i < 48000; i++)
+        {
+            var result = mixer.Step(0.3f, -0.1f, 0, 0, 0.35f, 0.85f,
+                AtmosphereMixMode.AdaptiveDialogue);
+            Assert.Equal(0.3f, result.Left, 5);
+            Assert.Equal(-0.1f, result.Right, 5);
+        }
+        Assert.Equal(1f, mixer.CurrentGameGain);
+    }
+
+    [Fact]
+    public void AdaptiveDialogueNeverExceedsLegacyDuckingAtEqualFloor()
+    {
+        var mixer = new AtmosphereMixEnvelope(48000);
+        for (var i = 0; i < 5000; i++)
+            mixer.Step(0.45f, 0.45f, 0.02f, 0.02f,
+                0.82f, 0.85f, AtmosphereMixMode.AdaptiveDialogue);
+        Assert.True(mixer.CurrentGameGain >= 0.82f);
+    }
+
+    [Fact]
     public void AllModesKeepFiniteOutputAndDoNotClip()
     {
         foreach (var mode in Enum.GetValues<AtmosphereMixMode>())
