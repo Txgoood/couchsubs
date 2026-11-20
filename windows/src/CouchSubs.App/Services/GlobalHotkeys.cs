@@ -64,7 +64,7 @@ public sealed partial class GlobalHotkeys : IDisposable
     private uint freeAreaKey = 0x7B;
 
     /// <summary>Accepted keys: F1-F12 or NumPad 0-9. Ignore invalid/duplicate assignments.</summary>
-    public static bool IsValidKey(int key) => key is >= 0x70 and <= 0x7B or >= 0x60 and <= 0x69;
+    public static bool IsValidKey(int key) => key is >= 0x70 and <= 0x7B or 0x65 or 0x69;
 
     public void Configure(int screen, int freeArea)
     {
