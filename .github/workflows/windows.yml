@@ -200,7 +200,7 @@ jobs:
           if ([int]$Matches[1] -ne $buildNumber) {
             throw "Windows ve webOS Build numaraları eşit değil"
           }
-          $expectedIpk = "dist/tv-app/com.couchsubs.tv_${($tv.version)}_all.ipk"
+          $expectedIpk = "dist/tv-app/com.couchsubs.tv_$($tv.version)_all.ipk"
           if (-not (Test-Path $expectedIpk)) { throw "webOS IPK üretilmedi: $expectedIpk" }
           Write-Host "Paired Windows v$windowsVersion ve webOS v$($tv.version) · Build #$buildNumber doğrulandı"
 
