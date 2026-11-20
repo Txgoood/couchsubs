@@ -30,6 +30,20 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#138** | **v0.2.4** | **v0.9.16** | **Oyun stereo konumunu koruyan yeni PULSE 3D mekânsal miks profilleri; eski miks varsayılan kalır** | **CI doğrulaması bekleniyor** |
 
+| **#139** | **v0.2.5** | **v0.9.17** | **Kritik stabilite: ayar dosyası atomik kaydet/yedek kurtarma, eski ses üretimini iptal, webOS SSE + dublaj temizliği, düşük bellekli ağ taraması** | **CI doğrulaması bekleniyor** |
+
+## Build #139 — Windows + LG webOS 2.0 stabilizasyonu
+
+- Windows kullanıcı ayarları ve oyun/karakter kütüphaneleri `settings.json` dosyasına geçici dosya ve atomik değiş-tokuş ile yazılır. Önceki sağlam `settings.json.bak` saklanır, geçersiz/yarım yazılmış ana dosyada bu yedek açılır.
+- Oyun altyazısı değiştiğinde eskimiş konuşmanın TTS isteğine `CancellationToken` gönderilir. Eski nesil zaten oynatılmaz; iptal artık yanlış hata mesajı üretmez. Model iptal isteğini desteklemiyorsa nesil kontrolü devrede kalır.
+- LG webOS 2.0 uygulamasında eski EventSource nesnesinin gecikmiş olayları yeni oturuma dokunmaz; uzun bağlantı kesintisinde eski konuşma durdurulur.
+- webOS ses oynatıcı nesneleri bittiğinde veya hata verdiğinde serbest bırakılır; 45 saniyelik emniyet zaman aşımı takılı medya oynatımını durdurur.
+- TV'nin yerel ağ otomatik taramasında aynı anda açık istek sayısı 24 → 8 azaltılır, sağlıklı bağlantı varken yeni tarama başlatılmaz.
+- GitHub CI `node --check tv-webos/app.js` ve `platform.js` doğrulaması yapar.
+- **Windows v0.2.5 / Build #139**, **LG webOS v0.9.17 / Build #139**, TV paket ID'si `com.couchsubs.tv` değişmez. Android TV, Tizen ve XIPTV projeleri değiştirilmez.
+- Test kapsamı: eski oyun profilleri/kısayol ayarları, bozuk ana JSON kurtarma, yedeğin bozuk yazımla kaybolmaması; temel ses ve dublaj regresyon testleri korunur.
+- Gerçek PS5, PULSE3D, LG webOS2 cihazlarında uzun kullanım ve ağ kesinti testi hâlâ gereklidir; CI bu testlerin yerine geçmez.
+
 ## Build #138 — Mekânsal atmosfer koruma
 
 - **Windows:** v0.2.4 Build #138. **LG webOS:** v0.9.16 Build #138, aynı `com.couchsubs.tv` App ID.
