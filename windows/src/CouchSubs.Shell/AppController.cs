@@ -804,6 +804,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 {
                     gameAudio.SetAtmosphereMix(settings.Dubbing.GameAtmospherePercent,
                         settings.Dubbing.TurkishVoicePercent);
+                    gameAudio.SetAtmosphereMode(settings.Dubbing.AtmosphereMode);
                     gameAudio.Start();
                     pulseAudioActive = true;
                 }
@@ -1661,6 +1662,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (now.GameAtmospherePercent != old.GameAtmospherePercent ||
             now.TurkishVoicePercent != old.TurkishVoicePercent)
             services.GameAudio?.SetAtmosphereMix(now.GameAtmospherePercent, now.TurkishVoicePercent);
+        if (now.AtmosphereMode != old.AtmosphereMode)
+            services.GameAudio?.SetAtmosphereMode(now.AtmosphereMode);
         if ((now.AutoSpeakerTracking != old.AutoSpeakerTracking ||
              now.SpeechDetection != old.SpeechDetection) && isRunning &&
             settings.Source == GameSource.Ps5)
