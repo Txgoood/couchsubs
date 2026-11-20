@@ -62,6 +62,37 @@ public sealed class AtmosphereMixEnvelopeTests
     }
 
     [Fact]
+    public void InvalidDecoderSamplesNeverPoisonTheStereoOutput()
+    {
+        var mix = new AtmosphereMixEnvelope();
+        var damaged = mix.Step(float.NaN, 0.3f, float.PositiveInfinity, 0.1f);
+        Assert.True(float.IsFinite(damaged.Left));
+        Assert.True(float.IsFinite(damaged.Right));
+        Assert.Equal(1, mix.InvalidInputFrames);
+
+        var recovered = mix.Step(0.2f, -0.4f, 0f, 0f);
+        Assert.True(float.IsFinite(recovered.Left));
+        Assert.True(float.IsFinite(recovered.Right));
+        Assert.Equal(0.2f, recovered.Left, 4);
+        Assert.Equal(-0.4f, recovered.Right, 4);
+        mix.Reset();
+        Assert.Equal(0, mix.InvalidInputFrames);
+    }
+
+    [Fact]
+    public void LimiterDiagnosticsCountOnlyActualPeakReduction()
+    {
+        var mix = new AtmosphereMixEnvelope();
+        mix.Step(0.1f, -0.1f, 0f, 0f);
+        Assert.Equal(0, mix.LimitedFrames);
+        for (var i = 0; i < 1000; i++)
+            mix.Step(0.95f, 0.95f, 1f, 1f, 1f, 1f);
+        Assert.True(mix.LimitedFrames > 0);
+        mix.Reset();
+        Assert.Equal(0, mix.LimitedFrames);
+    }
+
+    [Fact]
     public void GainRangeAndResetAreSafe()
     {
         var mix = new AtmosphereMixEnvelope();
