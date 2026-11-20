@@ -26,6 +26,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// <summary>Son okunan satırlar; kare değişmediyse yeniden okunmaz, bunlar kullanılır.</summary>
     private Reading lastReading = Reading.Empty;
 
+    /// <summary>Read timing setting without rebuilding translator or PS5 stream.</summary>
+    public SubtitleTimingMode TimingMode { get; set; } = SubtitleTimingMode.Adaptive;
+
     public (string Source, string Translation)? LastPair { get; private set; }
     /// <summary>Son gösterilen çevirinin oyundaki altyazısının karedeki yeri.</summary>
     public TextBox? LastBox { get; private set; }
@@ -79,6 +82,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     sender.Clear();
                     break;
                 case StabilizerKind.Translate:
+                    // English switched to a NEW line: remove the previous
+                    // translated subtitle before a delayed translation arrives.
+                    if (lineOnScreen is not null) sender.ClearForNewLine();
                     var number = ++lastRequested;
                     var current = session;
                     lineOnScreen = number;
@@ -105,7 +111,13 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     }
 
     /// <summary>Satır ekrandan kalktıktan sonra gelen çevirinin TV'de kalacağı süre (TV uygulamasıyla aynı kural).</summary>
-    public static int ReadingTime(string text) => Math.Min(8000, 2000 + (text.Length * 60));
+    public static int ReadingTime(string text) => Math.Clamp(2000 + (text.Length * 60), 2500, 8000);
+    public static int SubtitleDuration(string text, SubtitleTimingMode mode) => mode switch
+    {
+        SubtitleTimingMode.MatchEnglish => 15000, // Client waits for English OCR clear.
+        SubtitleTimingMode.Extended => Math.Clamp(ReadingTime(text) + 2200, 4000, 10000),
+        _ => ReadingTime(text)
+    };
 
     private async Task TranslateAndForget(string source, TextBox? box, int number, int current)
     {
@@ -142,10 +154,14 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
         lock (gate)
         {
+            // A newer English line already exists: never display an older
+            // translation over it (old versions briefly showed stale text).
+            if (number < lastRequested && number != lineOnScreen) return;
             if (number <= lastShown || !stabilizer.ShouldSend(source, translated)) return;
             lastShown = number;
             // Satır hâlâ ekrandaysa kalkınca silinir; kalktıysa okunacak kadar gösterilir.
-            sender.SendSubtitle(translated, number == lineOnScreen ? 15000 : ReadingTime(translated), box);
+            var duration = SubtitleDuration(translated, TimingMode);
+            sender.SendSubtitle(translated, duration, box);
             LastPair = (source, translated);
             LastBox = box;
         }
