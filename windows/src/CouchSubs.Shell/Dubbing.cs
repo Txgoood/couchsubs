@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using System.Diagnostics;
 using System.Text.Json.Serialization;
 using CouchSubs.Core;
 using CouchSubs.Core.Dubbing;
@@ -122,6 +123,9 @@ public interface IDubbingModel
 /// Çevrilen cümleleri sırayla seslendirir (Mac: Dubber.swift). Bir cümle çalarken sonraki hazırlanır; oyun konuşması
 /// hızlıysa geride kalan eski cümleler atlanır ki ses altyazının çok gerisinde kalmasın.
 /// </summary>
+/// <summary>Yalnız sayaçlar ve süreler; ham oyun sesi veya diyalog metni tutulmaz.</summary>
+public readonly record struct DubberTimingSnapshot(int DroppedLines, int InterruptedGenerations, int LastSynthesisMilliseconds, int PendingLines);
+
 public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<SubtitleServer> server, Func<int> serverPort, Action<Action> post)
     : IAsyncDisposable
 {
@@ -140,6 +144,18 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private bool disposed;
     private bool working;
     private int generation;
+    private int droppedLines;
+    private int interruptedGenerations;
+    private int lastSynthesisMilliseconds;
+    public DubberTimingSnapshot Timing
+    {
+        get
+        {
+            lock (gate)
+                return new DubberTimingSnapshot(droppedLines, interruptedGenerations,
+                    lastSynthesisMilliseconds, queue.Count);
+        }
+    }
     private int Generation { get { lock (gate) return generation; } }
     private SubtitleServer? publishedOn;
 
@@ -177,10 +193,12 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             // Yeni altyazı geldiyse öncekilerin cümleleri artık geç kalmıştır: bekleyenler atılır, çalan da kesilir.
             // Ses yazının gerisinde kalıp oyunu karıştırmasın; dublaj hep ekrandaki altyazıyı söyler.
             activeLineCancellation?.Cancel();
+            droppedLines += queue.Count;
             queue.Clear();
             foreach (var line in lines) queue.Enqueue((line, null));
-            while (queue.Count > Backlog) queue.Dequeue();
+            while (queue.Count > Backlog) { queue.Dequeue(); droppedLines++; }
             interrupt = working;
+            if (interrupt) interruptedGenerations++;
             working = true;
             // Sıra ile kuşak aynı kilit altında değişir; eski döngü yeni cümleyi alamaz.
             number = ++generation;
@@ -214,6 +232,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         lock (gate)
         {
             activeLineCancellation?.Cancel();
+            droppedLines += queue.Count;
             queue.Clear();
             working = false;
             generation++;
@@ -310,7 +329,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             if (result is not { } ready) break;
             // Bu cümle çalarken sonraki hazırlanır.
             next = Next(number);
-            await PlayAsync(ready.Audio, ready.Preview ? DubbingOutput.Computer : Output);
+            await PlayAsync(ready.Audio, ready.Preview ? DubbingOutput.Computer : Output, number);
             if (number != Generation) return;
         }
         lock (gate)
@@ -372,8 +391,15 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             try
             {
                 var token = operationCancellation.Token;
-                return ((await engine.SynthesizeAsync(text, url, token)).Tightened().SoftEdges(),
-                    preview is not null);
+                var timer = Stopwatch.StartNew();
+                var result = (await engine.SynthesizeAsync(text, url, token)).Tightened().SoftEdges();
+                timer.Stop();
+                lock (gate)
+                {
+                    if (number == generation)
+                        lastSynthesisMilliseconds = (int)Math.Min(int.MaxValue, timer.ElapsedMilliseconds);
+                }
+                return (result, preview is not null);
             }
             catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
             {
@@ -398,7 +424,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         });
     }
 
-    private async Task PlayAsync(SpeechAudio speech, DubbingOutput output)
+    private async Task PlayAsync(SpeechAudio speech, DubbingOutput output, int number)
     {
         var wav = speech.ToWav();
         var milliseconds = (int)(speech.Duration * 1000);
@@ -406,12 +432,23 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         {
             server().SendSpeech(wav, milliseconds);
             // TV sesi ağdan alıp çalmaya biraz geç başlar; sıradaki cümle bunu kesmesin.
-            await Task.Delay(milliseconds + 250);
+            await WaitWhileCurrentAsync(milliseconds + 250, number);
         }
         else
         {
             audio.Play(wav);
-            await Task.Delay(milliseconds + 60);
+            await WaitWhileCurrentAsync(milliseconds + 60, number);
+        }
+    }
+
+    /// <summary>Eski konuşma nesli iptal edilince tüm ses süresini beklemeden döner.</summary>
+    private async Task WaitWhileCurrentAsync(int milliseconds, int number)
+    {
+        var timer = Stopwatch.StartNew();
+        while (number == Generation && timer.ElapsedMilliseconds < milliseconds)
+        {
+            var remaining = milliseconds - timer.ElapsedMilliseconds;
+            await Task.Delay((int)Math.Min(50, Math.Max(1, remaining))).ConfigureAwait(false);
         }
     }
 
