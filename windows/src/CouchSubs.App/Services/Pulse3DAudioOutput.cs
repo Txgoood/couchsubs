@@ -25,6 +25,7 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     private readonly AtmosphereMixEnvelope mix = new(Rate);
     private int keepGamePercent = 82;
     private int voicePercent = 85;
+    private int atmosphereMode = (int)AtmosphereMixMode.Legacy;
     private WaveOutEvent? output;
     private readonly object lifecycleGate = new();
 
@@ -34,6 +35,12 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     {
         Volatile.Write(ref keepGamePercent, Math.Clamp(keepGame, 35, 100));
         Volatile.Write(ref voicePercent, Math.Clamp(voice, 0, 100));
+    }
+
+    public void SetAtmosphereMode(AtmosphereMixMode mode)
+    {
+        if (!Enum.IsDefined(mode)) mode = AtmosphereMixMode.Legacy;
+        Volatile.Write(ref atmosphereMode, (int)mode);
     }
 
     public void Start()
@@ -124,6 +131,7 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
             // Preserve stereo position and ambience while a Turkish line plays.
             var keep = Volatile.Read(ref keepGamePercent) / 100f;
             var voiceLevel = Volatile.Read(ref voicePercent) / 100f;
+            var selectedMode = (AtmosphereMixMode)Volatile.Read(ref atmosphereMode);
             for (var i = 0; i < count; i += Channels)
             {
                 var speaking = speech is { } voice && speechPosition < voice.Length;
@@ -139,7 +147,7 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
                     }
                 }
                 var mixed = mix.Step(destination[i], i + 1 < count ? destination[i + 1] : 0f,
-                    left, right, keep, voiceLevel);
+                    left, right, keep, voiceLevel, selectedMode);
                 destination[i] = mixed.Left;
                 if (i + 1 < count) destination[i + 1] = mixed.Right;
             }
