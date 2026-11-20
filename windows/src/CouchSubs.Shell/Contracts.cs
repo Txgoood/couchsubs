@@ -61,6 +61,16 @@ public sealed record UserSettings
     public int ScreenHotkey { get; init; } = 0x7A;
     /// <summary>Global free-area translator shortcut, default F12 (VK 0x7B).</summary>
     public int FreeAreaHotkey { get; init; } = 0x7B;
+    /// <summary>Pause or resume subtitles; defaults to Num0.</summary>
+    public int PauseHotkey { get; init; } = 0x60;
+    /// <summary>One-shot translation for region 1; defaults to Num1.</summary>
+    public int ExtraRegion1Hotkey { get; init; } = 0x61;
+    /// <summary>One-shot translation for region 2; defaults to Num2.</summary>
+    public int ExtraRegion2Hotkey { get; init; } = 0x62;
+    /// <summary>One-shot translation for region 3; defaults to Num3.</summary>
+    public int ExtraRegion3Hotkey { get; init; } = 0x63;
+    /// <summary>Refresh game preview; defaults to Num8.</summary>
+    public int SnapshotHotkey { get; init; } = 0x68;
     /// <summary>Anahtar girildiyse çeviri DeepL'le yapılır; kapalıysa ya da DeepL'e ulaşılamazsa cihaz üstü model.</summary>
     public bool OnlineTranslation { get; init; }
 

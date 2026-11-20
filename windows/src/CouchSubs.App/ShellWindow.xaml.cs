@@ -24,11 +24,11 @@ public partial class ShellWindow : Window
         controller.PropertyChanged += OnChanged;
         // Bilgisayar uykudan uyanınca bağlantılar hemen yenilenir.
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
-        // Num 0, 1, 2, 3, 8 + configured F11/F12 only while translating.
+        // All seven saved shortcuts are enabled only during active translation.
         SourceInitialized += (_, _) =>
         {
             hotkeys = new GlobalHotkeys(new WindowInteropHelper(this).Handle, OnHotkey);
-            hotkeys.Configure(controller.Settings.ScreenHotkey, controller.Settings.FreeAreaHotkey);
+            hotkeys.Configure(controller.Settings);
             hotkeys.Enabled = controller.IsRunning;
         };
         // Bilgisayarda gösterilecek çeviriler küçük, üstte duran bir kutuda çıkar.
@@ -54,7 +54,7 @@ public partial class ShellWindow : Window
     {
         if (e.PropertyName == nameof(AppController.Step)) ShowScreen();
         if (e.PropertyName == nameof(AppController.Settings))
-            hotkeys?.Configure(controller.Settings.ScreenHotkey, controller.Settings.FreeAreaHotkey);
+            hotkeys?.Configure(controller.Settings);
         if (e.PropertyName == nameof(AppController.IsRunning) && hotkeys is not null) hotkeys.Enabled = controller.IsRunning;
     }
 

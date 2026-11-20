@@ -2,6 +2,7 @@
 
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using CouchSubs.Shell;
 
 namespace CouchSubs.App.Services;
 
@@ -25,7 +26,7 @@ public enum HotkeyAction
 }
 
 /// <summary>
-/// Genel kısayollar (Num 0, 1, 2, 3, 8 + F11/F12): kullanıcı kumandayla oynarken bilgisayardaki pencere arka planda olsa da çalışır.
+/// Genel kısayollar (default Num 0, 1, 2, 3, 8 and F11/F12): kullanıcı kumandayla oynarken bilgisayardaki pencere arka planda olsa da çalışır.
 /// Kısayollar yalnız <see cref="Enabled"/> iken tutulur; böylece çeviri kapalıyken sayı tuşları diğer uygulamalarda
 /// (Excel gibi) normal çalışır. Tuş başka bir uygulamada kullanılıyorsa sessizce atlanır.
 /// </summary>
@@ -35,7 +36,7 @@ public sealed partial class GlobalHotkeys : IDisposable
     private const uint ModNoRepeat = 0x4000;
     private const int FirstId = 0x4353;
 
-    /// <summary>Num 0, 1, 2, 3, 5, 8, 9 (NumLock açıkken).</summary>
+    /// <summary>Action order is fixed; assigned keys are independently configurable.</summary>
     private static readonly (HotkeyAction Action, uint VirtualKey)[] Keys =
     [
         (HotkeyAction.ExtraRegion1, 0x61),
@@ -60,29 +61,27 @@ public sealed partial class GlobalHotkeys : IDisposable
     private readonly Action<HotkeyAction> pressed;
     private readonly List<int> registered = [];
     private bool enabled;
-    private uint screenKey = 0x7A;
-    private uint freeAreaKey = 0x7B;
+    private readonly uint[] configuredKeys = Keys.Select(k => k.VirtualKey).ToArray();
 
-    /// <summary>Accepted keys: F1-F12 or NumPad 0-9. Ignore invalid/duplicate assignments.</summary>
-    public static bool IsValidKey(int key) => key is >= 0x70 and <= 0x7B or 0x65 or 0x69;
-
-    public void Configure(int screen, int freeArea)
+    /// <summary>Apply seven non-conflicting shortcuts, and register immediately when running.</summary>
+    public bool Configure(UserSettings settings)
     {
-        if (!IsValidKey(screen) || !IsValidKey(freeArea) || screen == freeArea) return;
-        if (screenKey == (uint)screen && freeAreaKey == (uint)freeArea) return;
+        var mapping = HotkeyAssignments.From(settings);
+        if (!mapping.IsValid) return false;
+        // Same order as Keys: region1, region2, region3, free, snapshot, pause, screen.
+        uint[] updated =
+        [
+            (uint)mapping.Extra1, (uint)mapping.Extra2, (uint)mapping.Extra3,
+            (uint)mapping.FreeArea, (uint)mapping.Snapshot, (uint)mapping.Pause,
+            (uint)mapping.Screen
+        ];
+        if (configuredKeys.SequenceEqual(updated)) return true;
         bool wasEnabled = enabled;
         if (wasEnabled) Unregister();
-        screenKey = (uint)screen;
-        freeAreaKey = (uint)freeArea;
+        Array.Copy(updated, configuredKeys, updated.Length);
         if (wasEnabled) Register();
+        return true;
     }
-
-    private uint KeyFor(int index) => Keys[index].Action switch
-    {
-        HotkeyAction.Screen => screenKey,
-        HotkeyAction.FreeArea => freeAreaKey,
-        _ => Keys[index].VirtualKey
-    };
 
     /// <param name="window">Pencerenin tutamağı (HWND).</param>
     /// <param name="pressed">Kısayola basılınca çağrılır.</param>
@@ -112,7 +111,7 @@ public sealed partial class GlobalHotkeys : IDisposable
         for (var index = 0; index < Keys.Length; index++)
         {
             var id = FirstId + index;
-            if (RegisterHotKey(window, id, ModNoRepeat, KeyFor(index))) registered.Add(id);
+            if (RegisterHotKey(window, id, ModNoRepeat, configuredKeys[index])) registered.Add(id);
         }
     }
 

@@ -113,18 +113,15 @@
                         <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton Content="{t:T 'Subtitles'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="0" IsChecked="True" />
-                                <RadioButton Content="{t:T 'Area 1 (Num 1)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="1" />
-                                <RadioButton Content="{t:T 'Area 2 (Num 2)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="2" />
-                                <RadioButton Content="{t:T 'Area 3 (Num 3)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="3" />
+                                <RadioButton Content="{t:T 'Area 1'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="1" />
+                                <RadioButton Content="{t:T 'Area 2'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="2" />
+                                <RadioButton Content="{t:T 'Area 3'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="3" />
                             </StackPanel>
                         </Border>
                         <CheckBox x:Name="UseArea" Content="{t:T 'Use this area'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,12"
                                   Visibility="Collapsed" Checked="OnUseArea" Unchecked="OnUseArea" />
                         <StackPanel x:Name="ExtraTargetPanel" Visibility="Collapsed" Margin="0,0,0,12">
-                            <TextBlock Text="Serbest alan tuşu" Margin="0,0,0,4" />
-                        <ComboBox x:Name="FreeAreaHotkeyPicker" Width="155" HorizontalAlignment="Left"
-                                  SelectionChanged="OnHotkeysChanged" Margin="0,0,0,12" />
-                        <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
+                            <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
                             <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal">
                                     <RadioButton x:Name="ExtraTv" Content="{t:T 'On the TV'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Tv" />
@@ -149,13 +146,61 @@
                     </StackPanel>
                 </c:Card>
 
-                <c:Card Title="Ekranı çevir (F11)" Margin="0,16,0,0">
+                <c:Card Title="Klavye kısayolları - hepsini değiştir" Margin="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Yedi işlevin tuşunu buradan ayrı ayrı değiştir. F1-F12 veya Num 0-9 seçebilirsin. Aynı tuş iki işlevde kullanılamaz."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                            <ComboBox x:Name="ScreenHotkeyPicker" Width="145" DockPanel.Dock="Right"
+                                      SelectionChanged="OnHotkeysChanged" />
+                            <TextBlock Text="Ekranın tamamını çevir" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                            <ComboBox x:Name="FreeAreaHotkeyPicker" Width="145" DockPanel.Dock="Right"
+                                      SelectionChanged="OnHotkeysChanged" />
+                            <TextBlock Text="Serbest alan seç" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                            <ComboBox x:Name="PauseHotkeyPicker" Width="145" DockPanel.Dock="Right"
+                                      SelectionChanged="OnHotkeysChanged" />
+                            <TextBlock Text="Canlı altyazıyı duraklat / sürdür" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                            <ComboBox x:Name="Region1HotkeyPicker" Width="145" DockPanel.Dock="Right"
+                                      SelectionChanged="OnHotkeysChanged" />
+                            <TextBlock Text="Ek bölge 1&apos;i çevir" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                            <ComboBox x:Name="Region2HotkeyPicker" Width="145" DockPanel.Dock="Right"
+                                      SelectionChanged="OnHotkeysChanged" />
+                            <TextBlock Text="Ek bölge 2&apos;yi çevir" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                            <ComboBox x:Name="Region3HotkeyPicker" Width="145" DockPanel.Dock="Right"
+                                      SelectionChanged="OnHotkeysChanged" />
+                            <TextBlock Text="Ek bölge 3&apos;ü çevir" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                            <ComboBox x:Name="SnapshotHotkeyPicker" Width="145" DockPanel.Dock="Right"
+                                      SelectionChanged="OnHotkeysChanged" />
+                            <TextBlock Text="Oyun görüntüsü önizlemesini yenile" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                        </DockPanel>
+                        <TextBlock Text="Seçimler otomatik kaydedilir ve çeviri sırasında hemen uygulanır. Num tuşları için Num Lock açık olmalı."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                    </StackPanel>
+                </c:Card>
+
+                <c:Card Title="Ekranı çevir" Margin="0,16,0,0">
                     <StackPanel>
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                   Text="Oynarken F11'e basın: ekrandaki bütün yazılar bir kez çevrilir; tekrar basınca kaldırılır." />
-                        <TextBlock Text="Ekranı çevir tuşu" Margin="0,9,0,4" />
-                        <ComboBox x:Name="ScreenHotkeyPicker" Width="155" HorizontalAlignment="Left"
-                                  SelectionChanged="OnHotkeysChanged" />
+                                   Text="Oynarken yukarıda atadığın tuşa bas: ekrandaki bütün yazılar bir kez çevrilir; tekrar basınca kaldırılır." />
                     </StackPanel>
                 </c:Card>
 
@@ -172,10 +217,10 @@
                     </StackPanel>
                 </c:Card>
 
-                <c:Card Title="Serbest alan (F12)" Margin="0,16,0,0">
+                <c:Card Title="Serbest alan" Margin="0,16,0,0">
                     <StackPanel>
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                                   Text="Oynarken F12'ye basın: görüntü bilgisayarda donar, çevirmek istediğiniz yeri fareyle seçin. Esc kapatır." />
+                                   Text="Oynarken yukarıda atadığın tuşa bas: görüntü bilgisayarda donar, çevirmek istediğin yeri fareyle seç. Esc kapatır." />
                         <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
                         <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal">
@@ -185,9 +230,9 @@
                             </StackPanel>
                         </Border>
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Text="{t:T 'Num 0 pauses or resumes the live subtitle translation, which helps when you translate areas.'}" />
+                                   Text="Altyazıyı duraklatma veya sürdürme için yukarıda atadığın tuşu kullan." />
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                   Text="{t:T 'F11/F12 ve Num kısayolları yalnız çeviri açıkken çalışır. Num kısayolları için Num Lock açık olmalı.'}" />
+                                   Text="{t:T 'Atadığın kısayollar yalnız çeviri açıkken çalışır. Num kısayolları için Num Lock açık olmalı.'}" />
                     </StackPanel>
                 </c:Card>
 
