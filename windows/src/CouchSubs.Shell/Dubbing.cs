@@ -38,6 +38,8 @@ public sealed record DubbingSettings
     public bool Enabled { get; init; }
     /// <summary>Experimental speaker embeddings for PS5 audio without subtitle names.</summary>
     public bool AutoSpeakerTracking { get; init; } = true;
+    /// <summary>Auto-create/select library only when a recognizable game title is observed.</summary>
+    public bool AutoGameLibrary { get; init; } = true;
     /// <summary>Opt-in emotional speech. Never affects subtitle OCR or translation.</summary>
     public DubbingEmotionMode EmotionMode { get; init; } = DubbingEmotionMode.Balanced;
     public DubbingEngine Engine { get; init; } = DubbingEngine.Natural;
