@@ -21,6 +21,8 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     private readonly object speechGate = new();
     private float[]? speech;
     private int speechPosition;
+    private float nextSpeechPan;
+    private float nextSpeechConfidence;
     // Separate envelopes preserve stereo space and prevent abrupt ambience changes.
     private readonly AtmosphereMixEnvelope mix = new(Rate);
     private int keepGamePercent = 82;
@@ -41,6 +43,16 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     {
         if (!Enum.IsDefined(mode)) mode = AtmosphereMixMode.Legacy;
         Volatile.Write(ref atmosphereMode, (int)mode);
+    }
+
+    /// <summary>Only opt-in, explicitly trusted spatial metadata may pan the NEXT Turkish line.</summary>
+    public void SetNextSpeechPosition(float pan, float confidence)
+    {
+        lock (speechGate)
+        {
+            nextSpeechPan = pan;
+            nextSpeechConfidence = confidence;
+        }
     }
 
     public void Start()
@@ -108,6 +120,14 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
         }
         lock (speechGate)
         {
+            var gains = SpatialVoicePanner.Gains(nextSpeechPan, nextSpeechConfidence);
+            nextSpeechPan = nextSpeechConfidence = 0f;
+            // No extra resampler pass: placement affects only TTS, never PS5 ambience.
+            for (var i = 0; i < converted.Length; i += Channels)
+            {
+                converted[i] *= gains.Left;
+                converted[i + 1] *= gains.Right;
+            }
             speech = converted;
             speechPosition = 0;
         }
