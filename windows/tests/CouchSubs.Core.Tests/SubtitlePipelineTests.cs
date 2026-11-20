@@ -237,7 +237,29 @@ public class SubtitlePipelineTests
         await WaitUntil(() => sender.Sent.Count == 1);
         await translator.Release("Run!");
         await pipeline.WaitForTranslationsAsync();
-        Assert.Equal(["TR: Hold the gate.", "TR: Run!"], sender.Sent);
+        // New line supersedes older translation before the old result arrives.
+        Assert.Equal(["TR: Run!"], sender.Sent);
+    }
+
+    [Fact]
+    public async Task NewEnglishLineClearsOldTurkishImmediately()
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader("First!", "Second!"),
+            new FakeTranslator(), sender);
+        await Run(pipeline, 2);
+        Assert.Equal(["TR: First!", "TR: Second!"], sender.Sent);
+        Assert.Equal(1, sender.Clears);
+    }
+
+    [Theory]
+    [InlineData(SubtitleTimingMode.Adaptive, 2500)]
+    [InlineData(SubtitleTimingMode.Extended, 4700)]
+    [InlineData(SubtitleTimingMode.MatchEnglish, 15000)]
+    public void TimingsRespectSelectedMode(SubtitleTimingMode mode, int minimum)
+    {
+        var duration = SubtitlePipeline.SubtitleDuration("Go!", mode);
+        Assert.True(duration >= minimum);
     }
 
     /// Yeni satırın çevirisi zaten gösterildiyse eski satırınki onun üstüne yazılmaz.
