@@ -77,6 +77,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
+    private readonly SpeakerTurnGuard speakerTurnGuard = new();
     private bool manualGamePinned;
     private readonly HashSet<string> suppressedAutoGames = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? gameProbeCancellation;
@@ -827,6 +828,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (autoSpeaker) services.SpeakerDetector?.Start();
             bool captureAudio = pulseAudioActive || acousticMode || neuralMode;
             gameProsody.Clear();
+            speakerTurnGuard.Reset();
             var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
             if (captureAudio && stream is StreamSession audioStream)
             {
@@ -947,6 +949,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         services.GameAudio?.Dispose();
         services.NeuralSpeech?.Stop();
         services.SpeakerDetector?.Stop();
+        speakerTurnGuard.Reset();
         keeper?.Stop();
         keeper = null;
         pipeline?.Reset();
@@ -1446,6 +1449,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public IReadOnlyList<string> KnownGames => GameCastLibrary.Games(settings.Dubbing);
 
+    public string InterruptionGuardSummary =>
+        $"Şüpheli hızlı konuşmacı geçişi: {speakerTurnGuard.PossibleInterruptions} · " +
+        $"güvenli ses atama geri çekilmesi: {speakerTurnGuard.Abstentions}. " +
+        "Bu sayaçlar üst üste iki sesin kesin algılandığı anlamına gelmez.";
+
     /// <summary>Snapshot only: counts/timing, never game audio or dialogue text.</summary>
     public string AiPerformanceSummary
     {
@@ -1468,6 +1476,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         manualGamePinned = true;
         suppressedAutoGames.Remove(GameCastLibrary.Normalize(name));
+        speakerTurnGuard.Reset();
         var selected = GameCastLibrary.Switch(settings.Dubbing, name);
         if (ReferenceEquals(selected, settings.Dubbing)) return;
         Settings = settings with { Dubbing = selected };
@@ -1608,11 +1617,25 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // Subtitle labels win. When absent, use only a fresh high-confidence
         // voice embedding result; never invent a real character name.
         var recent = services.SpeakerDetector?.Latest;
-        if (settings.Source == GameSource.Ps5 && settings.Dubbing.AutoSpeakerTracking &&
-            recent is { Name: not null, Source: SpeakerIdentitySource.VoiceEmbedding, Confidence: >= 0.83f })
+        string? candidate = null;
+        if (settings.Source == GameSource.Ps5 && settings.Dubbing.AutoSpeakerTracking)
+        {
+            if (settings.Dubbing.InterruptionGuard)
+            {
+                // This is an uncertainty gate, not an actual overlap separation
+                // model. Explicitly labelled subtitles bypass the gate below.
+                var decision = speakerTurnGuard.Evaluate(recent, Environment.TickCount64);
+                candidate = decision.Speaker;
+            }
+            else if (recent is
+                { Name: not null, Source: SpeakerIdentitySource.VoiceEmbedding, Confidence: >= 0.83f })
+                candidate = recent.Name;
+        }
+
+        if (candidate is not null)
             MakeDubber()?.Speak(lines.Select(line =>
                 string.IsNullOrWhiteSpace(line.Speaker)
-                    ? line with { Speaker = recent.Name } : line).ToArray());
+                    ? line with { Speaker = candidate } : line).ToArray());
         else
             MakeDubber()?.Speak(lines);
     }
