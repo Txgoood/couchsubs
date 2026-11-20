@@ -233,11 +233,10 @@ public class SubtitlePipelineTests
         var translator = new GatedTranslator();
         var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!"), translator, sender);
         await Run(pipeline, 2, waitEach: false);
+        // The first translation is stale once a newer English line appears.
         await translator.Release("Hold the gate.");
-        await WaitUntil(() => sender.Sent.Count == 1);
         await translator.Release("Run!");
         await pipeline.WaitForTranslationsAsync();
-        // New line supersedes older translation before the old result arrives.
         Assert.Equal(["TR: Run!"], sender.Sent);
     }
 
