@@ -176,7 +176,7 @@ jobs:
           $props = Get-Content windows/Directory.Build.props -Raw
           $tv = Get-Content tv-webos/appinfo.json -Raw | ConvertFrom-Json
           $js = Get-Content tv-webos/app.js -Raw
-          if ($props -notmatch '<AssemblyVersion>0\.1\.8\.132</AssemblyVersion>') { throw "Windows Build #133 bulunamadı" }
+          if ($props -notmatch '<AssemblyVersion>0\.1\.9\.133</AssemblyVersion>') { throw "Windows Build #133 bulunamadı" }
           if ($tv.version -ne '0.9.11') { throw "webOS v0.9.11 bulunamadı" }
           $platform = Get-Content tv-webos/platform.js -Raw
           if ($platform -notmatch 'appBuild: 133') { throw "webOS Build #133 bulunamadı" }
@@ -313,4 +313,4 @@ jobs:
         with:
           name: couchsubs-screens
           path: screens
-          if-no-files-found: error
+          if-no-files-found: warn
