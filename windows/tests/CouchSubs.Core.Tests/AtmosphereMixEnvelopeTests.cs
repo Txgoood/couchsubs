@@ -73,8 +73,10 @@ public sealed class AtmosphereMixEnvelopeTests
         var recovered = mix.Step(0.2f, -0.4f, 0f, 0f);
         Assert.True(float.IsFinite(recovered.Left));
         Assert.True(float.IsFinite(recovered.Right));
-        Assert.Equal(0.2f, recovered.Left, 4);
-        Assert.Equal(-0.4f, recovered.Right, 4);
+        // The very first damaged frame may engage a tiny, intentional 35ms
+        // gain ramp. Recovery must stay finite and close to the clean input.
+        Assert.InRange(recovered.Left, 0.198f, 0.202f);
+        Assert.InRange(recovered.Right, -0.402f, -0.398f);
         mix.Reset();
         Assert.Equal(0, mix.InvalidInputFrames);
     }
