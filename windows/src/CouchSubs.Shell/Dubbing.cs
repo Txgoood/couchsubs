@@ -41,6 +41,8 @@ public sealed record DubbingSettings
     public bool Enabled { get; init; }
     /// <summary>Experimental speaker embeddings for PS5 audio without subtitle names.</summary>
     public bool AutoSpeakerTracking { get; init; } = true;
+    /// <summary>Protect against wrong anonymous speaker attribution during rapid interruptions.</summary>
+    public bool InterruptionGuard { get; init; } = false;
     public SpeechDetectionEngine SpeechDetection { get; init; } = SpeechDetectionEngine.Automatic;
     /// <summary>Auto-create/select library only when a recognizable game title is observed.</summary>
     public bool AutoGameLibrary { get; init; } = true;
