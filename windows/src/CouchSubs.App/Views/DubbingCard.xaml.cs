@@ -5,6 +5,7 @@ using System.IO;
 using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using CouchSubs.Core;
 using CouchSubs.Core.Dubbing;
 using CouchSubs.Shell;
@@ -18,15 +19,24 @@ public partial class DubbingCard : UserControl
     private bool loading;
     private int characterPage;
     private const int PageSize = 24;
+    private readonly DispatcherTimer healthTimer = new()
+    { Interval = TimeSpan.FromSeconds(5) };
 
     public DubbingCard()
     {
         InitializeComponent();
+        healthTimer.Tick += (_, _) =>
+        {
+            if (controller is not null && IsVisible)
+                DubbingHealthInfo.Text = controller.DubbingHealthSummary;
+        };
+        Loaded += (_, _) => healthTimer.Start();
         // Kesme işaretli metinler XAML biçimlendirme uzantısına yazılamıyor.
         SetupHint.Text = Localizer.Current["In the game's audio settings, turn the dialogue (voice) volume down; keep music and effects. If the game can show speaker names in subtitles, turn them on: every character then speaks with its own voice."];
         Credits.Text = Localizer.Current["Voices: Pocket TTS Turkish (wite-tech, CC BY 4.0) with Kyutai's pocket-tts. The voices are synthetic, not real people."];
         Unloaded += (_, _) =>
         {
+            healthTimer.Stop();
             if (controller is not null) controller.PropertyChanged -= OnChanged;
         };
     }
@@ -72,6 +82,7 @@ public partial class DubbingCard : UserControl
         foreach (ComboBoxItem item in SpeechDetectionPicker.Items)
             item.IsSelected = string.Equals(item.Tag as string, settings.SpeechDetection.ToString(), StringComparison.Ordinal);
         AiPerformanceInfo.Text = controller.AiPerformanceSummary;
+        DubbingHealthInfo.Text = controller.DubbingHealthSummary;
         AutoGameLibrary.IsChecked = settings.AutoGameLibrary;
         foreach (ComboBoxItem item in EmotionModePicker.Items)
             item.IsSelected = string.Equals(item.Tag as string, settings.EmotionMode.ToString(), StringComparison.Ordinal);
