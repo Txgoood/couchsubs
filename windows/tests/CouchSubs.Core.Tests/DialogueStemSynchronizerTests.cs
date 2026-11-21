@@ -70,6 +70,8 @@ public sealed class DialogueStemSynchronizerTests
         join.OfferOriginal(1, Original(), 1000);
         Assert.False(join.OfferStem(1, Enumerable.Repeat(.1f, 960).ToArray(),
             .5f, 1010, true));
+        Assert.False(join.OfferStem(1, Enumerable.Repeat(.1f, 960).ToArray(),
+            1.01f, 1010, true));
         Assert.False(join.OfferStem(1, Enumerable.Repeat(float.NaN, 960).ToArray(),
             .99f, 1020, true));
         Assert.False(join.OfferStem(1, Enumerable.Repeat(.1f, 960).ToArray(),

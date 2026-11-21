@@ -70,7 +70,8 @@ public sealed class DialogueStemSynchronizer
         float confidence, long returnedMs, bool turkishDubActive)
     {
         if (monoSpeech.Length != SamplesPerFrame / 2 || !Finite(monoSpeech) ||
-            !float.IsFinite(confidence) || confidence < DialogueStemSafetyGate.MinimumConfidence)
+            !float.IsFinite(confidence) || confidence < DialogueStemSafetyGate.MinimumConfidence ||
+            confidence > 1f)
             return false;
         lock (gate)
         {
