@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using Microsoft.ML.OnnxRuntime;
+using CouchSubs.Core.Dubbing;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace CouchSubs.Translation;
@@ -50,6 +51,11 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
             ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
         };
+        // Optional CPU inference thread cap for measured latency tuning.
+        // Keep ONNX defaults in normal mode; GPU providers are NOT bundled.
+        var onnxThreads = DubbingComputeBudget.OnnxThreads(Environment.ProcessorCount,
+            Environment.GetEnvironmentVariable(DubbingComputeBudget.OnnxThreadsSetting));
+        if (onnxThreads > 0) options.IntraOpNumThreads = onnxThreads;
         // Bellek havuzunu ya da ağırlık ön paketlemeyi kapatmak denendi: yüklemede bellek düşse de
         // çeviriler başladıktan sonra bellek artıyor, satır süresi de %20'ye kadar uzuyordu. Varsayılanlar kalır.
         _encoder = new InferenceSession(Path.Combine(modelDirectory, ModelStore.EncoderFile), options);
