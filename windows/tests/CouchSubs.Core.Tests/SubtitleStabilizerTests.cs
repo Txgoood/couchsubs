@@ -80,6 +80,36 @@ public class SubtitleStabilizerTests
     }
 
     [Fact]
+    public void TransientOcrLossDoesNotRedubTheSameEnglishLine()
+    {
+        var tracker = new SubtitleStabilizer(emptyFramesToClear: 6);
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Stay with me!").Kind);
+        for (var n = 0; n < 6; n++) tracker.Feed("");
+        // The TV may clear after an OCR flicker, but this is not a new line.
+        for (var n = 0; n < 10; n++)
+            Assert.Equal(StabilizerKind.None, tracker.Feed("Stay with me!").Kind);
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Get in the car!").Kind);
+    }
+
+    [Fact]
+    public void GenuineRepeatAfterLongAbsenceIsAllowed()
+    {
+        var tracker = new SubtitleStabilizer(emptyFramesToClear: 6, repeatGuardFrames: 12);
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Move!").Kind);
+        for (var n = 0; n < 20; n++) tracker.Feed("");
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Move!").Kind);
+    }
+
+    [Fact]
+    public void FailedTranslationCanRetryEvenWithinDuplicateWindow()
+    {
+        var tracker = new SubtitleStabilizer();
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Hold on!").Kind);
+        tracker.ForgetSent();
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Hold on!").Kind);
+    }
+
+    [Fact]
     public void AlreadyTranslatedIsSkipped()
     {
         var s = new SubtitleStabilizer();
