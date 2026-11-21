@@ -91,7 +91,7 @@ public sealed class OnnxDialogueStemAdapter : IDisposable
         var sw = Stopwatch.StartNew();
         try
         {
-            using var input = NamedOnnxValue.CreateFromTensor(InputName,
+            var input = NamedOnnxValue.CreateFromTensor(InputName,
                 new DenseTensor<float>(planar, [1, Channels, SamplesPerChannel]));
             using var outputs = session.Run([input], [OutputName]);
             if (sw.ElapsedMilliseconds > maxLatencyMilliseconds || outputs.Count != 1)
