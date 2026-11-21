@@ -129,7 +129,7 @@ public sealed class VoiceCast
     {
         if (!SuggestedNames.ContainsKey(Key(name))) return;
         SuggestedNames.Remove(Key(name));
-        SetGroup(name, group);
+        SetGroup(name, group == CharacterGroup.Unknown ? GroupFor(name) : group);
     }
 
     public void Assign(DubbingVoice voice, string name) => Assignments[Key(name)] = voice;
