@@ -1571,7 +1571,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var speaker = DialogueNameCandidates.ExplicitSpeaker(english);
         if (speaker is not null && !cast.Assignments.ContainsKey(VoiceCast.Key(speaker)))
         {
-            cast.SetGroup(speaker, CharacterGroup.Unknown);
+            cast.SetGroup(speaker, cast.GroupFor(speaker));
             changed = true;
         }
         foreach (var name in DialogueNameCandidates.Mentioned(english))
