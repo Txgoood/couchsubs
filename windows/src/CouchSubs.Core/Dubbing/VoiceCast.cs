@@ -113,7 +113,8 @@ public sealed class VoiceCast
     {
         var oldKey = Key(oldName);
         var newKey = Key(newName);
-        if (newKey.Length is 0 or > 64 || newKey == oldKey ||
+        if (newKey == oldKey && Assignments.ContainsKey(oldKey)) return;
+        if (newKey.Length is 0 or > 64 ||
             !Assignments.TryGetValue(oldKey, out var voice))
             throw new InvalidOperationException("Geçersiz karakter adı veya kaynak bulunamadı.");
         if (Assignments.ContainsKey(newKey))
