@@ -13,6 +13,11 @@ public static class Program
     [STAThread]
     public static void Main()
     {
+        if (Environment.GetCommandLineArgs().Skip(1).SequenceEqual(["--speaker-worker"]))
+        {
+            Environment.ExitCode = Services.IsolatedSpeakerWorker.Run();
+            return;
+        }
         VelopackApp.Build().Run();
         var app = new App();
         app.InitializeComponent();
