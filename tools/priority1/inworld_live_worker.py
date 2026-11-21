@@ -56,9 +56,10 @@ class FrameEmitter:
         self.last_id = frame_id
         self.ids.append(frame_id)
         self.audio.extend(produced)
+        completed = self._drain()
         if len(self.ids) > MAX_PENDING:
-            raise RuntimeError("Model is too far behind PS5 stream; no live fallback")
-        return self._drain()
+            raise RuntimeError("Model is too far behind PS5 stream; host must fail open")
+        return completed
 
     def finalize(self, produced):
         self.audio.extend(produced)
