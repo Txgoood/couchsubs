@@ -269,11 +269,26 @@ public partial class DubbingCard : UserControl
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(195) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        row.Children.Add(new TextBlock
+        var nameEditor = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
+        var nameText = new System.Windows.Controls.TextBox
         {
-            Text = DisplayName(name), VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0)
-        });
+            Text = DisplayName(name), Width = 126, VerticalContentAlignment = VerticalAlignment.Center,
+            ToolTip = "Karakterin adını düzelt; Türkçe ses tercihi kaybolmaz."
+        };
+        var rename = new Button { Content = "✓", Width = 27, Margin = new Thickness(4, 0, 0, 0),
+            ToolTip = "Yeni ismi kaydet" };
+        rename.Click += (_, _) =>
+        {
+            if (controller is null) return;
+            try { controller.RenameCharacter(name, nameText.Text); }
+            catch (InvalidOperationException error)
+            {
+                MessageBox.Show(error.Message, "Karakter adı", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        };
+        nameEditor.Children.Add(nameText);
+        nameEditor.Children.Add(rename);
+        row.Children.Add(nameEditor);
         var kind = new ComboBox { Margin = new Thickness(0, 0, 6, 0) };
         foreach (var group in Enum.GetValues<CharacterGroup>())
             kind.Items.Add(new ComboBoxItem
@@ -336,6 +351,7 @@ public partial class DubbingCard : UserControl
 
     private void BuildVoices(VoiceCast cast)
     {
+        RefreshSuggestedNames(cast);
         Voices.Children.Clear();
         Voices.Children.Add(VoiceRow(Localizer.Current["Narrator and unnamed lines"], cast.Narrator,
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, narrator: voice) } })));
@@ -356,6 +372,45 @@ public partial class DubbingCard : UserControl
         });
         foreach (var name in names.Skip(characterPage * PageSize).Take(PageSize))
             Voices.Children.Add(CharacterRow(name, cast));
+    }
+
+    private void RefreshSuggestedNames(VoiceCast cast)
+    {
+        NameSuggestions.Children.Clear();
+        var suggestions = cast.SuggestedNames
+            .Where(pair => !cast.Assignments.ContainsKey(pair.Key))
+            .OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key)
+            .Take(12).ToArray();
+        if (suggestions.Length == 0)
+        {
+            NameSuggestions.Children.Add(new TextBlock
+            {
+                Text = "Henüz tahmini isim yok.",
+                Style = (Style)FindResource("HintText")
+            });
+            return;
+        }
+        foreach (var suggestion in suggestions)
+        {
+            var candidate = suggestion.Key;
+            var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+            bar.Children.Add(new TextBlock
+            {
+                Text = DisplayName(candidate) + " (" + suggestion.Value + " kez)",
+                Width = 190, VerticalAlignment = VerticalAlignment.Center
+            });
+            var accept = new Button
+            {
+                Content = "Karakter olarak ekle", Margin = new Thickness(0, 0, 6, 0),
+                ToolTip = "İsmi onaylar. Konuşmacı sesiyle otomatik eşleştiği anlamına gelmez."
+            };
+            accept.Click += (_, _) => controller?.AcceptCharacterSuggestion(candidate);
+            bar.Children.Add(accept);
+            var dismiss = new Button { Content = "Yanlış / sil" };
+            dismiss.Click += (_, _) => controller?.DismissCharacterSuggestion(candidate);
+            bar.Children.Add(dismiss);
+            NameSuggestions.Children.Add(bar);
+        }
     }
 
     private static VoiceCast WithRoles(VoiceCast cast, DubbingVoice? narrator = null, DubbingVoice? partner = null)

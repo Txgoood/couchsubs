@@ -43,6 +43,8 @@ public sealed class VoiceCast
     public Dictionary<string, DubbingVoice> Assignments { get; init; } = new(StringComparer.Ordinal);
     /// <summary>Karakterin düzenleme grubu; modelin sesini değiştirmez, kullanıcı isterse ayarlar.</summary>
     public Dictionary<string, CharacterGroup> Groups { get; init; } = new(StringComparer.Ordinal);
+    /// <summary>Unconfirmed names heard in dialogue (NOT a mapping to whoever is speaking).</summary>
+    public Dictionary<string, int> SuggestedNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public DubbingVoice Narrator { get; set; } = DubbingVoice.Male1;
     /// <summary>Tireli konuşmada sıradaki kişinin sesi.</summary>
     public DubbingVoice Partner { get; set; } = DubbingVoice.Female1;
@@ -93,6 +95,44 @@ public sealed class VoiceCast
         return _lastWasPartner ? Partner : Narrator;
     }
 
+    /// <summary>Collect a dialogue clue; never assign it to the current speaker.</summary>
+    public bool SuggestName(string name)
+    {
+        name = name.Trim();
+        if (name.Length is < 2 or > 32 || SuggestedNames.Count > 250) return false;
+        var key = Key(name);
+        if (Assignments.ContainsKey(key) || SuggestedNames.GetValueOrDefault(key) >= 3) return false;
+        SuggestedNames[key] = SuggestedNames.GetValueOrDefault(key) + 1;
+        return true;
+    }
+
+    public void DismissSuggestion(string name) => SuggestedNames.Remove(Key(name));
+
+    /// <summary>Manually correct a character name without changing its chosen Turkish voice.</summary>
+    public void Rename(string oldName, string newName)
+    {
+        var oldKey = Key(oldName);
+        var newKey = Key(newName);
+        if (newKey == oldKey && Assignments.ContainsKey(oldKey)) return;
+        if (newKey.Length is 0 or > 64 ||
+            !Assignments.TryGetValue(oldKey, out var voice))
+            throw new InvalidOperationException("Geçersiz karakter adı veya kaynak bulunamadı.");
+        if (Assignments.ContainsKey(newKey))
+            throw new InvalidOperationException("Bu karakter adı zaten kayıtlı; yanlışlıkla iki sesi birleştirmemek için önce kontrol et.");
+        Assignments.Remove(oldKey);
+        Assignments[newKey] = voice;
+        if (Groups.Remove(oldKey, out var group)) Groups[newKey] = group;
+        SuggestedNames.Remove(newKey);
+        SuggestedNames.Remove(oldKey);
+    }
+
+    public void AcceptSuggestion(string name, CharacterGroup group = CharacterGroup.Unknown)
+    {
+        if (!SuggestedNames.ContainsKey(Key(name))) return;
+        SuggestedNames.Remove(Key(name));
+        SetGroup(name, group == CharacterGroup.Unknown ? GroupFor(name) : group);
+    }
+
     public void Assign(DubbingVoice voice, string name) => Assignments[Key(name)] = voice;
 
     public CharacterGroup GroupFor(string name)
@@ -125,12 +165,14 @@ public sealed class VoiceCast
         var key = Key(name);
         Assignments.Remove(key);
         Groups.Remove(key);
+        SuggestedNames.Remove(key);
     }
 
     public VoiceCast Copy() => new()
     {
         Assignments = new Dictionary<string, DubbingVoice>(Assignments, StringComparer.Ordinal),
         Groups = new Dictionary<string, CharacterGroup>(Groups, StringComparer.Ordinal),
+        SuggestedNames = new Dictionary<string, int>(SuggestedNames, StringComparer.OrdinalIgnoreCase),
         Narrator = Narrator,
         Partner = Partner,
     };

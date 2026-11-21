@@ -153,6 +153,11 @@
                         <TextBlock x:Name="CharacterPageInfo" VerticalAlignment="Center" Margin="8,0,0,0"
                                    Style="{StaticResource HintText}" />
                     </StackPanel>
+                    <TextBlock Text="Diyalogdan bulunan isimler (tahmini)" FontWeight="SemiBold"
+                               Margin="0,12,0,4" />
+                    <TextBlock Text="Bir karakterin adı diyalogda söylenirse burada görünür. Bu isim, konuşan kişiye otomatik bağlanmaz. Onaylayabilir veya yanlışsa silebilirsin."
+                               TextWrapping="Wrap" Style="{StaticResource HintText}" Margin="0,0,0,6" />
+                    <StackPanel x:Name="NameSuggestions" Margin="0,0,0,10" />
                     <StackPanel x:Name="Voices" />
                     <TextBlock x:Name="Credits" Style="{StaticResource HintText}" Margin="0,12,0,0" />
                 </StackPanel>
