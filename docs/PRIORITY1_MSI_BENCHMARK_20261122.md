@@ -109,3 +109,23 @@ inventing a resampler and corrupting synchronization. Tests added.
 **Reminder:** These two classes are groundwork for opt-in live capture,
 not currently enabled by application startup, and their presence is not
 proof of a working game speech separator. #157 and #161 remain orange.
+
+## Paced CUDA worker replay after adding startup warm-up
+
+On the MSI RTX 5080, a subprocess replay fed 1,000 numbered stereo
+frames from the existing synthetic speech-plus-background clip at
+20 ms intervals. The CUDA worker warmed up on a separate stream before
+printing READY. The replay read and checked each output frame ID.
+
+| Metric | Observed |
+|---|---:|
+| Worker process start to READY | 3.64 s |
+| First input to first matching stem | 102.6 ms |
+| Scheduled input to matching stem, p95 | 5,563.6 ms |
+| Last scheduled input to matching stem | 5,722.1 ms |
+| Frames over the 90 ms budget | 1,000 / 1,000 |
+
+The replay allowed producer and pipe backlog to expose cumulative drift.
+This is a synthetic worker/IPC measurement. The application's bounded
+queues would reject excess input instead of accumulating this delay.
+Keep the diagnostic path read-only and the audio mix unchanged.

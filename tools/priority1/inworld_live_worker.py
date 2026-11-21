@@ -8,7 +8,7 @@ fault. This worker never emits modified game audio; only model speech stems.
 
 Wire protocol (little endian):
   input  : repeated {frame_id: int64, game: 1920 float32 interleaved L/R}
-  startup: ASCII b"READY\n" after weights have been loaded
+  startup: ASCII b"READY\n" after weights load and a discarded CUDA warm-up
   output : repeated {frame_id: int64, dialogue: 960 float32 MONO}
 The model has delayed output, so output IDs refer to EARLIER input frames.
 """
@@ -110,6 +110,17 @@ def main():
     isolator = voice_isolation.VoiceIsolator(
         "inworld/voice-isolator", device=args.device,
         mode="streaming", lookahead_frames=2)
+    if args.device == "cuda":
+        # Exercise the fixed-size live input on a disposable stream so the
+        # first PS5 frame neither pays CUDA startup nor inherits warm-up audio.
+        warmup = isolator.stream()
+        warmup_frame = torch.full((FRAME_SAMPLES,), 0.01, dtype=torch.float32)
+        with torch.inference_mode():
+            for _ in range(MAX_PENDING):
+                warmup.push(warmup_frame)
+            warmup.flush()
+        torch.cuda.synchronize()
+        del warmup
     stream = isolator.stream()
     out = sys.stdout.buffer
     inp = sys.stdin.buffer
@@ -127,7 +138,7 @@ def main():
             raise ValueError("Invalid PCM; host must return unmodified originals")
         center = pcm.mean(axis=1, dtype=np.float32)
         with torch.inference_mode():
-            rendered = stream.push(torch.from_numpy(center.copy()))
+            rendered = stream.push(torch.from_numpy(center))
         voice = rendered.detach().cpu().numpy().reshape(-1).tolist()
         for frame_id, audio_bytes in ids.accept(frame_id, voice):
             out.write(HEADER.pack(frame_id) + audio_bytes)
