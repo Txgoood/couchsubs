@@ -73,3 +73,64 @@ P4 #160/#164: software checks passed; actual console/headset long tests open.
 
 Tracking PR: https://github.com/Txgoood/couchsubs/pull/49
 CI must pass on this priority branch before any attempt to merge or release.
+
+## 2026-11-21: better real-time candidate — Inworld Voice Isolator v1 realtime
+
+Official source: https://github.com/inworld-ai/voice-isolator
+Official model card: https://github.com/inworld-ai/voice-isolator/blob/main/MODEL_CARD.md
+
+- The released model is `voice-isolator-v1-realtime`, Apache-2.0 (code and weights).
+- Official model registry pins Hugging Face revision
+  `9b0285b3fe8403aa8e2f1dbb2165a80a4294c970` and SHA256
+  `76598f05523c0669e76562a8b2f31c9d395fca316e80c907ee11775e7497ae0f`.
+- Real streaming inference uses 48kHz mono, 10ms hop and 20ms lookahead,
+  with **63ms published algorithmic latency** at two lookahead frames.
+  This is *not* measured end-to-end PS5 latency, and the model does not
+  output a calibrated dialogue confidence score.
+- `tools/priority1/inworld_streaming_probe.py` actually invokes the official
+  streaming `VoiceIsolator.stream().push()/flush()` API on local authorized
+  PCM16 WAV. It runs 20ms chunks, checks every produced sample, measures
+  CPU/CUDA inference push time (if installed on a real device), and writes
+  `speech.wav`, `original_stereo.wav`, `conservative_stereo.wav`,
+  and `metrics.json`. It preserves the source's L-R stereo difference
+  when auditioning conservative subtraction. No model or audio is
+  uploaded by this project; the upstream model weights may be downloaded
+  once by the installed official package.
+- This probe is **offline replay**, not live PS5 processing. The actual
+  Windows mixer remains on unmodified PCM until a validated worker with
+  bounded alignment/age, speech confidence gating and automatic fail-open
+  can be connected safely.
+- CI runs the dependency-free Python parser/syntax smoke tests. Real
+  58M-parameter model inference is intentionally not claimed or exercised
+  by the GitHub runner.
+
+### Manual actual-model validation on MSI/RTX5080 (user PC required)
+
+1. Install Python >=3.10 and official package
+   `python -m pip install inworld-voice-isolation==1.0.0`.
+2. For a 10s authorized 48kHz PCM16 stereo sample, run from repo root:
+
+   `python tools/priority1/inworld_streaming_probe.py --input C:\\audio\\test48k.wav --output C:\\audio\\inworld-test --device cpu`
+
+3. A *separate* CUDA trial can use `--device cuda` only when PyTorch
+   CUDA availability has been confirmed and the GPU is ready. Record p95,
+   model loading and audible speech bleed; listen to the original and
+   conservative mix. Never mark RTX5080 confirmed from documentation alone.
+4. Prefer a 10-30s clip with mixed speech + music/effects and several
+   speaker turns. Compare playback and check no severe music loss.
+
+### Updated green criteria for #157 + #161
+
+- [x] Identify legally redistributable real-time 48kHz model candidate.
+- [x] Add actual model streaming API in local authorized offline probe.
+- [x] Prevent solo model-window / inferred speed claims from enabling live PS5.
+- [ ] Confirm actual model inference on owner's computer, with signed timing metrics.
+- [ ] Measure total STFT+lookahead+inference+transport <90ms with safety margin.
+- [ ] Build supervised fault-isolated realtime worker, bounded queue and
+      original-stereo-preserving synchronization, all tested under failure.
+- [ ] Validate source separation on representative game music/effects and
+      overlapping voices, including false-positive speech and clipping.
+- [ ] Connect the model's verified stem to PULSE3D safe fallback path.
+- [ ] Real PS5/PULSE 3D long test passes and owner confirms audible quality.
+
+Do **not** advance to Priority 2 until every box above is verified.
