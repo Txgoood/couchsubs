@@ -49,6 +49,8 @@ public sealed record DubbingSettings
     public bool MultiSpeakerSafety { get; init; } = false;
     /// <summary>Opt-in: ignore repeated OCR frames and discard too-late TTS.</summary>
     public bool SmartTiming { get; init; } = false;
+    /// <summary>Opt-in conservative emotional continuity; defaults off to preserve old tags.</summary>
+    public bool ExpressiveSafety { get; init; } = false;
     public SpeechDetectionEngine SpeechDetection { get; init; } = SpeechDetectionEngine.Automatic;
     /// <summary>Auto-create/select library only when a recognizable game title is observed.</summary>
     public bool AutoGameLibrary { get; init; } = true;
@@ -183,9 +185,11 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private SubtitleServer? publishedOn;
 
     private readonly EmotionContinuity emotions = new();
+    private readonly ExpressiveDeliveryGuard expressiveGuard = new();
     public GameProsodyMeter? Prosody { get; set; }
     public INeuralSpeechDetector? NeuralSpeech { get; set; }
     public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Balanced;
+    public bool ExpressiveSafety { get; set; } = false;
     public DubbingEngine Engine { get; set; } = DubbingEngine.Natural;
     public VoiceCast Cast { get; set; } = new();
     public DubbingOutput Output { get; set; } = DubbingOutput.Tv;
@@ -263,7 +267,11 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             working = false;
             generation++;
         }
-        lock (gate) timingPolicy.Reset();
+        lock (gate)
+        {
+            timingPolicy.Reset();
+            expressiveGuard.Reset();
+        }
         audio.Stop();
         server().StopSpeech();
     }
@@ -421,6 +429,20 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         };
         var emotion = EmotionMode == DubbingEmotionMode.Off || Engine == DubbingEngine.Fast
             ? null : emotions.Resolve(line, EmotionMode, allowCarry);
+        // Build #159: optional text-grounded emotion safety. A mixed
+        // soundtrack can indicate speech activity, never emotional identity.
+        if (ExpressiveSafety && emotion is not null)
+        {
+            var confirmed = EmotionMode switch
+            {
+                DubbingEmotionMode.Neural => NeuralSpeech?.RecentSpeech == true,
+                DubbingEmotionMode.Acoustic => Prosody?.RecentSpeechCandidate() == true,
+                _ => true
+            };
+            lock (gate)
+                emotion = expressiveGuard.Refine(line, emotion, EmotionMode,
+                    Environment.TickCount64, confirmed);
+        }
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
         return TrackSynth<(SpeechAudio, bool, long)?>(async engine =>
