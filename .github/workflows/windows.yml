@@ -155,6 +155,13 @@ jobs:
       - name: Testler
         run: dotnet test windows/CouchSubs.Windows.slnx -c Release --no-build -m:1
 
+      # Priority-1 probe tests do not download model weights or require torch.
+      - name: Öncelik 1 ses modeli araçları — güvenli Python testleri
+        shell: pwsh
+        run: |
+          python -m compileall -q tools/priority1
+          python -m unittest discover -s tools/priority1 -p "test_*.py" -v
+
       - uses: actions/download-artifact@v4
         if: inputs.with-android
         with:
