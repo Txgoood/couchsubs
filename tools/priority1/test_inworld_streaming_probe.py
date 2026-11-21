@@ -44,6 +44,12 @@ class InworldStreamingProbeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "0.1"):
                 PROBE.read_pcm16_wav(wav)
 
+    def test_live_worker_protocol_self_test_requires_no_model_or_torch(self):
+        result = subprocess.run(
+            [sys.executable, str(HERE / "inworld_live_worker.py"), "--self-test"],
+            check=True, capture_output=True, text=True)
+        self.assertIn("PASS", result.stdout)
+
     def test_help_does_not_require_torch_or_download_model(self):
         result = subprocess.run(
             [sys.executable, str(HERE / "inworld_streaming_probe.py"), "--help"],
