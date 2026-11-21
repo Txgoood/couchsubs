@@ -97,6 +97,11 @@ public interface IAutomaticSpeakerDetector
     void Start();
     void Push(short[] pcm, int channels, int rate, bool speechConfirmed);
     void Stop();
+    // Optional hooks; prior detectors and fake test services remain compatible.
+    void ConfigureGame(string name) { }
+    void RenameSpeaker(string oldName, string newName) { }
+    void ForgetSpeaker(string name) { }
+    void ForgetGame(string name) { }
 }
 
 public interface IGameAudioOutput : IAudioOutput, IDisposable
