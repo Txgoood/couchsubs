@@ -27,12 +27,11 @@ public sealed class LiveServices : IAppServices
     public IAudioOutput? Audio { get; } = new WindowsAudioOutput();
     public IGameAudioOutput? GameAudio { get; } = new Pulse3DAudioOutput();
     public INeuralSpeechDetector? NeuralSpeech { get; } = SileroVadService.IsBundled ? new SileroVadService() : null;
-    // Build #147 native crash containment: never invoke Sherpa in CouchSubs.exe.
-    // A native access violation cannot be caught safely by a managed try/catch.
-    // Future support requires a supervised separate process with health checks.
+    // Build #153: native model is launched only in a separate supervised child.
+    // Explicit diagnostic opt-in required; never use unsafe in-process Sherpa.
     public IAutomaticSpeakerDetector? SpeakerDetector { get; } =
-        NativeSpeakerSafetyPolicy.InProcessInferenceAllowed && SherpaSpeakerService.IsBundled
-            ? new SherpaSpeakerService() : null;
+        IsolatedSpeakerService.ExplicitlyEnabled && SherpaSpeakerService.IsBundled
+            ? new IsolatedSpeakerService() : null;
     public IGameScreenCapture? GameScreen { get; } = new WindowsGameScreenCapture();
     public IUpdater? Updater { get; } = new Updater();
     public IFirewall? Firewall { get; } = new WindowsFirewall();
