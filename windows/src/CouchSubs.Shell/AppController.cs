@@ -1659,6 +1659,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             Cast = settings.Dubbing.Cast.Copy(),
             Engine = settings.Dubbing.Engine,
             EmotionMode = settings.Dubbing.EmotionMode,
+            SmartTiming = settings.Dubbing.SmartTiming,
             Prosody = gameProsody,
             NeuralSpeech = services.NeuralSpeech,
             Output = settings.Source == GameSource.Pc ? DubbingOutput.Computer : settings.Dubbing.Output,
@@ -1788,6 +1789,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             services.GameAudio?.SetAtmosphereMix(now.GameAtmospherePercent, now.TurkishVoicePercent);
         if (now.AtmosphereMode != old.AtmosphereMode)
             services.GameAudio?.SetAtmosphereMode(now.AtmosphereMode);
+        if (now.SmartTiming != old.SmartTiming)
+            dubber.SmartTiming = now.SmartTiming;
         if (now.MultiSpeakerSafety != old.MultiSpeakerSafety)
             multiSpeakerTracker.Reset();
         if ((now.AutoSpeakerTracking != old.AutoSpeakerTracking ||

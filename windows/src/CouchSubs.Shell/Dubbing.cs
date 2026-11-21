@@ -47,6 +47,8 @@ public sealed record DubbingSettings
     /// <summary>Opt-in conservative tracking for 3+ sequential anonymous speakers.
     /// Does not separate simultaneous voices.</summary>
     public bool MultiSpeakerSafety { get; init; } = false;
+    /// <summary>Opt-in: ignore repeated OCR frames and discard too-late TTS.</summary>
+    public bool SmartTiming { get; init; } = false;
     public SpeechDetectionEngine SpeechDetection { get; init; } = SpeechDetectionEngine.Automatic;
     /// <summary>Auto-create/select library only when a recognizable game title is observed.</summary>
     public bool AutoGameLibrary { get; init; } = true;
@@ -147,7 +149,12 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private const string PreviewText = "Merhaba, oyundaki karakterleri Türkçe seslendireceğim.";
 
     private readonly object gate = new();
-    private readonly Queue<(SpokenLine Line, DubbingVoice? Preview)> queue = new();
+    private readonly Queue<(SpokenLine Line, DubbingVoice? Preview, long SubmittedMs)> queue = new();
+    private readonly SmartDubbingTimingPolicy timingPolicy = new();
+    private int lateLines;
+    public bool SmartTiming { get; set; }
+    public int LateLines => Volatile.Read(ref lateLines);
+    public int SuppressedDuplicates { get { lock (gate) return timingPolicy.SuppressedDuplicates; } }
     private ISpeechSynthesizer? synthesizer;
     // Ses motorunun HTTP isteği bitmeden dispose edilmesini önler.
     // Prepare ve Next tarafından başlatılan TÜM ses işlemleri takip edilir.
@@ -205,10 +212,13 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         {
             // Yeni altyazı geldiyse öncekilerin cümleleri artık geç kalmıştır: bekleyenler atılır, çalan da kesilir.
             // Ses yazının gerisinde kalıp oyunu karıştırmasın; dublaj hep ekrandaki altyazıyı söyler.
+            if (SmartTiming && !timingPolicy.Accept(lines, Environment.TickCount64))
+                return;
             activeLineCancellation?.Cancel();
             droppedLines += queue.Count;
             queue.Clear();
-            foreach (var line in lines) queue.Enqueue((line, null));
+            var submittedMs = Environment.TickCount64;
+            foreach (var line in lines) queue.Enqueue((line, null, submittedMs));
             while (queue.Count > Backlog) { queue.Dequeue(); droppedLines++; }
             interrupt = working;
             if (interrupt) interruptedGenerations++;
@@ -233,7 +243,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         int number;
         lock (gate)
         {
-            queue.Enqueue((new SpokenLine("Listen.", PreviewText), voice));
+            queue.Enqueue((new SpokenLine("Listen.", PreviewText), voice, Environment.TickCount64));
             working = true;
             number = ++generation;
         }
@@ -250,6 +260,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             working = false;
             generation++;
         }
+        lock (gate) timingPolicy.Reset();
         audio.Stop();
         server().StopSpeech();
     }
@@ -333,13 +344,22 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
 
     private async Task RunAsync(int number)
     {
-        Task<(SpeechAudio Audio, bool Preview)?>? next = Next(number);
+        Task<(SpeechAudio Audio, bool Preview, long SubmittedMs)?>? next = Next(number);
         while (next is not null)
         {
             var result = await next;
             // Bu arada yeni altyazı geldiyse eski cümle hiç çalınmaz.
             if (number != Generation) return;
             if (result is not { } ready) break;
+            bool tooLate;
+            lock (gate)
+                tooLate = SmartTiming && !timingPolicy.ShouldPlay(ready.SubmittedMs, Environment.TickCount64);
+            if (tooLate)
+            {
+                Interlocked.Increment(ref lateLines);
+                next = Next(number);
+                continue;
+            }
             // Bu cümle çalarken sonraki hazırlanır.
             next = Next(number);
             await PlayAsync(ready.Audio, ready.Preview ? DubbingOutput.Computer : Output, number);
@@ -354,16 +374,17 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         await RunAsync(number);
     }
 
-    private Task<(SpeechAudio, bool)?>? Next(int number)
+    private Task<(SpeechAudio, bool, long)?>? Next(int number)
     {
         SpokenLine line;
         DubbingVoice? preview;
+        long submittedMs;
         CancellationTokenSource operationCancellation;
         lock (gate)
         {
             // Geç başlayan eski döngü yeni altyazının cümlesini alıp atmasın.
             if (disposed || queue.Count == 0 || number != generation) return null;
-            (line, preview) = queue.Dequeue();
+            (line, preview, submittedMs) = queue.Dequeue();
             operationCancellation = new CancellationTokenSource();
             activeLineCancellation = operationCancellation;
         }
@@ -399,7 +420,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             ? null : emotions.Resolve(line, EmotionMode, allowCarry);
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
-        return TrackSynth<(SpeechAudio, bool)?>(async engine =>
+        return TrackSynth<(SpeechAudio, bool, long)?>(async engine =>
         {
             try
             {
@@ -412,7 +433,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
                     if (number == generation)
                         lastSynthesisMilliseconds = (int)Math.Min(int.MaxValue, timer.ElapsedMilliseconds);
                 }
-                return (result, preview is not null);
+                return (result, preview is not null, submittedMs);
             }
             catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
             {
