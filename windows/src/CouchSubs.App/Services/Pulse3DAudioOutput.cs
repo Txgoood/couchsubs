@@ -19,6 +19,9 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     private const int Channels = 2;
     private readonly GameAudioBuffer game = new(Rate * Channels / 4); // 250 ms max
     private readonly SeparatedAudioFrameRouter stemRouter = new();
+    // Only processes externally VERIFIED, time-aligned dialogue stem frames.
+    // Standard PS5 PCM always uses the unchanged PushGameAudio path.
+    private readonly AtmosphereSafeStemProcessor atmosphereStem = new();
     private readonly object speechGate = new();
     private float[]? speech;
     private int speechPosition;
@@ -115,9 +118,17 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
         if (gamePcm is null || gamePcm.Length == 0 || gamePcm.Length % Channels != 0 ||
             gamePcm.Length > Rate * Channels) return;
         var safe = new float[gamePcm.Length];
-        stemRouter.Process(frameId, gamePcm,
-            dialogueStem is null ? ReadOnlySpan<float>.Empty : dialogueStem,
-            safe, confidence, ageMilliseconds, turkishDubActive);
+        var trustedStem = dialogueStem is null ? ReadOnlySpan<float>.Empty : dialogueStem;
+        if (stemRouter.Process(frameId, gamePcm, trustedStem, safe,
+                confidence, ageMilliseconds, turkishDubActive))
+        {
+            // Router validates frame order and the established safety gate.
+            // Keep stereo side information and softly ramp dialogue attenuation.
+            atmosphereStem.Process(gamePcm, trustedStem, safe,
+                confidence, ageMilliseconds, turkishDubActive);
+        }
+        else
+            atmosphereStem.Reset();
         game.Write(safe);
     }
 
@@ -204,6 +215,8 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
         }
         Stop();
         game.Clear();
+        stemRouter.Reset();
+        atmosphereStem.Reset();
         lock (speechGate) mix.Reset();
     }
 }
