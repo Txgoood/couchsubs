@@ -1565,7 +1565,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// </summary>
     private void DiscoverDialogueNames(string english)
     {
-        if (!settings.Dubbing.Enabled || string.IsNullOrWhiteSpace(english)) return;
+        if (string.IsNullOrWhiteSpace(english)) return;
         var cast = settings.Dubbing.Cast.Copy();
         var changed = false;
         var speaker = DialogueNameCandidates.ExplicitSpeaker(english);
@@ -1649,7 +1649,19 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             NeuralSpeech = services.NeuralSpeech,
             Output = settings.Source == GameSource.Pc ? DubbingOutput.Computer : settings.Dubbing.Output,
         };
-        made.CastChanged += cast => Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
+        made.CastChanged += cast =>
+        {
+            // A concurrently discovered dialogue-name hint belongs to the
+            // game library, not to the Dubber snapshot; never wipe it out.
+            foreach (var (name, observations) in settings.Dubbing.Cast.SuggestedNames)
+                if (!cast.SuggestedNames.ContainsKey(name) &&
+                    !cast.Assignments.ContainsKey(name))
+                    cast.SuggestedNames[name] = observations;
+            Settings = settings with
+            {
+                Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast })
+            };
+        };
         made.Failed += message => DubbingError = message;
         dubber = made;
         return made;
