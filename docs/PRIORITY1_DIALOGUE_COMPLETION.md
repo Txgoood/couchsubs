@@ -70,3 +70,6 @@ P1 #157/#161: ACTIVE; candidate + offline probe and readiness gate present,
 P2 #158/#162: WAITING for a selected compatible model and GPU package.
 P3 #159/#163: WAITING for an expressive voice model.
 P4 #160/#164: software checks passed; actual console/headset long tests open.
+
+Tracking PR: https://github.com/Txgoood/couchsubs/pull/49
+CI must pass on this priority branch before any attempt to merge or release.
