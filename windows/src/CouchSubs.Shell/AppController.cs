@@ -1479,6 +1479,31 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
 
+    /// <summary>Rule-based, passive diagnostics; never touches PS5 PCM or restarts the TTS engine.</summary>
+    public string DubbingHealthSummary
+    {
+        get
+        {
+            var timing = dubber?.Timing ?? default;
+            var latency = dubber?.SynthesisLatency ?? default;
+            var neural = services.NeuralSpeech?.Statistics ?? default;
+            var input = new DubbingHealthInputs(
+                isRunning, settings.Dubbing.Enabled, DubbingInstalled,
+                timing.PendingLines, Dubber.Backlog, timing.LastSynthesisMilliseconds,
+                latency.Calls, latency.AverageMs, latency.SlowCalls,
+                dubber?.LateLines ?? 0, dubber?.SuppressedDuplicates ?? 0,
+                neural.InferenceCalls, neural.InferenceErrors, dubbingError);
+            var health = DubbingHealthEvaluator.Evaluate(input);
+            return $"{health.Level}: {health.Summary}" + Environment.NewLine +
+                $"TTS ort.: {latency.AverageMs:F0} ms · en yüksek: {latency.PeakMs} ms · " +
+                $"yavaş işlem: {latency.SlowCalls}" + Environment.NewLine +
+                $"Kuyruk: {timing.PendingLines}/{Dubber.Backlog} · geciken: {dubber?.LateLines ?? 0} · " +
+                $"tekrar bastırma: {dubber?.SuppressedDuplicates ?? 0}" + Environment.NewLine +
+                $"Konuşma algılama: {neural.InferenceCalls} işlem · {neural.InferenceErrors} hata" +
+                Environment.NewLine + health.Recommendation;
+        }
+    }
+
     /// <summary>İsim verilmezse Genel; eski oyun sesleri saklanır.</summary>
     public void SelectGame(string name)
     {
