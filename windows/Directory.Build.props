@@ -4,10 +4,10 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.3.16</Version>
-    <AssemblyVersion>0.3.16.160</AssemblyVersion>
-    <FileVersion>0.3.16.160</FileVersion>
-    <InformationalVersion>0.3.16-dubbing-health-monitor.160</InformationalVersion>
+    <Version>0.3.17</Version>
+    <AssemblyVersion>0.3.17.161</AssemblyVersion>
+    <FileVersion>0.3.17.161</FileVersion>
+    <InformationalVersion>0.3.17-dialogue-separator-adapter.161</InformationalVersion>
     <Company>Enmera</Company>
     <Product>CouchSubs</Product>
     <Copyright>AGPL-3.0. Uses chiaki-ng (AGPL-3.0).</Copyright>
