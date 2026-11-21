@@ -11,7 +11,8 @@ public readonly record struct DialogueSeparatorCapabilities(
     int InputWindowMilliseconds, int AlgorithmicLookAheadMilliseconds,
     int ObservedInferenceMilliseconds, bool HasDialogueStem,
     bool ValidatedOnGameAudio, bool Redistributable,
-    bool TestedOnTargetHardware);
+    bool TestedOnTargetHardware, bool StereoRestorationVerified = false,
+    int MeasuredTransportMilliseconds = 0);
 
 public readonly record struct DialogueSeparatorReadiness(
     bool OfflineEvaluationAllowed, bool LiveGameAudioAllowed, string Reason);
@@ -31,13 +32,24 @@ public static class DialogueSeparationReadiness
 
         var offline = new DialogueSeparatorReadiness(true, false,
             "Offline evaluation only; original PS5 PCM stays unchanged.");
-        if (model.SampleRate != LiveSampleRate || model.Channels != LiveChannels)
-            return offline with { Reason = "Model requires resampling/channel adaptation." };
+        if (model.SampleRate != LiveSampleRate)
+            return offline with { Reason = "Model requires resampling." };
+        if (model.Channels == 1 && !model.StereoRestorationVerified)
+            return offline with { Reason = "Mono analysis has not proved safe stereo reconstruction." };
         if (model.InputWindowMilliseconds > LiveMaximumAgeMs ||
-            model.AlgorithmicLookAheadMilliseconds > LiveMaximumAgeMs ||
+            model.AlgorithmicLookAheadMilliseconds < 0 ||
             model.ObservedInferenceMilliseconds <= 0 ||
-            model.ObservedInferenceMilliseconds > LiveMaximumAgeMs)
-            return offline with { Reason = "Window, look-ahead or measured inference exceeds live budget." };
+            model.MeasuredTransportMilliseconds <= 0)
+            return offline with { Reason = "Verified positive inference/transport timings are required." };
+        // Age is a TOTAL budget, not four independent 90ms allowances.
+        // 48k Inworld 2048-point STFT ~43ms + 20ms lookahead => 63ms,
+        // leaving only 27ms for inference, transport and scheduler jitter.
+        var endToEnd = (long)model.InputWindowMilliseconds +
+            model.AlgorithmicLookAheadMilliseconds +
+            model.ObservedInferenceMilliseconds +
+            model.MeasuredTransportMilliseconds;
+        if (endToEnd > LiveMaximumAgeMs)
+            return offline with { Reason = "Total window + lookahead + inference + transport exceeds 90ms." };
         if (!model.ValidatedOnGameAudio || !model.TestedOnTargetHardware)
             return offline with { Reason = "Target game and real device testing missing." };
 
