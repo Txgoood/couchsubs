@@ -141,3 +141,10 @@ and their ages do not represent normal steady-state behavior. The run
 did not capture PS5 audio or evaluate separation quality. The paired-frame
 experiment is not enabled in the application. It improves throughput
 compared with individual-frame inference, but still misses the deadline.
+
+An instrumented 1,000-frame replay of the same configuration measured the
+40 ms model push at median 26.51 ms and p95 46.76 ms. The subsequent
+conversion of the returned tensor to CPU audio took median 0.05 ms and
+p95 0.08 ms. Push timing includes work executed before the conversion;
+these measurements do not separately identify GPU execution and CPU
+scheduling. The full matching-stem p95 was 125.2 ms in that run.
