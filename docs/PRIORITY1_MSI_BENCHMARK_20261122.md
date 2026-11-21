@@ -148,3 +148,36 @@ conversion of the returned tensor to CPU audio took median 0.05 ms and
 p95 0.08 ms. Push timing includes work executed before the conversion;
 these measurements do not separately identify GPU execution and CPU
 scheduling. The full matching-stem p95 was 125.2 ms in that run.
+
+## Owner test on PS5 and Sony PULSE 3D
+
+The owner tested the CI #634 package. PS5 connected, the headset played game
+audio without audible dropouts or delay, and Turkish dubbing was audible.
+The owner reported better dubbing timing. This validates the existing audio
+route. The experimental AI stem still needs its own live trial.
+
+## Paced replay with intermediate chunk sizes
+
+On the MSI, a 12-second synthetic replay with CUDA, FP32 and zero lookahead
+reported p95 of 95.10 ms for 20 ms input chunks, 85.41 ms for 25 ms chunks,
+and 91.80 ms for 30 ms chunks. The 25 ms run had 3 of 597 completed frames
+above 90 ms. Output age starts at the scheduled end of each 20 ms output
+frame and excludes the final flush, PS5 capture, IPC and headset output.
+The 25 ms input is a benchmark configuration. The existing PS5 worker
+receives 20 ms input frames.
+
+The 60-second repeat at 25 ms measured p95 86.44 ms. It returned 2,997
+complete frames before flush, of which 38 exceeded 90 ms. This leaves
+3.56 ms at p95 before the other stages of the live pipeline. The matching
+60-second run with 20 ms input reported p95 142.65 ms and 1,282 late
+frames out of 2,997.
+
+Restricting attention history to 64 or 16 frames in separate 12-second
+runs did not get 20 ms input below the target. Output p95 was 120.73 ms
+and 124.69 ms respectively. Leave the runtime model settings unchanged.
+
+Reproduce with the installed Inworld CUDA environment:
+
+```powershell
+python -B tools/priority1/inworld_paced_probe.py path/to/local-48khz.wav --chunk-ms 20 25 30
+```
