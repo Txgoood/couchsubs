@@ -27,6 +27,7 @@ public sealed class InworldRealtimeWorkerClient : IAsyncDisposable
     private Process? process;
     private Task? writer;
     private Task? reader;
+    private Task? stderrDrain;
     private int ready;
     private int disposed;
 
@@ -66,6 +67,20 @@ public sealed class InworldRealtimeWorkerClient : IAsyncDisposable
         start.ArgumentList.Add(device);
         process = Process.Start(start) ??
             throw new InvalidOperationException("Python worker did not start");
+        // Drain stderr before model initialization: large Python/torch native
+        // error logs must not block the child before it can emit READY.
+        var launched = process;
+        stderrDrain = Task.Run(async () =>
+        {
+            try
+            {
+                var buffer = new char[512];
+                while (await launched.StandardError.ReadAsync(
+                    buffer.AsMemory(), shutdown.Token).ConfigureAwait(false) > 0) { }
+            }
+            catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+            catch (IOException) { } // Child terminated; main reader reports it.
+        });
         try
         {
             // No StreamReader here: its buffering can consume binary
@@ -167,6 +182,8 @@ public sealed class InworldRealtimeWorkerClient : IAsyncDisposable
             if (writer is not null) try { await writer.ConfigureAwait(false); }
                 catch (OperationCanceledException) { }
             if (reader is not null) try { await reader.ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+            if (stderrDrain is not null) try { await stderrDrain.ConfigureAwait(false); }
                 catch (OperationCanceledException) { }
             p.Dispose();
             process = null;
