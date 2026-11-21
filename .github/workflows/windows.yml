@@ -2,7 +2,7 @@
 # Windows uygulaması: yerel DLL'i (libchiaki + FFmpeg) MSYS2 ile derler, .NET testlerini koşar,
 # uygulamayı tek klasör olarak yayınlar.
 name: windows
-# Paired Windows v0.3.10 (Build #154) + webOS v0.9.32 (Build #154).
+# Paired Windows v0.3.11 (Build #155) + webOS v0.9.33 (Build #155).
 
 on:
   push:
@@ -214,7 +214,7 @@ jobs:
       # Always expose the standalone IPK separately from the Windows EXE artifact.
       - uses: actions/upload-artifact@v4
         with:
-          name: couchsubs-webos-v0.9.32-build154-ipk
+          name: couchsubs-webos-v0.9.33-build155-ipk
           path: dist/tv-app/*.ipk
           if-no-files-found: error
 
