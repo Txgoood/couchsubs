@@ -979,6 +979,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Bilgisayar uykudan uyanınca bağlantıları hemen yenile.</summary>
     public void SystemResumed()
     {
+        // Sleep intervals are not real audio-buffer observation windows.
+        longSessionAudioMonitor.Reset();
         session?.ReconnectNow();
         keeper?.Reconnect();
     }
