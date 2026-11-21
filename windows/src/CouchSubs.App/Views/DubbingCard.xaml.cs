@@ -270,7 +270,7 @@ public partial class DubbingCard : UserControl
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var nameEditor = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
-        var nameText = new TextBox
+        var nameText = new System.Windows.Controls.TextBox
         {
             Text = DisplayName(name), Width = 126, VerticalContentAlignment = VerticalAlignment.Center,
             ToolTip = "Karakterin adını düzelt; Türkçe ses tercihi kaybolmaz."
