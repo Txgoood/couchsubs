@@ -1669,9 +1669,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             if (!now.Enabled)
             {
-                // Only stop Turkish speech; keep the PS5 PCM and PULSE mixer
-                // alive so the original soundtrack stays uninterrupted.
-                StopDubber();
+                // Stop only Turkish speech. Preserve the prepared Pocket TTS
+                // engine (hundreds of MB) so re-enabling is immediate. Also
+                // keep the PS5 PCM/PULSE mixer and original soundtrack alive.
+                dubber?.Stop();
                 return;
             }
             // Remote Play was created with audio capture regardless of the
@@ -1682,7 +1683,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (isRunning && DubbingInstalled)
             {
                 DubbingError = null;
-                MakeDubber()?.Prepare();
+                // Reuse the existing model instead of spawning a second
+                // pocket-tts process on every checkbox toggle.
+                (dubber ?? MakeDubber())?.Prepare();
             }
             return;
         }
