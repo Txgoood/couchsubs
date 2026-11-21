@@ -1034,6 +1034,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 LastSource = source;
                 LastTranslation = translation;
                 AutoSelectRecognizedGame(source);
+                DiscoverDialogueNames(source);
                 if (box is not null) lastSubtitleBox = box;
                 if (settings.Source == GameSource.Pc)
                     PcSubtitleReady?.Invoke(translation, SubtitlePipeline.ReadingTime(translation), settings.PcDisplayId);
@@ -1555,6 +1556,52 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         manualGamePinned = false; // Allow the detected game to become active again after deletion.
         Settings = settings with { Dubbing = cleaned };
         Changed(nameof(KnownGames));
+    }
+
+    /// <summary>
+    /// Dialogue names are discovered once per shown line. A vocative such as
+    /// "Lucia, run!" addresses Lucia; it does NOT identify who is talking.
+    /// Only a clearly labelled speaker can be mapped to a character automatically.
+    /// </summary>
+    private void DiscoverDialogueNames(string english)
+    {
+        if (!settings.Dubbing.Enabled || string.IsNullOrWhiteSpace(english)) return;
+        var cast = settings.Dubbing.Cast.Copy();
+        var changed = false;
+        var speaker = DialogueNameCandidates.ExplicitSpeaker(english);
+        if (speaker is not null && !cast.Assignments.ContainsKey(VoiceCast.Key(speaker)))
+        {
+            cast.SetGroup(speaker, CharacterGroup.Unknown);
+            changed = true;
+        }
+        foreach (var name in DialogueNameCandidates.Mentioned(english))
+            changed |= cast.SuggestName(name);
+        if (changed)
+            Settings = settings with
+            {
+                Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast })
+            };
+    }
+
+    public void RenameCharacter(string originalName, string newName)
+    {
+        var cast = settings.Dubbing.Cast.Copy();
+        cast.Rename(originalName, newName);
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
+    }
+
+    public void AcceptCharacterSuggestion(string name)
+    {
+        var cast = settings.Dubbing.Cast.Copy();
+        cast.AcceptSuggestion(name);
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
+    }
+
+    public void DismissCharacterSuggestion(string name)
+    {
+        var cast = settings.Dubbing.Cast.Copy();
+        cast.DismissSuggestion(name);
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
     }
 
     public void AddCharacter(string name, CharacterGroup group)
