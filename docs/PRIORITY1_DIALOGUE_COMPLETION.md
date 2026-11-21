@@ -134,3 +134,34 @@ Official model card: https://github.com/inworld-ai/voice-isolator/blob/main/MODE
 - [ ] Real PS5/PULSE 3D long test passes and owner confirms audible quality.
 
 Do **not** advance to Priority 2 until every box above is verified.
+
+## PS5 live diagnostic tap (added after #622)
+
+`InworldLiveDiagnosticTap` is connected to the PS5 audio capture
+handler in `AppController` as a strictly **read-only** side-channel.
+The original PCM still goes through `PushGameAudio` without touching
+the model. It is disabled by default and requires all these environment
+variables before launching the Windows app:
+
+- `COUCHSUBS_ENABLE_INWORLD_DIAGNOSTIC_TAP=1`
+- `COUCHSUBS_INWORLD_PYTHON=<absolute path to Python 3.12 venv python.exe>`
+- `COUCHSUBS_INWORLD_WORKER_SCRIPT=<absolute path to inworld_live_worker.py>`
+- `COUCHSUBS_INWORLD_DEVICE=cuda` (optional; default CPU)
+
+The tap can observe genuine stereo Remote Play PCM when it is captured
+and can call the genuine Inworld subprocess. **It does not yet replace
+or attenuate the English audio.** The bounded diagnostic queue can drop
+observations under overload without affecting game playback. The model's
+stem has no calibrated voice-confidence probability; never invent one.
+
+New pipeline guard `DialogueInferenceAdmissionGate` requires a
+minimum sample window, sustained faster-than-realtime inference and
+the total 90ms model-to-mixer budget before any eventual audio-path
+enablement. New `Ps5DialogueFrameSegmenter` prevents partial Opus
+packets or wrong sample rates from masquerading as valid 20ms model
+frames. Unit tests cover the default-off behavior and frame alignment.
+
+**Green still requires:** true PS5/PULSE3D game playback measurements,
+model inference stable and faster than real-time, proper audio output
+reconciliation and user audible validation. A side-channel test or a
+green CI run alone is not feature completion.
