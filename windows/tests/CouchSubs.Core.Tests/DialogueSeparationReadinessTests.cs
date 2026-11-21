@@ -30,7 +30,8 @@ public sealed class DialogueSeparationReadinessTests
         {
             SampleRate = 48000, Channels = 2, InputWindowMilliseconds = 20,
             AlgorithmicLookAheadMilliseconds = 10, ObservedInferenceMilliseconds = 35,
-            ValidatedOnGameAudio = true, TestedOnTargetHardware = true
+            ValidatedOnGameAudio = true, TestedOnTargetHardware = true,
+            MeasuredTransportMilliseconds = 4
         };
         Assert.True(DialogueSeparationReadiness.Assess(baseModel).LiveGameAudioAllowed);
         Assert.False(DialogueSeparationReadiness.Assess(baseModel with
@@ -39,6 +40,17 @@ public sealed class DialogueSeparationReadinessTests
         { InputWindowMilliseconds = 120 }).LiveGameAudioAllowed);
         Assert.False(DialogueSeparationReadiness.Assess(baseModel with
         { TestedOnTargetHardware = false }).LiveGameAudioAllowed);
+        Assert.False(DialogueSeparationReadiness.Assess(baseModel with
+        { MeasuredTransportMilliseconds = 0 }).LiveGameAudioAllowed);
+        // A 48k mono model is only live-eligible with separate verified
+        // stereo reconstruction and the full 90ms end-to-end budget.
+        Assert.False(DialogueSeparationReadiness.Assess(baseModel with
+        { Channels = 1 }).LiveGameAudioAllowed);
+        Assert.True(DialogueSeparationReadiness.Assess(baseModel with
+        { Channels = 1, StereoRestorationVerified = true }).LiveGameAudioAllowed);
+        Assert.False(DialogueSeparationReadiness.Assess(baseModel with
+        { InputWindowMilliseconds = 43, AlgorithmicLookAheadMilliseconds = 20,
+          ObservedInferenceMilliseconds = 20, MeasuredTransportMilliseconds = 8 }).LiveGameAudioAllowed);
     }
 
     [Fact]
