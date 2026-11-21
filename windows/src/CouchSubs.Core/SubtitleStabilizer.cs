@@ -16,15 +16,22 @@ public readonly record struct StabilizerAction(StabilizerKind Kind, string? Text
 /// Kare kare gelen OCR çıktısını izler; altyazı kararlı hale gelince çevrilmesini,
 /// ekrandan kalkınca TV'den temizlenmesini ister. Aynı altyazıyı tekrar göndermez.
 /// </summary>
-public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrames = 2, int emptyFramesToClear = 2)
+public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrames = 2, int emptyFramesToClear = 2, int repeatGuardFrames = 30)
 {
     private string candidate = "";
     private int candidateCount;
     private string sent = "";
     private int emptyCount;
+    // Keep a short-term identity after OCR briefly loses the English subtitle.
+    // Unlike sent, recentSent survives the visual Clear event; a flicker is not
+    // a new spoken line. Frame-based rather than wall clock for deterministic tests.
+    private string recentSent = "";
+    private int frameNumber;
+    private int recentSentFrame;
 
     public StabilizerAction Feed(string rawText)
     {
+        frameNumber++;
         var text = TextMatch.Normalize(rawText);
         // 3 karakterden kısa okumalar (gürültü, tek simge) boş kare sayılır.
         if (text.Length < 3)
@@ -55,7 +62,18 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         var ready = candidateCount == stableFrames || (candidateCount == 1 && EndsSentence(rawText));
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
         if (!ready || TextMatch.IsSimilar(text, sent, similarity) || TextMatch.IsSameSubtitle(text, sent)) return StabilizerAction.None;
+        // An OCR dropout can clear the TV subtitle although the English words
+        // remain visible. Do not translate or dub the same sentence again.
+        if (recentSent.Length > 0 && frameNumber - recentSentFrame <= repeatGuardFrames &&
+            (TextMatch.IsSimilar(text, recentSent, similarity) || TextMatch.IsSameSubtitle(text, recentSent)))
+        {
+            // Retain the same identity until an actually different subtitle arrives.
+            sent = recentSent;
+            return StabilizerAction.None;
+        }
         sent = text;
+        recentSent = text;
+        recentSentFrame = frameNumber;
         return StabilizerAction.Translate(rawText.Trim());
     }
 
@@ -74,6 +92,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     public void ForgetSent()
     {
         sent = "";
+        recentSent = "";
         candidate = "";
         candidateCount = 0;
     }
@@ -83,6 +102,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         candidate = "";
         candidateCount = 0;
         emptyCount = 0;
+        recentSent = "";
+        recentSentFrame = 0;
+        frameNumber = 0;
         if (sent.Length == 0) return StabilizerAction.None;
         sent = "";
         return StabilizerAction.Clear;
