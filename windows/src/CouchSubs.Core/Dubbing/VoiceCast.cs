@@ -101,8 +101,8 @@ public sealed class VoiceCast
         name = name.Trim();
         if (name.Length is < 2 or > 32 || SuggestedNames.Count > 250) return false;
         var key = Key(name);
-        if (Assignments.ContainsKey(key)) return false;
-        SuggestedNames[key] = Math.Min(999, SuggestedNames.GetValueOrDefault(key) + 1);
+        if (Assignments.ContainsKey(key) || SuggestedNames.GetValueOrDefault(key) >= 3) return false;
+        SuggestedNames[key] = SuggestedNames.GetValueOrDefault(key) + 1;
         return true;
     }
 
