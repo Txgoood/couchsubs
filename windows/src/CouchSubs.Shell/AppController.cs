@@ -800,21 +800,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             // PULSE 3D: yalnız Headset modunda isteğe bağlı Remote Play oyun sesi açılır.
             // USB alıcısı Windows'un varsayılan çıkışı seçilmelidir.
             pulseAudioActive = false;
-            if (settings.Dubbing.Enabled && settings.Dubbing.Output == DubbingOutput.Headset && services.GameAudio is { } gameAudio)
-            {
-                try
-                {
-                    gameAudio.SetAtmosphereMix(settings.Dubbing.GameAtmospherePercent,
-                        settings.Dubbing.TurkishVoicePercent);
-                    gameAudio.SetAtmosphereMode(settings.Dubbing.AtmosphereMode);
-                    gameAudio.Start();
-                    pulseAudioActive = true;
-                }
-                catch (Exception error)
-                {
-                    DubbingError = "PULSE 3D ses çıkışı açılamadı: " + error.Message;
-                }
-            }
+            // A Headset PS5 session always has an audio-capable stream and a
+            // reusable mixer. The Turkish Dubbing checkbox must never require
+            // disconnecting Remote Play to enable speech again.
+            TryStartHeadsetAudio();
 
             bool acousticMode = settings.Dubbing.Enabled && settings.Dubbing.EmotionMode == DubbingEmotionMode.Acoustic;
             // Safe model registry v1: Automatic/explicit Silero use the existing
@@ -829,7 +818,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 && speechModelEnabled;
             if (neuralMode) services.NeuralSpeech?.Start();
             if (autoSpeaker) services.SpeakerDetector?.Start();
-            bool captureAudio = pulseAudioActive || acousticMode || neuralMode;
+            bool captureAudio = Ps5DubbingTogglePolicy.RequiresAudioCapture(
+                settings.Dubbing.Output == DubbingOutput.Headset,
+                pulseAudioActive, acousticMode, neuralMode);
             gameProsody.Clear();
             speakerTurnGuard.Reset();
             var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
@@ -1646,9 +1637,58 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             MakeDubber()?.Speak(lines);
     }
 
+    /// <summary>
+    /// Starts the PS5 headset mixer without changing the Remote Play session.
+    /// Safe to call again after a failed device initialization. Does not
+    /// interfere with native PS5/HDMI audio or TV output.
+    /// </summary>
+    private void TryStartHeadsetAudio()
+    {
+        if (settings.Source != GameSource.Ps5 ||
+            settings.Dubbing.Output != DubbingOutput.Headset ||
+            services.GameAudio is not { } gameAudio || pulseAudioActive) return;
+        try
+        {
+            gameAudio.SetAtmosphereMix(settings.Dubbing.GameAtmospherePercent,
+                settings.Dubbing.TurkishVoicePercent);
+            gameAudio.SetAtmosphereMode(settings.Dubbing.AtmosphereMode);
+            gameAudio.Start();
+            pulseAudioActive = true;
+            DubbingError = null;
+        }
+        catch (Exception error)
+        {
+            DubbingError = "PULSE 3D ses çıkışı açılamadı: " + error.Message;
+        }
+    }
+
     private void DubbingSettingsChanged(DubbingSettings old)
     {
         var now = settings.Dubbing;
+        if (now.Enabled != old.Enabled)
+        {
+            if (!now.Enabled)
+            {
+                // Stop only Turkish speech. Preserve the prepared Pocket TTS
+                // engine (hundreds of MB) so re-enabling is immediate. Also
+                // keep the PS5 PCM/PULSE mixer and original soundtrack alive.
+                dubber?.Stop();
+                return;
+            }
+            // Remote Play was created with audio capture regardless of the
+            // checkbox state. Ensure the mixer is ready before a fresh dubber
+            // chooses its audio output, even if initialization failed earlier.
+            if (isRunning && settings.Source == GameSource.Ps5)
+                TryStartHeadsetAudio();
+            if (isRunning && DubbingInstalled)
+            {
+                DubbingError = null;
+                // Reuse the existing model instead of spawning a second
+                // pocket-tts process on every checkbox toggle.
+                (dubber ?? MakeDubber())?.Prepare();
+            }
+            return;
+        }
         if (now.Engine != old.Engine)
         {
             // Motor değişti: eski dublaj kapanır, yenisi hazırlanır.

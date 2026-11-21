@@ -30,6 +30,8 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | **#138** | **v0.2.4** | **v0.9.16** | **Oyun stereo konumunu koruyan yeni PULSE 3D mekânsal miks profilleri; eski miks varsayılan kalır** | **CI doğrulaması bekleniyor** |
 
+| **#149** | **v0.3.5** | **v0.9.27** | **PS5 oyun sırasında Türkçe Dublaj tikini açıp kapatınca PULSE 3D ses hattını koparmadan TTS yeniden başlatma; Headset ses akışını tikten bağımsız yakalama, başarısız ses aygıtı açılışında tekrar deneme, oyun atmosferini kesmeme.** | **CI ve PS5/PULSE 3D gerçek cihaz testi bekleniyor** |
+
 | **#148** | **v0.3.4** | **v0.9.26** | **28px sarı, %85 arka plan, cover/original ve adaptive altyazı ayarları; English OCR clear ile kısa-okuma koruması, yeni konuşmada hemen eski altyazı temizleme; geç kalmış eski çeviriyi düşürme.** | **CI ve saha testi bekleniyor** |
 
 | **#147** | **v0.3.3** | **v0.9.25** | **Acil Sherpa kaynaklı 0xC0000005 çökme düzeltmesi: ana süreçte yerel konuşmacı modeli çalıştırılmaz, altyazı/Türkçe dublaj/manuel ses atama/Silero korunur. Otomatik ses izi geçici devre dışı, ayrık işlem motoru sonraki aşama.** | **CI ve PS5 cihaz testi bekleniyor** |

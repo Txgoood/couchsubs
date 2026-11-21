@@ -152,6 +152,48 @@ public class DubberTests
     }
 
     [Fact]
+    public async Task CheckboxCanPauseAndResumeWithSameWarmSpeechEngine()
+    {
+        var synth = new FakeSynth();
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        var dubber = new Dubber(new FakeModel(synth), audio,
+            () => server, () => 8787, action => action()) { Output = DubbingOutput.Headset };
+        dubber.Prepare();
+        dubber.Speak([new SpokenLine("One.", "Bir.")]);
+        await WaitUntil(() => audio.Played == 1);
+        // Mirrors the live checkbox path: Stop Turkish speech, not the
+        // hundreds-of-MB Pocket TTS model or the game PCM mixer.
+        dubber.Stop();
+        dubber.Prepare();
+        dubber.Speak([new SpokenLine("Two.", "İki.")]);
+        await WaitUntil(() => audio.Played == 2);
+        Assert.Equal(2, synth.Calls.Count);
+        await dubber.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DisableThenEnableCreatesNewDubberWithoutStoppingSubtitleCapture()
+    {
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        var first = new Dubber(new FakeModel(new FakeSynth()), audio,
+            () => server, () => 8787, action => action()) { Output = DubbingOutput.Headset };
+        first.Prepare();
+        first.Speak([new SpokenLine("Stop.", "Dur.")]);
+        await WaitUntil(() => audio.Played == 1);
+        await first.DisposeAsync();
+        var stopped = audio.Stopped;
+        var second = new Dubber(new FakeModel(new FakeSynth()), audio,
+            () => server, () => 8787, action => action()) { Output = DubbingOutput.Headset };
+        second.Prepare();
+        second.Speak([new SpokenLine("Go.", "Git.")]);
+        await WaitUntil(() => audio.Played == 2);
+        Assert.True(audio.Stopped >= stopped);
+        await second.DisposeAsync();
+    }
+
+    [Fact]
     public async Task AgonProfilePlaysThroughWindowsAudioOutput()
     {
         var audio = new FakeAudio();
