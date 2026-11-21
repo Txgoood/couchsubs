@@ -25,7 +25,42 @@ internal sealed class IsolatedSpeakerService : IAutomaticSpeakerDetector
     private Task? task;
     private SpeakerIdentityResult latest = new(null, SpeakerIdentitySource.Uncertain, 0);
     private long latestAt;
-    private readonly record struct Packet(byte[] Pcm, int Channels, int Rate, bool Speech);
+    private string game = "Genel";
+    private readonly record struct Packet(byte[]? Pcm, int Channels, int Rate, bool Speech,
+        string Game, string? RenameFrom = null, string? RenameTo = null,
+        bool ForgetGame = false, string? ForgetSpeaker = null);
+
+    public void ConfigureGame(string name)
+    {
+        var selected = GameSpeakerMemory.NormalizeGame(name);
+        lock (gate)
+        {
+            game = selected;
+            latest = new(null, SpeakerIdentitySource.Uncertain, 0);
+            latestAt = 0;
+        }
+    }
+
+    public void RenameSpeaker(string oldName, string newName)
+    {
+        if (oldName.Length is < 1 or > 64 || newName.Length is < 1 or > 64) return;
+        lock (gate)
+            queue?.Writer.TryWrite(new Packet(null, 0, 0, false, game, oldName, newName));
+    }
+
+    public void ForgetSpeaker(string name)
+    {
+        if (name.Length is < 1 or > 64) return;
+        lock (gate)
+            queue?.Writer.TryWrite(new Packet(null, 0, 0, false, game, ForgetSpeaker: name));
+    }
+
+    public void ForgetGame(string name)
+    {
+        lock (gate)
+            queue?.Writer.TryWrite(new Packet(null, 0, 0, false,
+                GameSpeakerMemory.NormalizeGame(name), ForgetGame: true));
+    }
     public SpeakerIdentityResult Latest
     {
         get
@@ -62,7 +97,8 @@ internal sealed class IsolatedSpeakerService : IAutomaticSpeakerDetector
             return;
         var bytes = new byte[pcm.Length * sizeof(short)];
         Buffer.BlockCopy(pcm, 0, bytes, 0, bytes.Length);
-        queue?.Writer.TryWrite(new Packet(bytes, channels, rate, speechConfirmed));
+        lock (gate)
+            queue?.Writer.TryWrite(new Packet(bytes, channels, rate, speechConfirmed, game));
     }
 
     public void Stop()
@@ -129,7 +165,12 @@ internal sealed class IsolatedSpeakerService : IAutomaticSpeakerDetector
                 {
                     var line = JsonSerializer.Serialize(new
                     {
-                        pcm = Convert.ToBase64String(frame.Pcm),
+                        pcm = frame.Pcm is null ? null : Convert.ToBase64String(frame.Pcm),
+                        game = frame.Game,
+                        renameFrom = frame.RenameFrom,
+                        renameTo = frame.RenameTo,
+                        forgetGame = frame.ForgetGame,
+                        forgetSpeaker = frame.ForgetSpeaker,
                         channels = frame.Channels,
                         rate = frame.Rate,
                         speech = frame.Speech
