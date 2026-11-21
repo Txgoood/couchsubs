@@ -186,6 +186,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
 
     private readonly EmotionContinuity emotions = new();
     private readonly ExpressiveDeliveryGuard expressiveGuard = new();
+    private readonly ExpressiveTurnPlanner expressivePlanner = new();
     public GameProsodyMeter? Prosody { get; set; }
     public INeuralSpeechDetector? NeuralSpeech { get; set; }
     public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Balanced;
@@ -271,6 +272,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         {
             timingPolicy.Reset();
             expressiveGuard.Reset();
+            expressivePlanner.Reset();
         }
         audio.Stop();
         server().StopSpeech();
@@ -440,7 +442,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
                 _ => true
             };
             lock (gate)
-                emotion = expressiveGuard.Refine(line, emotion, EmotionMode,
+                emotion = expressivePlanner.Resolve(line, emotion, EmotionMode,
                     Environment.TickCount64, confirmed);
         }
         var text = SpeechText.Prepare(line.Turkish, emotion);
