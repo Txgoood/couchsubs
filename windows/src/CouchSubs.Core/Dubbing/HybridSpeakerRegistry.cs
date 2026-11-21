@@ -94,6 +94,47 @@ public sealed class HybridSpeakerRegistry
         return new SpeakerIdentityResult(anonymous, SpeakerIdentitySource.VoiceEmbedding, 0.9f);
     }
 
+
+    /// <summary>Validated, normalized vectors only. Never includes raw game audio.</summary>
+    public SpeakerMemorySnapshot Snapshot() => new(
+        known.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray(),
+            StringComparer.OrdinalIgnoreCase), nextAnonymous);
+
+    /// <summary>Loads one game's embeddings; rejects malformed/unbounded data.</summary>
+    public bool Restore(SpeakerMemorySnapshot snapshot)
+    {
+        if (snapshot.Vectors is null || snapshot.Vectors.Count > 256 ||
+            snapshot.NextAnonymous is < 1 or > 1000000) return false;
+        var validated = new Dictionary<string, float[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, vector) in snapshot.Vectors)
+        {
+            if (string.IsNullOrWhiteSpace(key) || key.Length > 64 ||
+                !TryNormalize(vector, out var normalized) ||
+                validated.ContainsKey(key)) return false;
+            validated.Add(key, normalized);
+        }
+        known.Clear();
+        foreach (var (key, vector) in validated) known.Add(key, vector);
+        nextAnonymous = snapshot.NextAnonymous;
+        pending = null;
+        pendingCount = 0;
+        return true;
+    }
+
+    public bool Rename(string oldName, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName) ||
+            newName.Length > 64 || !known.TryGetValue(oldName, out var vector) ||
+            (known.ContainsKey(newName) &&
+             !string.Equals(oldName, newName, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        known.Remove(oldName);
+        known[newName] = vector;
+        return true;
+    }
+
+    public bool Forget(string name) => known.Remove(name);
+
     public void Reset()
     {
         known.Clear();

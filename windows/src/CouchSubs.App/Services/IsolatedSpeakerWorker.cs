@@ -13,7 +13,8 @@ namespace CouchSubs.App.Services;
 /// </summary>
 internal static class IsolatedSpeakerWorker
 {
-    private sealed record Packet(string? Pcm, int Channels, int Rate, bool Speech);
+    private sealed record Packet(string? Pcm, int Channels, int Rate, bool Speech,
+        string? Game, string? RenameFrom, string? RenameTo, bool ForgetGame, string? ForgetSpeaker);
     private static void Reply(object value)
     {
         Console.Out.WriteLine(JsonSerializer.Serialize(value));
@@ -42,6 +43,8 @@ internal static class IsolatedSpeakerWorker
                 return 3;
             }
             var registry = new HybridSpeakerRegistry();
+            var memory = new GameSpeakerMemory(GameSpeakerMemory.DefaultDirectory);
+            string? activeGame = null;
             var samples = new float[32000];
             var count = 0;
             Reply(new { protocol = 1, ready = true, modelLoaded = true });
@@ -52,7 +55,37 @@ internal static class IsolatedSpeakerWorker
                 Packet? packet;
                 try { packet = JsonSerializer.Deserialize<Packet>(input, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); }
                 catch (JsonException) { return 5; }
-                if (packet is null || packet.Channels is < 1 or > 2 ||
+                if (packet is null) return 6;
+                var requestedGame = GameSpeakerMemory.NormalizeGame(packet.Game);
+                if (!string.Equals(activeGame, requestedGame, StringComparison.OrdinalIgnoreCase))
+                {
+                    activeGame = requestedGame;
+                    registry.Reset();
+                    memory.Load(activeGame, registry);
+                    count = 0;
+                }
+                if (packet.ForgetGame)
+                {
+                    registry.Reset();
+                    memory.Delete(activeGame);
+                    Reply(new { protocol = 1, ready = true, modelLoaded = true });
+                    continue;
+                }
+                if (packet.RenameFrom is not null && packet.RenameTo is not null)
+                {
+                    if (registry.Rename(packet.RenameFrom, packet.RenameTo))
+                        memory.Save(activeGame, registry);
+                    Reply(new { protocol = 1, ready = true, modelLoaded = true });
+                    continue;
+                }
+                if (packet.ForgetSpeaker is not null)
+                {
+                    if (registry.Forget(packet.ForgetSpeaker))
+                        memory.Save(activeGame, registry);
+                    Reply(new { protocol = 1, ready = true, modelLoaded = true });
+                    continue;
+                }
+                if (packet.Channels is < 1 or > 2 ||
                     (packet.Rate != 16000 && packet.Rate != 48000) ||
                     packet.Pcm is null || packet.Pcm.Length > 130000) return 6;
                 byte[] bytes;
@@ -90,8 +123,11 @@ internal static class IsolatedSpeakerWorker
                     if (extractor.IsReady(stream))
                     {
                         var vector = extractor.Compute(stream);
+                        var before = registry.Snapshot().Vectors.Count;
                         var result = registry.Resolve(new SpeakerEvidence(null, vector, 0.95f, true, true));
                         name = result.Name;
+                        if (registry.Snapshot().Vectors.Count != before)
+                            memory.Save(activeGame, registry);
                     }
                     count = 0;
                 }
