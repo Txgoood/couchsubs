@@ -13,6 +13,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// <summary>Kareler saniyede ~20 kez okunur; yaklaşık 0,3 sn boş kalan bölge altyazının kalktığı anlamına gelir.</summary>
     private readonly SubtitleStabilizer stabilizer = new(emptyFramesToClear: 6);
     private readonly Dictionary<int, Task> translations = [];
+    // Each new subtitle invalidates the previous translation request. Translators
+    // that support cancellation stop early; all others are still filtered by ID.
+    private CancellationTokenSource? latestTranslation;
     /// <summary>
     /// Her çeviri isteği sıra numarası alır. Hızlı konuşmada çeviriler sırasız dönebilir:
     /// daha yeni bir satırın çevirisi gösterilmediyse eski satırınki yine gösterilir.
@@ -85,13 +88,16 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     // English switched to a NEW line: remove the previous
                     // translated subtitle before a delayed translation arrives.
                     sender.ClearForNewLine();
+                    latestTranslation?.Cancel();
+                    var tokenSource = new CancellationTokenSource();
+                    latestTranslation = tokenSource;
                     var number = ++lastRequested;
                     var current = session;
                     lineOnScreen = number;
                     // Çevirmen burada, istek sırasıyla çağrılır (ayrı görevle başlatılsa sıra karışabilirdi).
                     // Çeviri hemen bittiyse kendini zaten listeden çıkarmıştır; yeniden eklenmez.
                     var box = reading.Box?.PlacedIn(area).CenteredOnScreen();
-                    var task = TranslateAndForget(action.Text!, box, number, current);
+                    var task = TranslateAndForget(action.Text!, box, number, current, tokenSource);
                     if (!task.IsCompleted) translations[number] = task;
                     break;
             }
@@ -119,24 +125,40 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         _ => ReadingTime(text)
     };
 
-    private async Task TranslateAndForget(string source, TextBox? box, int number, int current)
+    private async Task TranslateAndForget(string source, TextBox? box, int number, int current,
+        CancellationTokenSource tokenSource)
     {
-        await Translate(source, box, number, current);
-        lock (gate) translations.Remove(number);
+        try { await Translate(source, box, number, current, tokenSource.Token); }
+        finally
+        {
+            lock (gate)
+            {
+                translations.Remove(number);
+                if (ReferenceEquals(latestTranslation, tokenSource)) latestTranslation = null;
+            }
+            tokenSource.Dispose();
+        }
     }
 
-    private async Task Translate(string source, TextBox? box, int number, int current)
+    private async Task Translate(string source, TextBox? box, int number, int current,
+        CancellationToken token)
     {
         string translated;
         try
         {
-            translated = await translator.TranslateAsync(source);
+            translated = await translator.TranslateAsync(source, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Another dialogue line started; cancellation is not a translation error.
+            return;
         }
         catch (Exception error)
         {
+            if (token.IsCancellationRequested) return;
             lock (gate)
             {
-                if (current != session) return;
+                if (current != session || token.IsCancellationRequested) return;
                 // Model eksikse ya da geçici bir hata olduysa satır ekranda kaldıkça yeniden denenir.
                 LastError = (error as TranslatorException)?.Status;
                 if (number == lineOnScreen) stabilizer.ForgetSent();
@@ -147,7 +169,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
         lock (gate)
         {
-            if (current != session) return;
+            if (current != session || token.IsCancellationRequested) return;
             LastError = null;
         }
         TranslationResult?.Invoke(null);
@@ -156,7 +178,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             // A newer English line already exists: never display an older
             // translation over it (old versions briefly showed stale text).
-            if (number < lastRequested && number != lineOnScreen) return;
+            if (token.IsCancellationRequested || (number < lastRequested && number != lineOnScreen)) return;
             if (number <= lastShown || !stabilizer.ShouldSend(source, translated)) return;
             lastShown = number;
             // Satır hâlâ ekrandaysa kalkınca silinir; kalktıysa okunacak kadar gösterilir.
@@ -182,6 +204,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         lock (gate)
         {
             session++;
+            latestTranslation?.Cancel();
+            latestTranslation = null;
             lineOnScreen = null;
             lastReading = Reading.Empty;
             schedule.Reset();
