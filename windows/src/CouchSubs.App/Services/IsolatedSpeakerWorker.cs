@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+using System.IO;
 using System.Text.Json;
 using CouchSubs.Core.Dubbing;
 using SherpaOnnx;
