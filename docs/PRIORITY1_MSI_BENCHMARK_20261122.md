@@ -129,3 +129,15 @@ The replay allowed producer and pipe backlog to expose cumulative drift.
 This is a synthetic worker/IPC measurement. The application's bounded
 queues would reject excess input instead of accumulating this delay.
 Keep the diagnostic path read-only and the audio mix unchanged.
+
+## Experimental 40 ms batches
+
+An isolated local experiment combined pairs of 20 ms frames before model
+inference, while preserving frame IDs. On the same MSI, synthetic replay
+with zero lookahead and FP32 produced 3,000 frames over one minute. The
+first matching stem arrived at 108.3 ms, p95 was 123.2 ms, and 2,239 of
+3,000 frames exceeded 90 ms. The last two frames are emitted by flush
+and their ages do not represent normal steady-state behavior. The run
+did not capture PS5 audio or evaluate separation quality. The paired-frame
+experiment is not enabled in the application. It improves throughput
+compared with individual-frame inference, but still misses the deadline.
