@@ -78,6 +78,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
     private readonly SpeakerTurnGuard speakerTurnGuard = new();
+    private readonly MultiSpeakerTurnTracker multiSpeakerTracker = new();
     private bool manualGamePinned;
     private readonly HashSet<string> suppressedAutoGames = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? gameProbeCancellation;
@@ -830,6 +831,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 pulseAudioActive, acousticMode, neuralMode);
             gameProsody.Clear();
             speakerTurnGuard.Reset();
+        multiSpeakerTracker.Reset();
             var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
             if (captureAudio && stream is StreamSession audioStream)
             {
@@ -951,6 +953,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         services.NeuralSpeech?.Stop();
         services.SpeakerDetector?.Stop();
         speakerTurnGuard.Reset();
+        multiSpeakerTracker.Reset();
         keeper?.Stop();
         keeper = null;
         pipeline?.Reset();
@@ -1482,6 +1485,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         manualGamePinned = true;
         suppressedAutoGames.Remove(GameCastLibrary.Normalize(name));
         speakerTurnGuard.Reset();
+        multiSpeakerTracker.Reset();
         var selected = GameCastLibrary.Switch(settings.Dubbing, name);
         if (ReferenceEquals(selected, settings.Dubbing)) return;
         Settings = settings with { Dubbing = selected };
@@ -1686,7 +1690,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         string? candidate = null;
         if (settings.Source == GameSource.Ps5 && settings.Dubbing.AutoSpeakerTracking)
         {
-            if (settings.Dubbing.InterruptionGuard)
+            if (settings.Dubbing.MultiSpeakerSafety)
+            {
+                // Multiple sequential identities are tracked without overriding
+                // explicit subtitle speakers or stopping the original game sound.
+                candidate = multiSpeakerTracker.Evaluate(recent, Environment.TickCount64).Speaker;
+            }
+            else if (settings.Dubbing.InterruptionGuard)
             {
                 // This is an uncertainty gate, not an actual overlap separation
                 // model. Explicitly labelled subtitles bypass the gate below.
@@ -1778,6 +1788,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             services.GameAudio?.SetAtmosphereMix(now.GameAtmospherePercent, now.TurkishVoicePercent);
         if (now.AtmosphereMode != old.AtmosphereMode)
             services.GameAudio?.SetAtmosphereMode(now.AtmosphereMode);
+        if (now.MultiSpeakerSafety != old.MultiSpeakerSafety)
+            multiSpeakerTracker.Reset();
         if ((now.AutoSpeakerTracking != old.AutoSpeakerTracking ||
              now.SpeechDetection != old.SpeechDetection) && isRunning &&
             settings.Source == GameSource.Ps5)
