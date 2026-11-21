@@ -14,6 +14,8 @@ namespace CouchSubs.Translation;
 public sealed class OnnxDialogueStemAdapter : IDisposable
 {
     private readonly InferenceSession session;
+    public bool GpuActive { get; }
+    public string ExecutionStatus { get; }
     public const string ModelVariable = "COUCHSUBS_DIALOGUE_STEM_MODEL";
     public const string OptInVariable = "COUCHSUBS_ENABLE_DIALOGUE_SEPARATOR";
     public const string InputName = "audio";
@@ -41,15 +43,17 @@ public sealed class OnnxDialogueStemAdapter : IDisposable
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path) || !File.Exists(path))
             throw new FileNotFoundException("An explicit local ONNX model file is required.", path);
-        using var options = new SessionOptions
-        {
-            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
-            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-            IntraOpNumThreads = 1
-        };
-        // Native inference stays opt-in and must be started from a worker,
-        // not the UI/audio callback. The default Windows ONNX package is CPU.
-        session = new InferenceSession(path, options);
+        // Explicit opt-in only. DirectML must be both packaged and compatible;
+        // otherwise the factory creates a fresh CPU inference session.
+        // No code in the game audio callback invokes this constructor.
+        var selection = OptionalGpuSessionFactory.Open(path,
+            OptionalGpuSessionFactory.IsOptedIn(
+                Environment.GetEnvironmentVariable(OptionalGpuSessionFactory.OptInVariable)),
+            OptionalGpuSessionFactory.ParseDeviceId(
+                Environment.GetEnvironmentVariable(OptionalGpuSessionFactory.DeviceIdVariable)));
+        session = selection.Session;
+        GpuActive = selection.GpuActive;
+        ExecutionStatus = selection.Status;
         try
         {
             if (!session.InputMetadata.TryGetValue(InputName, out var input) ||
