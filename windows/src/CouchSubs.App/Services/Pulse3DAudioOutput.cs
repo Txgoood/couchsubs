@@ -36,6 +36,7 @@ internal sealed class Pulse3DAudioOutput : IGameAudioOutput, ISampleProvider
     private readonly object lifecycleGate = new();
 
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(Rate, Channels);
+    public GameAudioBufferStats AudioBufferStatistics => game.Statistics;
 
     public void SetAtmosphereMix(int keepGame, int voice)
     {
