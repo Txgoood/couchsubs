@@ -78,6 +78,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
     private readonly LongSessionAudioMonitor longSessionAudioMonitor = new();
+    private InworldLiveDiagnosticTap? inworldDiagnosticTap;
     private readonly SpeakerTurnGuard speakerTurnGuard = new();
     private readonly MultiSpeakerTurnTracker multiSpeakerTracker = new();
     private bool manualGamePinned;
@@ -833,6 +834,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             gameProsody.Clear();
             speakerTurnGuard.Reset();
         multiSpeakerTracker.Reset();
+            if (captureAudio && pulseAudioActive) TryStartInworldDiagnosticTap();
             var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
             if (captureAudio && stream is StreamSession audioStream)
             {
@@ -849,6 +851,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     if (neuralMode) services.NeuralSpeech?.Push(pcm, channels, rate);
                     if (autoSpeaker) services.SpeakerDetector?.Push(pcm, channels, rate,
                         services.NeuralSpeech?.RecentSpeech == true);
+                    // Diagnostic side-channel only: original PS5 PCM ALWAYS
+                    // goes directly to the existing PULSE 3D mixer, unchanged.
+                    Volatile.Read(ref inworldDiagnosticTap)?.TryCapture(pcm, channels, rate);
                     if (pulseAudioActive && services.GameAudio is { } mixer)
                         mixer.PushGameAudio(pcm, channels, rate);
                 };
@@ -949,6 +954,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         session?.Stop();
         session?.Dispose();
         session = null;
+        var oldInworldTap = Interlocked.Exchange(ref inworldDiagnosticTap, null);
+        if (oldInworldTap is not null)
+            _ = Task.Run(async () =>
+            {
+                try { await oldInworldTap.DisposeAsync(); }
+                catch { /* diagnostic shutdown must never interrupt PS5 audio */ }
+            });
         pulseAudioActive = false;
         services.GameAudio?.Dispose();
         services.NeuralSpeech?.Stop();
@@ -1761,6 +1773,41 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// Safe to call again after a failed device initialization. Does not
     /// interfere with native PS5/HDMI audio or TV output.
     /// </summary>
+    /// <summary>
+    /// Experimental *read-only* model probe for PS5 audio. It cannot modify
+    /// the PULSE 3D PCM output and never starts without explicit env opt-in.
+    /// Model loading is off the UI/native audio callback, and all faults
+    /// are swallowed by this diagnostic startup.
+    /// </summary>
+    private void TryStartInworldDiagnosticTap()
+    {
+        if (Environment.GetEnvironmentVariable("COUCHSUBS_ENABLE_INWORLD_DIAGNOSTIC_TAP") != "1" ||
+            inworldDiagnosticTap is not null)
+            return;
+        var python = Environment.GetEnvironmentVariable("COUCHSUBS_INWORLD_PYTHON");
+        var script = Environment.GetEnvironmentVariable("COUCHSUBS_INWORLD_WORKER_SCRIPT");
+        var device = Environment.GetEnvironmentVariable("COUCHSUBS_INWORLD_DEVICE");
+        if (string.IsNullOrWhiteSpace(python) || !Path.IsPathFullyQualified(python) ||
+            !File.Exists(python) || string.IsNullOrWhiteSpace(script) ||
+            !Path.IsPathFullyQualified(script) || !File.Exists(script))
+            return;
+        var tap = new InworldLiveDiagnosticTap();
+        Volatile.Write(ref inworldDiagnosticTap, tap);
+        _ = Task.Run(async () =>
+        {
+            try { await tap.StartAsync(python, script, device == "cuda" ? "cuda" : "cpu"); }
+            catch
+            {
+                if (ReferenceEquals(Interlocked.CompareExchange(
+                    ref inworldDiagnosticTap, null, tap), tap))
+                {
+                    try { await tap.DisposeAsync(); }
+                    catch { /* read-only model probe must not affect game audio */ }
+                }
+            }
+        });
+    }
+
     private void TryStartHeadsetAudio()
     {
         if (settings.Source != GameSource.Ps5 ||
