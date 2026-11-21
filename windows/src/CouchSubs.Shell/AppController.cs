@@ -187,6 +187,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (old.Style.Timing != value.Style.Timing && pipeline is not null)
                 pipeline.TimingMode = value.Style.Timing;
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
+            if (!string.Equals(old.Dubbing.ActiveGame, value.Dubbing.ActiveGame,
+                    StringComparison.OrdinalIgnoreCase))
+                services.SpeakerDetector?.ConfigureGame(value.Dubbing.ActiveGame);
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
                               || old.OnlineTranslation != value.OnlineTranslation || old.AutoWorldText != value.AutoWorldText))
             {
@@ -817,7 +820,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 (settings.Dubbing.EmotionMode == DubbingEmotionMode.Neural || autoSpeaker)
                 && speechModelEnabled;
             if (neuralMode) services.NeuralSpeech?.Start();
-            if (autoSpeaker) services.SpeakerDetector?.Start();
+            if (autoSpeaker)
+            {
+                services.SpeakerDetector?.ConfigureGame(settings.Dubbing.ActiveGame);
+                services.SpeakerDetector?.Start();
+            }
             bool captureAudio = Ps5DubbingTogglePolicy.RequiresAudioCapture(
                 settings.Dubbing.Output == DubbingOutput.Headset,
                 pulseAudioActive, acousticMode, neuralMode);
@@ -1551,6 +1558,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void DeleteGameLibrary(string game)
     {
+        services.SpeakerDetector?.ForgetGame(game);
         var cleaned = GameCastLibrary.Delete(settings.Dubbing, game);
         suppressedAutoGames.Add(GameCastLibrary.Normalize(game));
         manualGamePinned = false; // Allow the detected game to become active again after deletion.
@@ -1587,6 +1595,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         var cast = settings.Dubbing.Cast.Copy();
         cast.Rename(originalName, newName);
+        services.SpeakerDetector?.RenameSpeaker(originalName, newName);
         Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
     }
 
@@ -1624,6 +1633,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         var cast = settings.Dubbing.Cast.Copy();
         cast.Remove(name);
+        services.SpeakerDetector?.ForgetSpeaker(name);
         Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
     }
 
