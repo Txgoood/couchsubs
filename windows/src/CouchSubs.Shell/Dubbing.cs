@@ -115,6 +115,8 @@ public interface IGameAudioOutput : IAudioOutput, IDisposable
 {
     void Start();
     void PushGameAudio(short[] pcm, int channels, int sampleRate);
+    /// <summary>Optional bounded-buffer diagnostics; no PCM is exposed.</summary>
+    GameAudioBufferStats AudioBufferStatistics => default;
     /// <summary>Optional pre-aligned 48kHz stereo frame + model dialogue stem; legacy outputs ignore stems.</summary>
     void PushSeparatedGameAudio(long frameId, float[] gamePcm, float[]? dialogueStem,
         float confidence, int ageMilliseconds, bool turkishDubActive) { }

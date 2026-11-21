@@ -77,6 +77,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
     private readonly GameProsodyMeter gameProsody = new();
+    private readonly LongSessionAudioMonitor longSessionAudioMonitor = new();
     private readonly SpeakerTurnGuard speakerTurnGuard = new();
     private readonly MultiSpeakerTurnTracker multiSpeakerTracker = new();
     private bool manualGamePinned;
@@ -954,6 +955,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         services.SpeakerDetector?.Stop();
         speakerTurnGuard.Reset();
         multiSpeakerTracker.Reset();
+        longSessionAudioMonitor.Reset();
         keeper?.Stop();
         keeper = null;
         pipeline?.Reset();
@@ -977,6 +979,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Bilgisayar uykudan uyanınca bağlantıları hemen yenile.</summary>
     public void SystemResumed()
     {
+        // Sleep intervals are not real audio-buffer observation windows.
+        longSessionAudioMonitor.Reset();
         session?.ReconnectNow();
         keeper?.Reconnect();
     }
@@ -1494,12 +1498,21 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 dubber?.LateLines ?? 0, dubber?.SuppressedDuplicates ?? 0,
                 neural.InferenceCalls, neural.InferenceErrors, dubbingError);
             var health = DubbingHealthEvaluator.Evaluate(input);
+            var audioHealth = services.GameAudio is { } output && pulseAudioActive
+                ? longSessionAudioMonitor.Observe(output.AudioBufferStatistics, Environment.TickCount64)
+                : default;
+            var audioStatus = !pulseAudioActive ? "PULSE 3D ortak ses çıkışı kapalı"
+                : !audioHealth.ValidWindow ? "Ses tamponu: ölçüm aralığı bekleniyor"
+                : $"Ses tamponu: {audioHealth.DroppedSamples} atılan örnek · " +
+                  $"{audioHealth.UnderrunSamples} boş okuma · " +
+                  (audioHealth.BacklogWarning ? "gecikme riski" : "kuyruk normal");
             return $"{health.Level}: {health.Summary}" + Environment.NewLine +
                 $"TTS ort.: {latency.AverageMs:F0} ms · en yüksek: {latency.PeakMs} ms · " +
                 $"yavaş işlem: {latency.SlowCalls}" + Environment.NewLine +
                 $"Kuyruk: {timing.PendingLines}/{Dubber.Backlog} · geciken: {dubber?.LateLines ?? 0} · " +
                 $"tekrar bastırma: {dubber?.SuppressedDuplicates ?? 0}" + Environment.NewLine +
                 $"Konuşma algılama: {neural.InferenceCalls} işlem · {neural.InferenceErrors} hata" +
+                Environment.NewLine + audioStatus +
                 Environment.NewLine + health.Recommendation;
         }
     }
