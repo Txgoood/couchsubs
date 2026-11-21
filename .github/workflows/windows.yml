@@ -2,7 +2,7 @@
 # Windows uygulaması: yerel DLL'i (libchiaki + FFmpeg) MSYS2 ile derler, .NET testlerini koşar,
 # uygulamayı tek klasör olarak yayınlar.
 name: windows
-# Paired Windows v0.3.5 (Build #149) + webOS v0.9.27 (Build #149).
+# Paired Windows v0.3.6 (Build #150) + webOS v0.9.28 (Build #150).
 
 on:
   push:

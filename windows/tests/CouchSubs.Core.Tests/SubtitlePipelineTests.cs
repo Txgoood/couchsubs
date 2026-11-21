@@ -74,6 +74,36 @@ internal sealed class GatedTranslator : ITextTranslator
     }
 }
 
+/// <summary>A translator that honors cancellation of an outdated dialogue.</summary>
+internal sealed class CancelAwareTranslator : ITextTranslator
+{
+    private readonly TaskCompletionSource started =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public int Cancelled { get; private set; }
+    public Task FirstStarted => started.Task;
+
+    public async Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (text == "First!")
+        {
+            started.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Interlocked.Increment(ref cancelCount);
+                throw;
+            }
+        }
+        return "TR: " + text;
+    }
+
+    private int cancelCount;
+    public int CancelCount => Volatile.Read(ref cancelCount);
+}
+
 internal sealed class FakeSender : ISubtitleSender
 {
     public List<string> Sent { get; } = [];
@@ -240,6 +270,41 @@ public class SubtitlePipelineTests
         await translator.Release("Run!");
         await pipeline.WaitForTranslationsAsync();
         Assert.Equal(["TR: Run!"], sender.Sent);
+    }
+
+    [Fact]
+    public async Task NewSpeechCancelsTheEarlierTranslationBeforeItCanDub()
+    {
+        var translator = new CancelAwareTranslator();
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(
+            new FakeReader("First!", "Second!"), translator, sender);
+        var spoken = new List<CouchSubs.Core.Dubbing.SpokenLine>();
+        pipeline.SpeechReady += lines => spoken.AddRange(lines);
+
+        await pipeline.ProcessAsync(Image, new CropRegion());
+        await translator.FirstStarted;
+        await pipeline.ProcessAsync(Image, new CropRegion());
+        await pipeline.WaitForTranslationsAsync();
+
+        Assert.Equal(1, translator.CancelCount);
+        Assert.Equal(["TR: Second!"], sender.Sent);
+        Assert.Single(spoken);
+        Assert.Equal("Second!", spoken[0].English);
+    }
+
+    [Fact]
+    public async Task LostOcrFramesDoNotCreateTwoTurkishTranslations()
+    {
+        var samples = new List<string> { "The police are coming!" };
+        samples.AddRange(Enumerable.Repeat("", 6));
+        samples.AddRange(Enumerable.Repeat("The police are coming!", 8));
+        samples.Add("Get out!");
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader([.. samples]),
+            new FakeTranslator(), sender);
+        await Run(pipeline, samples.Count);
+        Assert.Equal(["TR: The police are coming!", "TR: Get out!"], sender.Sent);
     }
 
     [Fact]

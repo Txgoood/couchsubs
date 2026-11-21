@@ -4,6 +4,19 @@ Bu dosya **yalnız Txgoood/couchsubs** deposunun kullanıcıya teslim ettiği e�
 
 | Çift Build | Windows EXE sürümü | LG webOS IPK sürümü | İçerik | Durum |
 | --- | --- | --- | --- | --- |
+| **#150** | **v0.3.6** | **v0.9.28** | **Smart Subtitle Tracker V2: OCR boşluklarında aynı cümleyi tekrar çevirmeyi/dublajı engelleme, eski çeviriyi iptal etme** | **CI doğrulaması bekleniyor** |
+
+## Build #150 – Smart Subtitle Tracker V2
+
+- Kısa OCR kopmaları, titreyen İngilizce altyazılar ve 6 boş karelik temizleme olaylarında son başarılı cümlenin kimliği 30 kareye kadar hatırlanır. Bu sırada aynı cümle tekrar çevrilmez veya dublaja gönderilmez.
+- Gerçekten daha sonra yeniden söylenen aynı cümle, yeterli aradan sonra yeniden işlenir.
+- Yeni İngilizce cümle algılandığında, önceki çeviri isteğine iptal verilir. Çeviri motoru iptali desteklemezse eski cevap mevcut nesil/kimlik denetimiyle gösterilmez.
+- Bilerek çevrilemeyen satırda mevcut retry mekanizması korunur; yeni kural onu bloke etmez.
+- Testler OCR kesintisi, gerçek tekrar, eski çevirinin iptali, tek dublaj çağrısı ve önceki pipeline davranışlarını kapsar.
+- Mevcut ses/oyun atmosferi, F11/F12 ve Num tuşları, konuşmacı/karakter hafızası, dublaj kapat/aç akışı korunur.
+- Kimlik hafızası için gerçek ses embedding çıkarımı şu anda güvenlik bayrağı ile devre dışıdır. Bu sürüm otomatik kalıcı biyometrik kimlik tanıma, ses-görsel yüz eşleştirme iddiası taşımaz.
+- Windows **v0.3.6 Build #150**, LG webOS **v0.9.28 Build #150**. App ID değişmez; görüntüleme/ses katmanı geriye dönük çalışır.
+
 | #130 | v0.1.6 | v0.9.8 | Silero ONNX VAD, duygu hafızası, doğal ses koruma | Başarılı GitHub Run #186 |
 | #131 | v0.1.7 | v0.9.9 | TV dublaj ses oynatma tanılaması, eski sesin temizlenmesi, webOS panelinde eşleşen Build no, IPK'nin bağımsız artifact olarak sunulması | GitHub Actions testi gerekli |
 
