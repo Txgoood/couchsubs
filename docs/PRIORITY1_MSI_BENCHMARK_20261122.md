@@ -79,3 +79,33 @@ require separately calibrated confidence, leakage tests and guardrails.
 
 **Priority 2 remains paused.** CUDA used here is only for testing
 whether Priority 1's actual separator can meet its time budget.
+
+## Additional follow-up after GitHub #622 success
+
+Further real RTX5080 and CPU tests of the same synthetic 4.46 second clip:
+
+| Backend / chunk | p50 / model call | p95 | comment |
+|---|---:|---:|---|
+| CPU, 1 OMP thread, 20ms | 192.54ms | 415.94ms | Far slower; reject |
+| RTX5080 CUDA, 20ms, zero model lookahead | 28.23ms | 45.34ms | Throughput still below 20ms/frame |
+| RTX5080 CUDA, 40ms chunks | 28.72ms | 57.87ms | Median throughput better, high variance; chunking adds latency |
+
+All measured offline on user MSI system, **not** captured PS5 input.
+The announced 63ms algorithmic figure is for the original 20ms
+lookahead configuration; it must NOT be quoted as exact for zero lookahead.
+For the 40ms chunk result, chunk accumulation and callback wakeups further
+increase overall latency and require measurement.
+
+Implemented new `DialogueInferenceAdmissionGate` to keep the experimental
+separator disabled until 64+ valid model frames sustain a mean inference
+well below real-time (15ms per 20ms chunk) and total p95 predicted age
+<90ms. This prevents 20ms overflow even when individual calls are
+sometimes fast. A failed inference forces immediate ineligible status.
+Also implemented `Ps5DialogueFrameSegmenter` to segment variable
+48k stereo PCM16 packets into model-compatible 20ms float frames on a
+background thread only. It rejects unsupported input formats rather than
+inventing a resampler and corrupting synchronization. Tests added.
+
+**Reminder:** These two classes are groundwork for opt-in live capture,
+not currently enabled by application startup, and their presence is not
+proof of a working game speech separator. #157 and #161 remain orange.
