@@ -351,7 +351,10 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             // Bu arada yeni altyazı geldiyse eski cümle hiç çalınmaz.
             if (number != Generation) return;
             if (result is not { } ready) break;
-            if (SmartTiming && !timingPolicy.ShouldPlay(ready.SubmittedMs, Environment.TickCount64))
+            bool tooLate;
+            lock (gate)
+                tooLate = SmartTiming && !timingPolicy.ShouldPlay(ready.SubmittedMs, Environment.TickCount64);
+            if (tooLate)
             {
                 Interlocked.Increment(ref lateLines);
                 next = Next(number);
