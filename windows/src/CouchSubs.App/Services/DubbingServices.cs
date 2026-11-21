@@ -50,7 +50,10 @@ internal sealed class PocketDubbingModel : IDubbingModel
         var local = DubbingModel.LocalConfig(File.ReadAllText(Path.Combine(directory, "config.yaml")), directory);
         if (!File.Exists(config) || File.ReadAllText(config) != local)
             File.WriteAllText(config, local);
-        return new PocketTtsServer(Executable, config, Path.Combine(directory, "voices", "male_1.wav"));
+        return new PocketTtsServer(Executable, config,
+            Path.Combine(directory, "voices", "male_1.wav"),
+            DubbingComputeBudget.CpuThreads(Environment.ProcessorCount,
+                Environment.GetEnvironmentVariable(DubbingComputeBudget.CpuThreadsSetting)));
     });
 
     private string PrepareAsciiRuntimeDirectory()

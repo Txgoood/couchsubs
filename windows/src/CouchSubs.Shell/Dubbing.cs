@@ -167,6 +167,9 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private int droppedLines;
     private int interruptedGenerations;
     private int lastSynthesisMilliseconds;
+    private readonly DubbingLatencyTracker latencyTracker = new();
+    public (long Calls, double AverageMs, long PeakMs, long SlowCalls) SynthesisLatency =>
+        latencyTracker.Snapshot();
     public DubberTimingSnapshot Timing
     {
         get
@@ -431,7 +434,10 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
                 lock (gate)
                 {
                     if (number == generation)
+                    {
                         lastSynthesisMilliseconds = (int)Math.Min(int.MaxValue, timer.ElapsedMilliseconds);
+                        latencyTracker.Record(lastSynthesisMilliseconds);
+                    }
                 }
                 return (result, preview is not null, submittedMs);
             }
