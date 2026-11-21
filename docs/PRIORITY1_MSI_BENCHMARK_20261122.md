@@ -1,0 +1,81 @@
+# Priority 1 — MSI laptop actual model benchmark, 2026-11-22
+
+Scope: **Build #157 and #161 unfinished together**. Do not mark green.
+
+## Test hardware and software (local authorized device)
+
+- NVIDIA GeForce RTX 5080 Laptop GPU, 16303 MiB; driver 621.24.
+- Windows Python 3.12.10 isolated virtualenv; `inworld-voice-isolation==1.0.0`.
+- PyTorch CPU 2.15.0+cpu for baseline, then official PyTorch
+  `torch==2.11.0+cu128` / `torchaudio==2.11.0+cu128`.
+- `torch.cuda.is_available()==True`, GPU `sm_120`.
+- Official Inworld realtime checkpoint loaded successfully with the
+  upstream registry's pinned SHA-256. 100 input frames -> 100 model
+  output frames, in order, via `inworld_live_worker.py --stdio`.
+- `python -m unittest discover -s tools/priority1 -p "test_*.py"`:
+  5 Python smoke tests passed on the laptop.
+- GitHub Windows Run #621: **SUCCESS** (native + dotnet). This proves
+  build and unit tests, **NOT real PS5 acoustic safety**.
+
+## Reproducible local-only synthetic measurements
+
+Sample A: synthetic 2 second stereo tones, 100 x 20ms model pushes.
+
+| Backend | 20ms push p50 | p95 | worst |
+|---|---:|---:|---:|
+| CPU torch 2.15 | 44.69 ms | 53.65 ms | 77.18 ms |
+
+Sample B: Windows System.Speech 4.46s synthetic English sentence
+plus generated multi-tone background, 224 x 20ms model pushes.
+
+| Backend | 20ms push p50 | p95 | worst |
+|---|---:|---:|---:|
+| CPU torch 2.15 | 50.26 ms | 77.13 ms | 98.03 ms |
+| CPU OMP_NUM_THREADS=4 | 75.17 ms | 138.17 ms | 165.78 ms |
+| RTX5080 CUDA torch 2.11 cu128 | 27.86 ms | 44.50 ms | 8463.74 ms (first-call warmup) |
+
+Metrics measured by `inworld_streaming_probe.py`, which synchronizes CUDA
+before/after inference. They are local **offline replay** measurements,
+not actual PS5 live-capture/PCM mixer end-to-end latency.
+
+The official model's stated algorithmic latency at
+`lookahead_frames=2` is **63ms**. CUDA p95 push 44.50ms is **already
+107.50ms** if conservatively added, before any capture, IPC, buffering,
+audio output or display latency. Also median 27.86ms exceeds the 20ms
+incoming audio frame period, potentially causing sustained backlog.
+The initial CUDA call must be warmed before live mode.
+
+### Separation sanity check (synthetic sample only)
+
+Using a two-source least-squares projection against known synthesized
+speech + generated tone background:
+
+- Model speech stem coefficient against original speech: **0.989**;
+  synthetic background leak coefficient **-0.002**.
+- Conservative 25% center suppression produced output speech
+  coefficient **0.753** and background coefficient **1.000**.
+
+This is encouraging for *this synthetic input only*; it is **NOT**
+evidence about actual GTA6 soundtrack, overlapping voices, stereo sound
+quality, or intelligibility. The 25% attenuation cap means the English
+voice is deliberately only modestly reduced; stronger removal would
+require separately calibrated confidence, leakage tests and guardrails.
+
+## Remaining blocker for turning both builds green
+
+1. Benchmark a causal configuration with lower lookahead and actual
+   average *throughput* faster than 20ms/frame, including sustained
+   10 minute processing and consistent p95.
+2. Integrate the supervised worker with the original 48k stereo PS5 PCM
+   path using a bounded 90ms deadline and fail-open fallback. Default
+   stays **disabled** until real game quality and synchronization pass.
+3. Calibrate a trustworthy speech-stem confidence/quality check.
+   Do not invent a 0.95 probability; the model has no verified
+   such calibration.
+4. Validate 2+ mixed game speakers, effects, music, scene changes and
+   subtitles/character speech synchronization on PS5+Sony PULSE3D.
+5. Produce, CI-verify and test a paired Windows/webOS release before
+   advertising #157/#161 as fully complete.
+
+**Priority 2 remains paused.** CUDA used here is only for testing
+whether Priority 1's actual separator can meet its time budget.
