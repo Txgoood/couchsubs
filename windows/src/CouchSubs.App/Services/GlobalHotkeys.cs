@@ -42,7 +42,7 @@ public sealed partial class GlobalHotkeys : IDisposable
         (HotkeyAction.ExtraRegion1, 0x61),
         (HotkeyAction.ExtraRegion2, 0x62),
         (HotkeyAction.ExtraRegion3, 0x63),
-        (HotkeyAction.FreeArea, 0x7B),
+        (HotkeyAction.FreeArea, 0x79),
         (HotkeyAction.Snapshot, 0x68),
         (HotkeyAction.PauseSubtitles, 0x60),
         (HotkeyAction.Screen, 0x7A),

@@ -8,11 +8,11 @@ namespace CouchSubs.Shell.Tests;
 public sealed class ShortcutSettingsTests
 {
     [Fact]
-    public void DefaultShortcutsAreF11AndF12()
+    public void DefaultShortcutsAreF11AndF10()
     {
         var settings = new UserSettings();
         Assert.Equal(0x7A, settings.ScreenHotkey);
-        Assert.Equal(0x7B, settings.FreeAreaHotkey);
+        Assert.Equal(0x79, settings.FreeAreaHotkey);
     }
 
     [Fact]
@@ -36,6 +36,6 @@ public sealed class ShortcutSettingsTests
         Assert.NotNull(restored);
         Assert.True(restored.AutoWorldText);
         Assert.Equal(0x7A, restored.ScreenHotkey);
-        Assert.Equal(0x7B, restored.FreeAreaHotkey);
+        Assert.Equal(0x79, restored.FreeAreaHotkey);
     }
 }

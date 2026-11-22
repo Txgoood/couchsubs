@@ -255,6 +255,28 @@
       var el = document.createElement('div');
       el.className = item.paragraphs === true ? 'item paragraphs' : 'item';
       el.textContent = item.text;
+      var paint = item.paint;
+      if (paint && /^#[0-9a-f]{6}$/i.test(paint.left) &&
+          /^#[0-9a-f]{6}$/i.test(paint.right) && /^#[0-9a-f]{6}$/i.test(paint.foreground)) {
+        var label = document.createElement('span');
+        label.textContent = item.text;
+        el.textContent = '';
+        el.className = 'item positioned';
+        el.appendChild(label);
+        el.style.left = (box.left * 100) + '%';
+        el.style.top = (box.top * 100) + '%';
+        el.style.width = ((box.right - box.left) * 100) + '%';
+        el.style.height = ((box.bottom - box.top) * 100) + '%';
+        el.style.fontSize = Math.max(7, (item.line || box.bottom - box.top) * height * 1.12) + 'px';
+        el.style.backgroundColor = paint.left;
+        el.style.backgroundImage = 'linear-gradient(90deg,' + paint.left + ',' + paint.right + ')';
+        el.style.color = paint.foreground;
+        el.style.fontWeight = paint.bold ? '600' : '400';
+        host.appendChild(el);
+        if (label.offsetWidth > el.clientWidth - 2)
+          label.style.transform = 'scaleX(' + Math.max(0, (el.clientWidth - 2) / label.offsetWidth) + ')';
+        continue;
+      }
       var left = Math.max(0, box.left - SCREEN_PAD);
       var top = Math.max(0, box.top - SCREEN_PAD);
       var boxHeight = (box.bottom - box.top + 2 * SCREEN_PAD) * height;

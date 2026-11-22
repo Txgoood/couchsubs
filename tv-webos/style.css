@@ -67,6 +67,16 @@ html, body {
   overflow: hidden;
 }
 #screen .item.paragraphs { text-align: left; white-space: pre-line; }
+#screen .item.positioned {
+  display: flex;
+  align-items: center;
+  padding: 0 1px;
+  border-radius: 0;
+  text-align: left;
+  text-shadow: none;
+  white-space: nowrap;
+}
+#screen .item.positioned span { display: inline-block; transform-origin: left center; flex: none; }
 
 /* Hızlı konuşmada önceki satır kısa süre yeni satırın üstünde, daha soluk durur. */
 #subtitle-prev { margin-bottom: 10px; opacity: 0.7; }

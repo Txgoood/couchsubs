@@ -22,14 +22,23 @@
   #line.on { opacity: 1; }
   /* İngilizce altyazının yeri biliniyorsa çeviri onu örter (TV'deki "örtme" ile aynı). */
   #line.cover { transform: translate(-50%, -50%); }
+  #screen { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  #screen .item { position: absolute; display: flex; align-items: center; overflow: hidden; padding: 0 1px;
+    box-sizing: border-box; color: white; background: #33343b;
+    font: 400 2vh/1 "Segoe UI", system-ui, sans-serif; white-space: nowrap; }
+  #screen span { display: inline-block; transform-origin: left center; flex: none; }
 </style>
 </head>
 <body>
 <div id="line"></div>
+<div id="screen"></div>
 <script>
 (function () {
   var line = document.getElementById('line');
   var params = new URLSearchParams(location.search);
+  var screenLayer = params.get('layer') === 'screen';
+  var screen = document.getElementById('screen');
+  var screenTimer;
   var fixed = { size: params.get('size'), bottom: params.get('bottom'), bg: params.get('bg') };
   var timer = null;
   var placement = 'cover';
@@ -92,6 +101,42 @@
   apply({});
   // "obs" parametresi uygulamaya bunun TV olmadığını söyler; "TV bağlı" sayısına katılmaz.
   var events = new EventSource('/events?viewer=obs');
+  function clearScreen() {
+    clearTimeout(screenTimer);
+    screen.replaceChildren();
+  }
+  function validColor(value) { return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value); }
+  function showScreen(data) {
+    clearScreen();
+    (data.items || []).forEach(function (item) {
+      var box = item.box;
+      if (!box || !(box.right > box.left && box.bottom > box.top) || !item.text) return;
+      var el = document.createElement('div');
+      var label = document.createElement('span');
+      el.className = 'item';
+      el.style.left = (box.left * 100) + '%';
+      el.style.top = (box.top * 100) + '%';
+      el.style.width = ((box.right - box.left) * 100) + '%';
+      el.style.height = ((box.bottom - box.top) * 100) + '%';
+      el.style.fontSize = (Math.max(.6, (item.line || box.bottom - box.top) * 112)) + 'vh';
+      var paint = item.paint;
+      if (paint && validColor(paint.left) && validColor(paint.right))
+        el.style.background = 'linear-gradient(90deg, ' + paint.left + ', ' + paint.right + ')';
+      if (paint && validColor(paint.foreground)) el.style.color = paint.foreground;
+      if (paint && paint.bold) el.style.fontWeight = '600';
+      label.textContent = item.text;
+      el.appendChild(label);
+      screen.appendChild(el);
+      if (label.offsetWidth > el.clientWidth - 2)
+        label.style.transform = 'scaleX(' + Math.max(0, (el.clientWidth - 2) / label.offsetWidth) + ')';
+    });
+    screenTimer = setTimeout(clearScreen, data.duration || 12000);
+  }
+  if (screenLayer) {
+    events.addEventListener('screen', function (e) { try { showScreen(JSON.parse(e.data)); } catch (err) {} });
+    events.addEventListener('screen-clear', clearScreen);
+    return;
+  }
   events.addEventListener('style', function (e) { try { apply(JSON.parse(e.data)); } catch (err) {} });
   events.addEventListener('subtitle', function (e) {
     try { var d = JSON.parse(e.data); show(d.text, d.duration, d.box); } catch (err) {}

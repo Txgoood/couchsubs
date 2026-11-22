@@ -162,7 +162,7 @@
 
                 <c:Card Title="Klavye kısayolları - hepsini değiştir" Margin="0,16,0,0">
                     <StackPanel>
-                        <TextBlock Text="Yedi işlevin tuşunu buradan ayrı ayrı değiştir. F1-F12 veya Num 0-9 seçebilirsin. Aynı tuş iki işlevde kullanılamaz."
+                        <TextBlock Text="Her işlev için farklı bir F1–F11 veya Num 0–9 tuşu seç."
                                    Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
                         <DockPanel Margin="0,0,0,10" LastChildFill="True">
                             <ComboBox x:Name="ScreenHotkeyPicker" Width="145" DockPanel.Dock="Right"
@@ -213,6 +213,7 @@
 
                 <c:Card Title="Ekranı çevir" Margin="0,16,0,0">
                     <StackPanel>
+                        <Button x:Name="ScreenActionButton" HorizontalAlignment="Left" Click="OnScreenAction" Margin="0,0,0,6" />
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
                                    Text="Oynarken yukarıda atadığın tuşa bas: ekrandaki bütün yazılar bir kez çevrilir; tekrar basınca kaldırılır." />
                     </StackPanel>
@@ -226,6 +227,11 @@
                             <Button x:Name="ObsCopy" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Margin="12,0,0,0" Click="OnObsCopy" />
                             <TextBox x:Name="ObsAddress" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
                         </DockPanel>
+                        <TextBlock Text="Menü ve ekran çevirisi katmanı" Margin="0,10,0,4" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="{t:T 'Copy'}" Margin="12,0,0,0" Click="OnObsScreenCopy" />
+                            <TextBox x:Name="ObsScreenAddress" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
+                        </DockPanel>
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
                                    Text="{t:T 'If OBS runs on another computer, use the network address of this PC instead of localhost. The overlay only shows subtitles while the translation is running.'}" />
                     </StackPanel>
@@ -233,6 +239,7 @@
 
                 <c:Card Title="Serbest alan" Margin="0,16,0,0">
                     <StackPanel>
+                        <Button x:Name="FreeAreaActionButton" HorizontalAlignment="Left" Click="OnFreeAreaAction" Margin="0,0,0,6" />
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
                                    Text="Oynarken yukarıda atadığın tuşa bas: görüntü bilgisayarda donar, çevirmek istediğin yeri fareyle seç. Esc kapatır." />
                         <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />

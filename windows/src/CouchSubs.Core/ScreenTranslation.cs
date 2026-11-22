@@ -18,9 +18,103 @@ public static class ScreenTranslation
     /// <param name="Translation">Parçaların çevirisi, her parça ayrı satırda.</param>
     public sealed record Item(string Source, string Translation, TextBox Box, double LineHeight)
     {
+        public OverlayPaint? Paint { get; init; }
         /// <summary>Birden çok parça var: TV satır satır, sola yaslı gösterir.</summary>
         public bool Paragraphs => Translation.Contains('\n');
     }
+
+    public sealed record OverlayPaint(string Left, string Right, string Foreground, bool Bold);
+
+    public static async Task<IReadOnlyList<Item>> TranslateOverlayAsync(
+        Frame frame, ITextReader reader, ITextTranslator translator,
+        CropRegion? exclude = null, Action<IReadOnlyList<Item>>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var reading = await Task.Run(() => reader.ReadLines(frame.Height < 900 ? frame.Scaled(2) : frame, false),
+            cancellationToken).ConfigureAwait(false);
+        var items = new List<Item>();
+        foreach (var line in OverlayLines(reading).Where(line => exclude is null || line.IsControllerHint ||
+                     !AmbientTextTranslation.IsDialogueRegion(line.Box!.Value, exclude))
+                     .Take(exclude is null ? MaxGroups : AmbientTextTranslation.MaxGroupsPerScan))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var target = (await translator.TranslateAsync(line.Text, cancellationToken).ConfigureAwait(false)).Trim();
+            if (target.Length == 0 || TextMatch.IsSimilar(TextMatch.Normalize(line.Text), TextMatch.Normalize(target), .90))
+                continue;
+            var box = line.Box!.Value;
+            items.Add(new Item(line.Text, target, box, box.Bottom - box.Top) { Paint = PaintFor(frame, line) });
+            progress?.Invoke([.. items]);
+        }
+        return items;
+    }
+
+    internal static IEnumerable<TextLine> OverlayLines(Reading reading)
+    {
+        foreach (var line in reading.Lines.OrderBy(line => line.Box?.Top))
+        {
+            if (line.Box is not { } box || box.Right <= box.Left || box.Bottom <= box.Top) continue;
+            var prompt = ButtonPrompts.IsPrompt(line.Text) || line.Words.Any(w => IsShortAction(w.Text));
+            var words = line.Words;
+            if (!words.Any(word => ButtonPrompts.IsMenuButton(word.Text, prompt)) &&
+                words.Count(word => IsShortAction(word.Text)) < 2)
+            {
+                var cleaned = OcrNoise.Clean(line.Text);
+                if (IsWords(cleaned)) yield return line with { Text = cleaned };
+                continue;
+            }
+            var part = new List<TextLine>();
+            for (var i = 0; i <= words.Count; i++)
+            {
+                var button = i < words.Count && ButtonPrompts.IsMenuButton(words[i].Text, prompt);
+                var startsAction = i < words.Count && prompt && IsShortAction(words[i].Text) &&
+                    part.Count == 1 && IsShortAction(part[0].Text);
+                if (i < words.Count && !button && !startsAction)
+                {
+                    part.Add(words[i]);
+                    continue;
+                }
+                var cleaned = OcrNoise.Clean(string.Join(' ', part.Select(word => word.Text)));
+                if (IsWords(cleaned) && part.All(word => word.Box is not null))
+                    yield return new TextLine(cleaned, part.Select(word => word.Box!.Value).Aggregate((a, b) => a.Union(b)))
+                        { IsControllerHint = true };
+                part.Clear();
+                if (startsAction) part.Add(words[i]);
+            }
+        }
+    }
+
+    private static bool IsShortAction(string value) =>
+        value.Equals("select", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("back", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("confirm", StringComparison.OrdinalIgnoreCase);
+
+    private static OverlayPaint PaintFor(Frame frame, TextLine line)
+    {
+        var box = line.Box!.Value;
+        var rowHeight = box.Bottom - box.Top;
+        var left = BackgroundAt(frame, box.Left, box.Top, box.Bottom, rowHeight);
+        var right = BackgroundAt(frame, box.Right, box.Top, box.Bottom, rowHeight);
+        bool light = ((left.R + right.R) * 3 + (left.G + right.G) * 6 + left.B + right.B) / 20 > 150;
+        return new OverlayPaint(Hex(left), Hex(right), light ? "#181820" : "#FFFFFF",
+            line.Text.Any(char.IsLetter) && line.Text.Where(char.IsLetter).All(char.IsUpper));
+    }
+
+    private static (int R, int G, int B) BackgroundAt(Frame frame, double x, double top, double bottom, double height)
+    {
+        var values = new List<(int R, int G, int B)>(18);
+        foreach (var y in new[] { top - height * .25, bottom + height * .25 })
+        for (var i = -4; i <= 4; i++)
+        {
+            var px = (int)(Math.Clamp(x + i * height * .15, 0, 1) * (frame.Width - 1));
+            var py = (int)(Math.Clamp(y, 0, 1) * (frame.Height - 1));
+            var index = py * frame.Stride + px * 4;
+            values.Add((frame.Pixels[index + 2], frame.Pixels[index + 1], frame.Pixels[index]));
+        }
+        return values.OrderBy(color => color.R * 3 + color.G * 6 + color.B).ElementAt(values.Count / 2);
+    }
+
+    private static string Hex((int R, int G, int B) c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
     /// <summary>Kalabalık ekranda TV'yi kutuyla doldurmamak ve çeviriyi uzatmamak için en çok bu kadar grup çevrilir.</summary>
     public const int MaxGroups = 30;

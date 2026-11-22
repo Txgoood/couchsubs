@@ -72,6 +72,27 @@ public class ScreenTranslationTests
     public void LinesWithoutPlacesAreSkipped() =>
         Assert.Empty(ScreenTranslation.Groups(new Reading([new TextLine("Find the blacksmith.")])));
 
+    [Theory]
+    [InlineData("✕", "O")]
+    [InlineData("", "@")]
+    [InlineData("", "")]
+    public async Task PositionedControllerLabelsTranslateWithoutCoveringTheirIcons(string x, string circle)
+    {
+        var words = new[] {
+            Line("SELECT", .63, .91, .71), Line(x, .72, .91, .74),
+            Line("BACK", .76, .91, .81), Line(circle, .82, .91, .84)
+        };
+        var menu = Line($"SELECT {x} BACK {circle}", .63, .91, .84) with
+            { Words = words.Where(word => word.Text.Length > 0).ToArray() };
+        var reading = new Reading([menu, Line("Ordinary subtitle.", .4, .8, .5)]);
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(reading),
+            new FakeTranslator(), new CropRegion());
+        Assert.Equal(["TR: SELECT", "TR: BACK"], items.Select(item => item.Translation));
+        Assert.Equal(words[0].Box!.Value, items[0].Box);
+        Assert.Equal(words[2].Box!.Value, items[1].Box);
+        Assert.All(items, item => Assert.NotNull(item.Paint));
+    }
+
     [Fact]
     public async Task EveryGroupIsTranslatedAndProgressIsReported()
     {

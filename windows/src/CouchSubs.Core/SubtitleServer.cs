@@ -162,7 +162,7 @@ public sealed class SubtitleServer(int port = 8787) : ISubtitleSender, IDisposab
     /// "Ekranı çevir" sonuçları: <c>screen</c> olayı her çeviriyi yazının yeri (<c>box</c>), tipik satır yüksekliği
     /// (<c>line</c>, ekrana oranla) ve çok parçalıysa <c>paragraphs</c> ile taşır. TV öncekinin yerine bunları koyar.
     /// </summary>
-    public void SendScreen(IReadOnlyList<ScreenTranslation.Item> items, int durationMs)
+    public void SendScreen(IReadOnlyList<ScreenTranslation.Item> items, int durationMs, bool obsOnly = false)
     {
         var list = items.Select(item =>
         {
@@ -173,13 +173,23 @@ public sealed class SubtitleServer(int port = 8787) : ISubtitleSender, IDisposab
                 ["text"] = item.Translation,
             };
             if (item.Paragraphs) json["paragraphs"] = true;
+            if (item.Paint is { } paint)
+                json["paint"] = new SortedDictionary<string, object>
+                {
+                    ["left"] = paint.Left,
+                    ["right"] = paint.Right,
+                    ["foreground"] = paint.Foreground,
+                    ["bold"] = paint.Bold
+                };
             return json;
         }).ToList();
-        Broadcast(Frame("screen", new SortedDictionary<string, object> { ["duration"] = durationMs, ["items"] = list }));
+        Broadcast(Frame("screen", new SortedDictionary<string, object> { ["duration"] = durationMs, ["items"] = list }),
+            obsOnly);
     }
 
     /// <summary>TV'deki "ekranı çevir" çevirilerini kaldırır (altyazıya dokunmaz).</summary>
-    public void ClearScreen() => Broadcast(Frame("screen-clear", new SortedDictionary<string, object>()));
+    public void ClearScreen(bool obsOnly = false) =>
+        Broadcast(Frame("screen-clear", new SortedDictionary<string, object>()), obsOnly);
 
     private static SortedDictionary<string, object> BoxJson(TextBox b) => new()
     {
@@ -343,10 +353,10 @@ public sealed class SubtitleServer(int port = 8787) : ISubtitleSender, IDisposab
     }
 
     /// <summary>Gönderim hatası alan bağlantı kopmuş sayılır ve listeden çıkarılır.</summary>
-    private void Broadcast(string frame)
+    private void Broadcast(string frame, bool obsOnly = false)
     {
         List<Client> targets;
-        lock (gate) targets = [.. clients];
+        lock (gate) targets = [.. clients.Where(client => !obsOnly || client.Viewer)];
         foreach (var client in targets)
             _ = Write(client, frame).ContinueWith(t => Remove(client), TaskContinuationOptions.OnlyOnFaulted);
     }

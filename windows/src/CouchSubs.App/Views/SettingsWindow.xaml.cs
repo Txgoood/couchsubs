@@ -36,9 +36,9 @@ public partial class SettingsWindow : Window
         var pickers = AllHotkeyPickers;
         for (int i = 0; i < pickers.Length; i++)
         {
-            foreach (var key in Enumerable.Range(0x70, 12).Concat(Enumerable.Range(0x60, 10)))
+            foreach (var key in Enumerable.Range(0x70, 11).Concat(Enumerable.Range(0x60, 10)))
             {
-                var label = key >= 0x70 ? "F" + (key - 0x6F) : "Num " + (key - 0x60);
+                var label = HotkeyAssignments.KeyLabel(key);
                 pickers[i].Items.Add(new ComboBoxItem
                 {
                     Content = label,
@@ -47,6 +47,7 @@ public partial class SettingsWindow : Window
                 });
             }
         }
+        UpdateActionKeys();
         TextSize.Value = Math.Clamp(settings.Style.FontSize, TextSize.Minimum, TextSize.Maximum);
         TextSizeValue.Text = ((int)TextSize.Value).ToString();
         Position.Value = settings.Style.BottomPercent;
@@ -62,9 +63,12 @@ public partial class SettingsWindow : Window
         foreach (var (code, name) in Languages.Where(l => controller.SupportsLanguage(l.Code)))
             GameLanguage.Items.Add(new ComboBoxItem { Content = Localizer.Current[name], Tag = code, IsSelected = code == settings.SourceLanguage });
         LanguageCard.Visibility = GameLanguage.Items.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-        (settings.FreeAreaTarget switch { ResultTarget.Pc => FreePc, ResultTarget.Both => FreeBoth, _ => FreeTv }).IsChecked = true;
+        (controller.IsPcMode ? FreePc : settings.FreeAreaTarget switch
+            { ResultTarget.Pc => FreePc, ResultTarget.Both => FreeBoth, _ => FreeTv }).IsChecked = true;
+        FreeTv.IsEnabled = FreeBoth.IsEnabled = !controller.IsPcMode;
         Region.Frame = controller.LastFrame;
         ObsAddress.Text = $"http://localhost:{controller.ServerPort}/obs";
+        ObsScreenAddress.Text = $"{ObsAddress.Text}?layer=screen";
         ShowArea(0);
         // Num 8: oyunun o anki görüntüsü önizlemeye alınır.
         controller.SnapshotRequested += OnSnapshot;
@@ -108,11 +112,40 @@ public partial class SettingsWindow : Window
             }
             finally { loading = false; }
             MessageBox.Show(
-                "Tuş çakışması veya geçersiz kısayol. Her işlev için farklı bir F1-F12 veya Num 0-9 tuşu seç.",
+                "Tuş çakışması veya geçersiz kısayol. Her işlev için farklı bir F1–F11 veya Num 0–9 tuşu seç.",
                 "Kısayol çakışması", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         controller.Settings = mapping.ApplyTo(controller.Settings);
+        UpdateActionKeys();
+    }
+
+    private void UpdateActionKeys()
+    {
+        var mapping = HotkeyAssignments.From(controller.Settings);
+        ScreenActionButton.Content = $"Ekranı çevir · {HotkeyAssignments.KeyLabel(mapping.Screen)}";
+        FreeAreaActionButton.Content = $"Alan seç · {HotkeyAssignments.KeyLabel(mapping.FreeArea)}";
+        ScreenActionButton.IsEnabled = FreeAreaActionButton.IsEnabled = controller.IsRunning;
+    }
+
+    private async void OnScreenAction(object sender, RoutedEventArgs e)
+    {
+        Close();
+        await Task.Delay(350);
+        await controller.TranslateScreenAsync();
+    }
+
+    private async void OnFreeAreaAction(object sender, RoutedEventArgs e)
+    {
+        Close();
+        await Task.Delay(350);
+        FreeAreaWindow.Open(controller);
+    }
+
+    private void OnObsScreenCopy(object sender, RoutedEventArgs e)
+    {
+        try { Clipboard.SetText(ObsScreenAddress.Text); }
+        catch (System.Runtime.InteropServices.COMException) { }
     }
 
     private void ShowDeepL()

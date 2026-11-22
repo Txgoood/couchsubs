@@ -3,17 +3,28 @@ namespace CouchSubs.Shell;
 
 /// <summary>
 /// Seven customizable global hotkeys, persisted in UserSettings.
-/// F1..F12 and NumPad0..9 are accepted; every action must have a unique key.
-/// No existing user setting is reset when this feature is installed.
+/// F1..F11 and NumPad0..9 are accepted; Windows reserves F12.
 /// </summary>
 public sealed record HotkeyAssignments(
     int Screen, int FreeArea, int Pause, int Extra1, int Extra2, int Extra3, int Snapshot)
 {
-    public static HotkeyAssignments From(UserSettings s) => new(
-        s.ScreenHotkey, s.FreeAreaHotkey, s.PauseHotkey,
-        s.ExtraRegion1Hotkey, s.ExtraRegion2Hotkey, s.ExtraRegion3Hotkey, s.SnapshotHotkey);
+    public static HotkeyAssignments From(UserSettings s)
+    {
+        int[] keys = [s.ScreenHotkey, s.FreeAreaHotkey, s.PauseHotkey,
+            s.ExtraRegion1Hotkey, s.ExtraRegion2Hotkey, s.ExtraRegion3Hotkey, s.SnapshotHotkey];
+        var used = keys.Where(IsSupportedKey).ToHashSet();
+        for (var i = 0; i < keys.Length; i++)
+            if (keys[i] == 0x7B)
+            {
+                keys[i] = Enumerable.Range(0x70, 10).Reverse().First(key => !used.Contains(key));
+                used.Add(keys[i]);
+            }
+        return new(keys[0], keys[1], keys[2], keys[3], keys[4], keys[5], keys[6]);
+    }
 
-    public static bool IsSupportedKey(int key) => key is >= 0x70 and <= 0x7B or >= 0x60 and <= 0x69;
+    public static bool IsSupportedKey(int key) => key is >= 0x70 and <= 0x7A or >= 0x60 and <= 0x69;
+
+    public static string KeyLabel(int key) => key >= 0x70 ? $"F{key - 0x6F}" : $"Num {key - 0x60}";
 
     public bool IsValid =>
         AllKeys().All(IsSupportedKey) && AllKeys().Distinct().Count() == 7;

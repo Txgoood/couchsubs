@@ -53,7 +53,12 @@ public sealed class FreeAreaWindow : Window
         Title = "CouchSubs";
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
-        WindowState = WindowState.Maximized;
+        if (controller.IsPcMode)
+        {
+            SourceInitialized += (_, _) => CouchSubs.App.Services.WindowsGameScreenCapture.PlaceOverlay(
+                new System.Windows.Interop.WindowInteropHelper(this).Handle, controller.Settings.PcDisplayId);
+        }
+        else WindowState = WindowState.Maximized;
         Topmost = true;
         ShowInTaskbar = false;
         Background = Brushes.Black;
@@ -180,7 +185,7 @@ public sealed class FreeAreaWindow : Window
         }
 
         // Yalnız TV'de gösteriliyorsa bilgisayar ekranının işi bitmiştir; pencere kendiliğinden kapanır.
-        if (outcome == ExtraRegionOutcome.Shown && controller.Settings.FreeAreaTarget == ResultTarget.Tv)
+        if (outcome == ExtraRegionOutcome.Shown && !controller.IsPcMode && controller.Settings.FreeAreaTarget == ResultTarget.Tv)
         {
             await Task.Delay(700);
             if (token == version && IsLoaded) Close();

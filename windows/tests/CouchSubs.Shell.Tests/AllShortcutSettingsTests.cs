@@ -12,7 +12,7 @@ public sealed class AllShortcutSettingsTests
     {
         var mapping = HotkeyAssignments.From(new UserSettings());
         Assert.True(mapping.IsValid);
-        Assert.Equal(new[] { 0x7A, 0x7B, 0x60, 0x61, 0x62, 0x63, 0x68 }, mapping.AllKeys());
+        Assert.Equal(new[] { 0x7A, 0x79, 0x60, 0x61, 0x62, 0x63, 0x68 }, mapping.AllKeys());
     }
 
     [Fact]
@@ -33,21 +33,32 @@ public sealed class AllShortcutSettingsTests
         Assert.False(new HotkeyAssignments(0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x41).IsValid);
         Assert.True(HotkeyAssignments.IsSupportedKey(0x60));
         Assert.True(HotkeyAssignments.IsSupportedKey(0x69));
-        Assert.True(HotkeyAssignments.IsSupportedKey(0x7B));
+        Assert.False(HotkeyAssignments.IsSupportedKey(0x7B));
         Assert.False(HotkeyAssignments.IsSupportedKey(0x41));
     }
 
     [Fact]
-    public void OldJsonRetainsF11F12AndOriginalNumpadDefaults()
+    public void OldJsonReplacesReservedF12WithoutChangingOtherKeys()
     {
         var settings = JsonSerializer.Deserialize<UserSettings>(
             "{\"ScreenHotkey\":122,\"FreeAreaHotkey\":123,\"AutoWorldText\":true}")!;
         Assert.True(settings.AutoWorldText);
-        Assert.True(HotkeyAssignments.From(settings).IsValid);
+        var mapping = HotkeyAssignments.From(settings);
+        Assert.True(mapping.IsValid);
+        Assert.Equal(0x79, mapping.FreeArea);
         Assert.Equal(0x60, settings.PauseHotkey);
         Assert.Equal(0x61, settings.ExtraRegion1Hotkey);
         Assert.Equal(0x62, settings.ExtraRegion2Hotkey);
         Assert.Equal(0x63, settings.ExtraRegion3Hotkey);
         Assert.Equal(0x68, settings.SnapshotHotkey);
+    }
+
+    [Fact]
+    public void ReservedF12MigratesToAnUnassignedFunctionKey()
+    {
+        var mapping = HotkeyAssignments.From(new UserSettings { FreeAreaHotkey = 0x7B, ScreenHotkey = 0x79 });
+        Assert.Equal(0x79, mapping.Screen);
+        Assert.Equal(0x78, mapping.FreeArea);
+        Assert.True(mapping.IsValid);
     }
 }

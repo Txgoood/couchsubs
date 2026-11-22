@@ -253,7 +253,7 @@ public class AppControllerTests
         store.Save(new UserSettings { Source = GameSource.Pc, AutoWorldText = true });
         var controller = Make(services: services, settings: store);
         int received = 0;
-        controller.PcWorldTextReady += (items, _) =>
+        controller.PcWorldTextReady += (items, _, _) =>
         {
             if (items.Any(item => item.Translation.Contains("TR: Inventory")))
                 Interlocked.Increment(ref received);

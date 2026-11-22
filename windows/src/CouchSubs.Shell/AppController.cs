@@ -144,7 +144,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public string? PcCaptureError { get; private set; }
     public event Action<string, int, string>? PcSubtitleReady;
     /// <summary>PC üzerinde diyalogdan ayrı envanter/menü/nesne çevirileri.</summary>
-    public event Action<IReadOnlyList<ScreenTranslation.Item>, string>? PcWorldTextReady;
+    public event Action<IReadOnlyList<ScreenTranslation.Item>, string, int>? PcWorldTextReady;
     public event Action? PcWorldTextClear;
     public bool IsRunning { get => isRunning; private set => Set(ref isRunning, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(TvTone)]); }
     public bool IsStarting { get => isStarting; private set => Set(ref isStarting, value); }
@@ -193,6 +193,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (!string.Equals(old.Dubbing.ActiveGame, value.Dubbing.ActiveGame,
                     StringComparison.OrdinalIgnoreCase))
                 services.SpeakerDetector?.ConfigureGame(value.Dubbing.ActiveGame);
+            if (old.AutoWorldText && !value.AutoWorldText && screenWork is null &&
+                DateTime.UtcNow >= screenShownUntil)
+            {
+                server.ClearScreen(obsOnly: IsPcMode);
+                PcWorldTextClear?.Invoke();
+            }
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
                               || old.OnlineTranslation != value.OnlineTranslation || old.AutoWorldText != value.AutoWorldText))
             {
@@ -639,7 +645,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// bilgisayarda gösterilmek üzere her durumda döner (serbest alan penceresi kendisi gösterir).
     /// </summary>
     public Task<(ExtraRegionOutcome Outcome, RegionTranslation.Result? Result)> TranslateAreaAsync(Frame frame, CropRegion region) =>
-        RunRegionAsync(frame, region, settings.FreeAreaTarget != ResultTarget.Pc, false);
+        RunRegionAsync(frame, region, !IsPcMode && settings.FreeAreaTarget != ResultTarget.Pc, false);
 
     private async Task<(ExtraRegionOutcome Outcome, RegionTranslation.Result? Result)> RunRegionAsync(Frame frame, CropRegion region, bool toTv, bool toPcPopup)
     {
@@ -722,21 +728,31 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
         using var work = new CancellationTokenSource();
         screenWork = work;
+        var pc = IsPcMode;
+        var display = settings.PcDisplayId;
+        if (pc) PcWorldTextClear?.Invoke();
         server.SendStyle(settings.Style);
-        server.SendSubtitle(text["Translating the screen…"], 2500);
+        if (!pc) server.SendSubtitle(text["Translating the screen…"], 2500);
         try
         {
             var translator = MakeTranslator();
-            var items = await ScreenTranslation.TranslateAsync(frame, reader, translator, shown =>
+            var items = await ScreenTranslation.TranslateOverlayAsync(frame, reader, translator, progress: shown =>
             {
                 if (work.IsCancellationRequested) return;
-                server.SendScreen(shown, ScreenTranslation.DisplayMilliseconds(shown));
-                screenShownUntil = DateTime.UtcNow.AddMilliseconds(ScreenTranslation.DisplayMilliseconds(shown));
-            }, work.Token);
-            server.Clear();
+                var duration = ScreenTranslation.DisplayMilliseconds(shown);
+                server.SendScreen(shown, duration, obsOnly: pc);
+                screenShownUntil = DateTime.UtcNow.AddMilliseconds(duration);
+                if (pc) post(() =>
+                {
+                    if (!work.IsCancellationRequested && screenShownUntil != default)
+                        PcWorldTextReady?.Invoke(shown, display, duration);
+                });
+            }, cancellationToken: work.Token);
+            if (!pc) server.Clear();
             if (items.Count == 0)
             {
-                server.SendSubtitle(text["No text found on the screen."], 2500);
+                if (pc) PcResultReady?.Invoke(text["No text found on the screen."], 2500);
+                else server.SendSubtitle(text["No text found on the screen."], 2500);
                 return ScreenOutcome.NoText;
             }
             return ScreenOutcome.Shown;
@@ -747,13 +763,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         catch (TranslatorException error)
         {
-            server.Clear();
+            if (!pc) server.Clear();
             post(() => TranslatorStatus = error.Status);
             return ScreenOutcome.TranslatorUnavailable;
         }
         catch
         {
-            server.Clear();
+            if (!pc) server.Clear();
             return ScreenOutcome.Failed;
         }
         finally
@@ -765,8 +781,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private void HideScreen()
     {
         screenShownUntil = default;
-        server.ClearScreen();
-        server.Clear();
+        PcWorldTextClear?.Invoke();
+        server.ClearScreen(obsOnly: IsPcMode);
+        if (!IsPcMode) server.Clear();
     }
 
     /// <summary>Kurulumu baştan başlatır (kayıtlı her şeyi siler).</summary>
@@ -1180,15 +1197,16 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             try
             {
-                var results = await AmbientTextTranslation.TranslateAsync(
-                    frame, reader, translator, subtitleRegion, cancellation).ConfigureAwait(false);
-                if (cancellation.IsCancellationRequested) return;
+                var results = await ScreenTranslation.TranslateOverlayAsync(
+                    frame, reader, translator, subtitleRegion, cancellationToken: cancellation).ConfigureAwait(false);
+                if (cancellation.IsCancellationRequested || screenWork is not null ||
+                    DateTime.UtcNow < screenShownUntil) return;
                 if (results.Count == 0)
                 {
                     if (++worldNoText >= 2 && lastWorldKey.Length != 0)
                     {
                         lastWorldKey = "";
-                        server.ClearScreen();
+                        server.ClearScreen(obsOnly: pc);
                         if (pc) post(() => PcWorldTextClear?.Invoke());
                     }
                     return;
@@ -1198,10 +1216,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 lastWorldKey = key;
                 // Her taramada yenile: TV 'screen' katmanı 9 sn sonunda kapanır; sabit menü açıkken
                 // çeviri kaybolmasın. PC katmanı aynı pencerenin metnini günceller, dublaja dokunmaz.
-                if (pc)
-                    post(() => PcWorldTextReady?.Invoke(results, display));
-                else
-                    server.SendScreen(results, 9000);
+                server.SendScreen(results, 9000, obsOnly: pc);
+                if (pc) post(() =>
+                {
+                    if (!cancellation.IsCancellationRequested && screenWork is null && DateTime.UtcNow >= screenShownUntil)
+                        PcWorldTextReady?.Invoke(results, display, 9000);
+                });
             }
             catch (OperationCanceledException) { }
             catch (Exception) { /* İkincil yazı okuma hatası konuşma dublajını durdurmaz. */ }

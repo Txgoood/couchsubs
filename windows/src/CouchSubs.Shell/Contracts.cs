@@ -59,8 +59,8 @@ public sealed record UserSettings
     public DubbingSettings Dubbing { get; init; } = new();
     /// <summary>Global screen translator shortcut, default F11 (VK 0x7A).</summary>
     public int ScreenHotkey { get; init; } = 0x7A;
-    /// <summary>Global free-area translator shortcut, default F12 (VK 0x7B).</summary>
-    public int FreeAreaHotkey { get; init; } = 0x7B;
+    /// <summary>Global free-area translator shortcut, default F10.</summary>
+    public int FreeAreaHotkey { get; init; } = 0x79;
     /// <summary>Pause or resume subtitles; defaults to Num0.</summary>
     public int PauseHotkey { get; init; } = 0x60;
     /// <summary>One-shot translation for region 1; defaults to Num1.</summary>

@@ -38,6 +38,9 @@ internal sealed class WindowsGameScreenCapture : IGameScreenCapture
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
+
     private sealed record FoundDisplay(string Id, Rectangle Bounds, bool Primary);
 
     private static List<FoundDisplay> Enumerate()
@@ -66,6 +69,13 @@ internal sealed class WindowsGameScreenCapture : IGameScreenCapture
         var screen = screens.FirstOrDefault(s => s.Id == id)
             ?? screens.FirstOrDefault(s => s.Primary) ?? screens[0];
         return screen.Bounds;
+    }
+
+    internal static void PlaceOverlay(nint handle, string displayId)
+    {
+        var bounds = BoundsFor(displayId);
+        const uint noActivateOrReorder = 0x0014;
+        SetWindowPos(handle, 0, bounds.Left, bounds.Top, bounds.Width, bounds.Height, noActivateOrReorder);
     }
 
     public IReadOnlyList<GameDisplay> Displays() =>

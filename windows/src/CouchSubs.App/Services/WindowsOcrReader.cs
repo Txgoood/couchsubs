@@ -79,16 +79,16 @@ public sealed class WindowsOcrReader : ITextReader
             if (!end && !Reading.IsSeparateText(words[index].BoundingRect.X - (words[index - 1].BoundingRect.X + words[index - 1].BoundingRect.Width), lineHeight, width))
                 continue;
             var part = words.GetRange(start, index - start);
-            TextBox? box = null;
-            foreach (var word in part)
+            var wordBoxes = part.Select(word =>
             {
                 var r = word.BoundingRect;
-                var wordBox = new TextBox(r.X / width, r.Y / height, (r.X + r.Width) / width, (r.Y + r.Height) / height);
-                box = box?.Union(wordBox) ?? wordBox;
-            }
+                return new TextLine(word.Text, new TextBox(r.X / width, r.Y / height,
+                    (r.X + r.Width) / width, (r.Y + r.Height) / height));
+            }).ToArray();
+            var box = wordBoxes.Select(word => word.Box!.Value).Aggregate((a, b) => a.Union(b));
             // Bölünmeyen satırın metni Windows'un verdiği gibi kalır (boşluksuz yazılan dillerde sözcükler birleşik).
             var text = start == 0 && end ? line.Text : string.Join(' ', part.Select(word => word.Text));
-            yield return new TextLine(text.Trim(), box);
+            yield return new TextLine(text.Trim(), box) { Words = wordBoxes };
             start = index;
         }
     }

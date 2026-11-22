@@ -30,7 +30,11 @@ public readonly record struct TextBox(double Left, double Top, double Right, dou
 }
 
 /// <summary>Yazı tanımanın bulduğu bir satır; kutu okunan alana göredir, bilinmiyorsa null.</summary>
-public sealed record TextLine(string Text, TextBox? Box = null);
+public sealed record TextLine(string Text, TextBox? Box = null)
+{
+    public IReadOnlyList<TextLine> Words { get; init; } = [];
+    internal bool IsControllerHint { get; init; }
+}
 
 /// <summary>Bir karenin okunan satırları, yukarıdan aşağı (Mac: CouchSubsCore/Reading.swift).</summary>
 public sealed class Reading
@@ -150,6 +154,13 @@ public static class ButtonPrompts
 
     private static readonly char[] Separators = [' ', '\t', '+', '/'];
     private static readonly char[] Brackets = ['(', ')', '[', ']', '{', '}', '<', '>', '「', '」'];
+
+    internal static bool IsMenuButton(string word, bool prompt)
+    {
+        var token = word.Trim(Brackets);
+        return token == "@" || !string.Equals(token, "OPTIONS", StringComparison.OrdinalIgnoreCase) &&
+            (Buttons.Contains(token) || (prompt && Lookalikes.Contains(token)));
+    }
 
     public static bool IsPrompt(string line)
     {
