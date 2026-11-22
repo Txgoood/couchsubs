@@ -155,7 +155,7 @@
                         <CheckBox x:Name="AutoWorldText" Content="Menü, envanter, harita ve nesne yazılarını otomatik Türkçeye çevir"
                                   Checked="OnAutoWorldText" Unchecked="OnAutoWorldText"
                                   Foreground="{DynamicResource textPrimaryBrush}" />
-                        <TextBlock Text="Konuşma ve dublaj bağımsız kalır. Yeni yazılar yaklaşık 3 saniyede bir taranır. Karakter konuşuyorsa Türkçe dublaj devam eder; menü yazıları ayrı gösterilir. Bu seçenek performans için kapatılabilir."
+                        <TextBlock Text="Menü yazıları değiştikçe yenilenir. Oyun altyazısı ve Türkçe dublaj ayrı çalışır."
                                    Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
                     </StackPanel>
                 </c:Card>

@@ -167,6 +167,60 @@ public class ScreenTranslationTests
     }
 
     [Fact]
+    public async Task AutomaticOverlaySkipsCurrentDialogueBeforeItsTranslationIsReady()
+    {
+        var subtitle = Line("Where are we going now?", .36, .82, .64);
+        var menu = Line("Color adjustments", .19, .89, .4);
+        var hint = Line("PAUSE PREVIEW", .65, .91, .8);
+        var reading = new Reading([subtitle, menu, hint]);
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(reading),
+            new FakeTranslator(), new CropRegion(), englishToTurkish: true, currentSubtitle: () => subtitle);
+        Assert.Equal(["PAUSE PREVIEW", "Color adjustments"], items.Select(item => item.Source));
+        Assert.Equal("ÖNİZLEMEYİ DURAKLAT", items[0].Translation);
+    }
+
+    [Fact]
+    public async Task AutomaticOverlayReservesNewCenteredDialogueWhileSubtitleOcrCatchesUp()
+    {
+        var reading = new Reading([
+            Line("Andrew: We need to leave.", .34, .82, .66),
+            Line("Effects intensity", .18, .86, .42)
+        ]);
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(reading),
+            new FakeTranslator(), new CropRegion(), currentSubtitle: () => null);
+        Assert.Equal("Effects intensity", Assert.Single(items).Source);
+    }
+
+    [Fact]
+    public void LocalMenuTextChangeIsDetectedEvenWhenOverallScreenMatches()
+    {
+        var before = Frame.Blank(200, 110);
+        var after = Frame.Blank(200, 110);
+        for (var y = 30; y < 40; y++)
+        for (var x = 144; x < 180; x += 4)
+        {
+            var offset = y * before.Stride + x * 4;
+            Array.Fill(before.Pixels, (byte)230, offset, 3);
+            Array.Fill(after.Pixels, (byte)230, offset + 4, 3);
+        }
+
+        Assert.True(ScreenTranslation.SameScreen(before, after));
+        Assert.False(ScreenTranslation.SameTextRegion(before, after, new TextBox(.7, .25, .91, .38)));
+        Assert.True(ScreenTranslation.SameTextRegion(before, after, new TextBox(.1, .25, .4, .38)));
+    }
+
+    [Fact]
+    public async Task ChangedPanelSkipsItsPendingResultButKeepsTheUnchangedMenuLabel()
+    {
+        var moves = Line("Previous explanation", .6, .2, .8);
+        var stays = Line("Settings", .12, .05, .28);
+        var changedChecks = 0;
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(new Reading([moves, stays])),
+            new FakeTranslator(), isRegionCurrent: box => box != moves.Box!.Value || ++changedChecks == 1);
+        Assert.Equal("Settings", Assert.Single(items).Source);
+    }
+
+    [Fact]
     public async Task TextThatTranslatesToItselfIsNotShown()
     {
         var items = await ScreenTranslation.TranslateAsync(Image, new LinesReader(new Reading([

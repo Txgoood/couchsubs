@@ -158,6 +158,30 @@ public class SubtitlePipelineTests
     }
 
     [Fact]
+    public async Task CurrentSubtitleExposesTheSourceWhileTranslationIsPending()
+    {
+        var translator = new GatedTranslator();
+        var sender = new FakeSender();
+        var reading = new Reading([new TextLine("We should go now.", new TextBox(.25, .5, .75, .65))]);
+        var pipeline = new SubtitlePipeline(new LinesReader(reading), translator, sender);
+        var region = new CropRegion(Top: .6, Bottom: 1, Left: .1, Right: .9);
+        await pipeline.ProcessAsync(Image, region);
+        try
+        {
+            Assert.Empty(sender.Sent);
+            Assert.Equal("We should go now.", pipeline.CurrentSubtitle?.Text);
+            Assert.Equal(.8, pipeline.CurrentSubtitle!.Box!.Value.Top, 6);
+            pipeline.Reset();
+            Assert.Null(pipeline.CurrentSubtitle);
+        }
+        finally
+        {
+            translator.Open();
+            await pipeline.WaitForTranslationsAsync();
+        }
+    }
+
+    [Fact]
     public void CenterStripLinesAreReportedInRegionCoordinates()
     {
         var reading = ReadingFallback.FirstLines(Image, candidate => candidate.Width == 64

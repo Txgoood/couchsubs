@@ -88,13 +88,14 @@ internal sealed class FakePcScreens : IGameScreenCapture
 {
     public int Captures;
     public string LastDisplay = "";
+    public Frame? CurrentFrame;
     public IReadOnlyList<GameDisplay> Displays() =>
         [new("\\\\.\\DISPLAY1", "MSI Laptop", true), new("\\\\.\\DISPLAY2", "Agon OLED", false)];
     public Frame Capture(string displayId)
     {
         LastDisplay = displayId;
         Interlocked.Increment(ref Captures);
-        return Frame.Blank(64, 64);
+        return Volatile.Read(ref CurrentFrame) ?? Frame.Blank(64, 64);
     }
 }
 
@@ -266,6 +267,45 @@ public class AppControllerTests
         Assert.Empty(services.Streams);
         controller.Stop();
         controller.Dispose();
+    }
+
+    [Fact]
+    public async Task PcWorldTextRemovesChangedSettingsPanelAndKeepsAnUnchangedMenu()
+    {
+        var explanatoryBox = new TextBox(.7, .25, .91, .38);
+        var services = new FakeServices
+        {
+            ReaderLines = new Reading([
+                new TextLine("Inventory", new TextBox(.06, .06, .25, .12)),
+                new TextLine("Previous camera description", explanatoryBox)
+            ])
+        };
+        var screen = (FakePcScreens)services.GameScreen!;
+        var before = Frame.Blank(200, 110);
+        var after = Frame.Blank(200, 110);
+        for (var y = 30; y < 40; y++)
+        for (var x = 144; x < 180; x += 4)
+        {
+            var offset = y * before.Stride + x * 4;
+            Array.Fill(before.Pixels, (byte)230, offset, 3);
+            Array.Fill(after.Pixels, (byte)230, offset + 4, 3);
+        }
+        screen.CurrentFrame = before;
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { Source = GameSource.Pc, AutoWorldText = true });
+        using var controller = Make(services: services, settings: settings);
+        var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pruned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.PcWorldTextReady += (items, _, _) =>
+        {
+            if (items.Count == 2) first.TrySetResult();
+            else if (ReferenceEquals(Volatile.Read(ref screen.CurrentFrame), after) &&
+                items.Count == 1 && items[0].Source == "Inventory") pruned.TrySetResult();
+        };
+        await controller.StartAsync();
+        await first.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Volatile.Write(ref screen.CurrentFrame, after);
+        await pruned.Task.WaitAsync(TimeSpan.FromSeconds(3));
     }
 
     [Fact]

@@ -69,11 +69,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private ITextReader? worldReader;
     private ITextTranslator? worldTranslator;
     private CancellationTokenSource worldWork = new();
+    private CancellationTokenSource? worldScanWork;
     private int worldBusy;
     private DateTime nextWorldScan;
     private Frame? latestScreenFrame;
-    private Frame? worldOverlayFrame;
+    private ScreenOverlay? worldOverlay;
+    private int worldRevision;
     private long nextOverlayCheck;
+    private sealed record ScreenOverlay(Frame Frame, IReadOnlyList<ScreenTranslation.Item> Items);
     private Dubber? dubber;
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
@@ -707,6 +710,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>TV'deki ekran çevirilerinin kalkacağı an; bu andan önce yeniden basmak onları kaldırır.</summary>
     private DateTime screenShownUntil;
     private Frame? screenSource;
+    private ScreenOverlay? manualOverlay;
     private bool EnglishToTurkishScreen => settings.SourceLanguage == "en" && settings.TargetLanguage == "tr";
 
     /// <summary>
@@ -735,6 +739,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var pc = IsPcMode;
         var display = settings.PcDisplayId;
         screenSource = frame;
+        worldScanWork?.Cancel();
         ClearWorldOverlay();
         server.SendStyle(settings.Style);
         if (!pc) server.SendSubtitle(text["Translating the screen…"], 2500);
@@ -747,13 +752,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 {
                     if (work.IsCancellationRequested || !ReferenceEquals(screenSource, frame) || !IsCurrentScreen(frame))
                         return;
-                    var duration = ScreenTranslation.DisplayMilliseconds(shown);
+                    var visible = KeepCurrentItems(frame, shown);
+                    if (visible.Count == 0) return;
+                    var duration = ScreenTranslation.DisplayMilliseconds(visible);
                     screenShownUntil = DateTime.UtcNow.AddMilliseconds(duration);
-                    server.SendScreen(shown, duration, obsOnly: pc);
-                    if (pc) PcWorldTextReady?.Invoke(shown, display, duration);
+                    manualOverlay = new ScreenOverlay(frame, visible);
+                    PublishOverlay(visible, duration, pc, display);
                 });
             }, cancellationToken: work.Token, isCurrent: () => IsCurrentScreen(frame),
-                englishToTurkish: EnglishToTurkishScreen);
+                englishToTurkish: EnglishToTurkishScreen, isRegionCurrent: box => IsCurrentTextRegion(frame, box));
             if (work.IsCancellationRequested || !IsCurrentScreen(frame)) return ScreenOutcome.Cleared;
             if (!pc) server.Clear();
             if (items.Count == 0)
@@ -788,6 +795,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private void HideScreen(bool clearSubtitle = true)
     {
         screenSource = null;
+        manualOverlay = null;
         screenShownUntil = default;
         PcWorldTextClear?.Invoke();
         server.ClearScreen(obsOnly: IsPcMode);
@@ -796,7 +804,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     private void ClearWorldOverlay()
     {
-        worldOverlayFrame = null;
+        worldOverlay = null;
         server.ClearScreen(obsOnly: IsPcMode);
         if (IsPcMode) PcWorldTextClear?.Invoke();
     }
@@ -804,14 +812,32 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private bool IsCurrentScreen(Frame frame) =>
         Volatile.Read(ref latestScreenFrame) is not { } latest || ScreenTranslation.SameScreen(frame, latest);
 
+    private bool IsCurrentTextRegion(Frame frame, TextBox box) =>
+        Volatile.Read(ref latestScreenFrame) is not { } latest || ScreenTranslation.SameTextRegion(frame, latest, box);
+
+    private IReadOnlyList<ScreenTranslation.Item> KeepCurrentItems(Frame source,
+        IReadOnlyList<ScreenTranslation.Item> items, TextLine? subtitle = null)
+    {
+        if (Volatile.Read(ref latestScreenFrame) is not { } latest) return items;
+        return items.Where(item => ScreenTranslation.SameTextRegion(source, latest, item.Box) &&
+            !ScreenTranslation.IsActiveSubtitle(new TextLine(item.Source, item.Box), subtitle)).ToArray();
+    }
+
+    private void PublishOverlay(IReadOnlyList<ScreenTranslation.Item> items, int duration, bool pc, string display)
+    {
+        server.SendScreen(items, duration, obsOnly: pc);
+        if (pc) PcWorldTextReady?.Invoke(items, display, duration);
+    }
+
     private void RefreshScreenOverlay()
     {
         var now = Environment.TickCount64;
         if (now < nextOverlayCheck) return;
-        nextOverlayCheck = now + 200;
+        nextOverlayCheck = now + 100;
         if (screenWork is null && screenShownUntil != default && DateTime.UtcNow >= screenShownUntil)
         {
             screenSource = null;
+            manualOverlay = null;
             screenShownUntil = default;
         }
         if (screenSource is { } manual && !IsCurrentScreen(manual))
@@ -821,11 +847,36 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             HideScreen(clearSubtitle: false);
             nextWorldScan = default;
         }
-        if (worldOverlayFrame is { } automatic && !IsCurrentScreen(automatic))
+        if (manualOverlay is { } shown)
         {
-            ClearWorldOverlay();
-            nextWorldScan = default;
+            var current = KeepCurrentItems(shown.Frame, shown.Items);
+            if (current.Count == 0)
+            {
+                screenWork?.Cancel();
+                screenWork = null;
+                HideScreen(clearSubtitle: false);
+                nextWorldScan = default;
+            }
+            else if (current.Count != shown.Items.Count)
+            {
+                manualOverlay = shown with { Items = current };
+                var remaining = (int)Math.Max(1, (screenShownUntil - DateTime.UtcNow).TotalMilliseconds);
+                PublishOverlay(current, remaining, IsPcMode, settings.PcDisplayId);
+            }
         }
+        if (worldOverlay is not { } automatic) return;
+        var remainingItems = IsCurrentScreen(automatic.Frame) ?
+            KeepCurrentItems(automatic.Frame, automatic.Items, pipeline?.CurrentSubtitle) : [];
+        if (remainingItems.Count == automatic.Items.Count) return;
+        if (remainingItems.Count == 0) ClearWorldOverlay();
+        else
+        {
+            worldOverlay = automatic with { Items = remainingItems };
+            PublishOverlay(remainingItems, 9000, IsPcMode, settings.PcDisplayId);
+        }
+        Interlocked.Increment(ref worldRevision);
+        worldScanWork?.Cancel();
+        nextWorldScan = default;
     }
 
     /// <summary>Kurulumu baştan başlatır (kayıtlı her şeyi siler).</summary>
@@ -1006,7 +1057,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         worldWork = new CancellationTokenSource();
         worldReader = null;
         worldTranslator = null;
-        worldOverlayFrame = null;
+        worldOverlay = null;
         Volatile.Write(ref latestScreenFrame, null);
         server.ClearScreen();
         post(() => PcWorldTextClear?.Invoke());
@@ -1038,6 +1089,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         screenWork?.Cancel();
         screenWork = null;
         screenSource = null;
+        manualOverlay = null;
         if (DateTime.UtcNow < screenShownUntil) server.ClearScreen();
         screenShownUntil = default;
         SubtitlesPaused = false;
@@ -1223,8 +1275,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Ayrı OCR/çeviri hattı. Ses üretmez, dublajı kesmez, konuşma altyazısının alanını atlar.
-    /// 3 saniyelik tarama ve tek uçuş kuralı ana oyun/altyazı işleme hattını korur.
+    /// Ayrı OCR/çeviri hattı. Aynı anda tek menü taraması sürer, sonuçlar hazır oldukça gösterilir.
     /// </summary>
     private void ScheduleWorldText(Frame frame)
     {
@@ -1232,16 +1283,19 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (screenWork is not null || DateTime.UtcNow < screenShownUntil) return;
         if (DateTime.UtcNow < nextWorldScan) return;
         if (Interlocked.CompareExchange(ref worldBusy, 1, 0) != 0) return;
-        nextWorldScan = DateTime.UtcNow.AddSeconds(3);
-        var cancellation = worldWork.Token;
+        nextWorldScan = DateTime.UtcNow.AddMilliseconds(1200);
+        var scanWork = CancellationTokenSource.CreateLinkedTokenSource(worldWork.Token);
+        worldScanWork = scanWork;
+        var cancellation = scanWork.Token;
         var reader = worldReader;
         var translator = worldTranslator;
-        var subtitle = LastSource;
-        var subtitleRegion = string.IsNullOrEmpty(subtitle) ? null : settings.Region;
+        var subtitleRegion = settings.Region;
         var display = settings.PcDisplayId;
         var pc = settings.Source == GameSource.Pc;
         var englishToTurkish = EnglishToTurkishScreen;
-        var showProgress = Volatile.Read(ref worldOverlayFrame) is null;
+        var revision = Volatile.Read(ref worldRevision);
+        bool IsCurrentScan() => revision == Volatile.Read(ref worldRevision) && IsCurrentScreen(frame);
+        TextLine? CurrentSubtitle() => pipeline?.CurrentSubtitle;
         _ = Task.Run(async () =>
         {
             try
@@ -1251,31 +1305,46 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     frame, reader, translator, subtitleRegion, progress: items =>
                     {
                         var now = Environment.TickCount64;
-                        if (!showProgress || now < nextProgress) return;
-                        nextProgress = now + 250;
-                        post(() => ShowResults(items));
+                        if (now < nextProgress) return;
+                        nextProgress = now + 120;
+                        post(() => ShowResults(items, complete: false));
                     },
-                    cancellationToken: cancellation, subtitle: subtitle, isCurrent: () => IsCurrentScreen(frame),
-                    englishToTurkish: englishToTurkish)
+                    cancellationToken: cancellation, isCurrent: IsCurrentScan,
+                    englishToTurkish: englishToTurkish, currentSubtitle: CurrentSubtitle,
+                    isRegionCurrent: box => IsCurrentTextRegion(frame, box))
                     .ConfigureAwait(false);
-                post(() => ShowResults(results));
+                post(() => ShowResults(results, complete: true));
             }
             catch (OperationCanceledException) { }
             catch (Exception) { /* İkincil yazı okuma hatası konuşma dublajını durdurmaz. */ }
-            finally { Volatile.Write(ref worldBusy, 0); }
+            finally
+            {
+                post(() =>
+                {
+                    if (ReferenceEquals(worldScanWork, scanWork)) worldScanWork = null;
+                    scanWork.Dispose();
+                    Volatile.Write(ref worldBusy, 0);
+                });
+            }
 
-            void ShowResults(IReadOnlyList<ScreenTranslation.Item> items)
+            void ShowResults(IReadOnlyList<ScreenTranslation.Item> items, bool complete)
             {
                 if (cancellation.IsCancellationRequested || screenWork is not null ||
-                    DateTime.UtcNow < screenShownUntil || !IsCurrentScreen(frame)) return;
-                if (items.Count == 0)
+                    DateTime.UtcNow < screenShownUntil || !IsCurrentScan()) return;
+                var visible = KeepCurrentItems(frame, items, CurrentSubtitle());
+                if (!complete && worldOverlay is { } previous && IsCurrentScreen(previous.Frame))
                 {
-                    if (worldOverlayFrame is not null) ClearWorldOverlay();
+                    var unchanged = KeepCurrentItems(previous.Frame, previous.Items, CurrentSubtitle());
+                    visible = [.. visible, .. unchanged.Where(old =>
+                        !visible.Any(item => ScreenTranslation.SameOverlayPosition(old.Box, item.Box)))];
+                }
+                if (visible.Count == 0)
+                {
+                    if (complete && worldOverlay is not null) ClearWorldOverlay();
                     return;
                 }
-                worldOverlayFrame = frame;
-                server.SendScreen(items, 9000, obsOnly: pc);
-                if (pc) PcWorldTextReady?.Invoke(items, display, 9000);
+                worldOverlay = new ScreenOverlay(frame, visible);
+                PublishOverlay(visible, 9000, pc, display);
             }
         });
     }
@@ -1287,8 +1356,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             LastFrame = frame;
             RefreshScreenOverlay();
+            if (Volatile.Read(ref latestScreenFrame) is { } latest) ScheduleWorldText(latest);
         });
-        ScheduleWorldText(frame);
         // Duraklatıldıysa kare yalnız ek bölgeler ve serbest alan için saklanır; altyazı okunmaz.
         if (subtitlesPaused) return;
         // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.

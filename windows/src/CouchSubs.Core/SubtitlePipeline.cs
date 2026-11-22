@@ -28,6 +28,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private int session;
     /// <summary>Son okunan satırlar; kare değişmediyse yeniden okunmaz, bunlar kullanılır.</summary>
     private Reading lastReading = Reading.Empty;
+    private TextLine? currentSubtitle;
 
     /// <summary>Read timing setting without rebuilding translator or PS5 stream.</summary>
     public SubtitleTimingMode TimingMode { get; set; } = SubtitleTimingMode.Adaptive;
@@ -35,6 +36,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public (string Source, string Translation)? LastPair { get; private set; }
     /// <summary>Son gösterilen çevirinin oyundaki altyazısının karedeki yeri.</summary>
     public TextBox? LastBox { get; private set; }
+    public TextLine? CurrentSubtitle => Volatile.Read(ref currentSubtitle);
     public TranslatorStatus? LastError { get; private set; }
 
     /// <summary>Yeni çeviri gösterilince çağrılır (kaynak, çeviri).</summary>
@@ -47,6 +49,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// <summary>Okuma çeviriyi beklemez; böylece çeviri sürerken gelen satırlar da yakalanır.</summary>
     public async Task ProcessAsync(Frame frame, CropRegion region)
     {
+        int readSession;
+        lock (gate) readSession = session;
         // Yazı tanıma uzun sürebilir; çağıranı (arayüzü) bekletmemek için iş parçacığı havuzunda yapılır.
         var raw = await Task.Run(() =>
         {
@@ -56,12 +60,14 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 ReadPlan plan;
                 lock (gate)
                 {
+                    if (readSession != session) return Reading.Empty;
                     plan = schedule.Plan(RegionCropper.Signature(area));
                     if (plan.Reuse) return lastReading;
                 }
                 var read = reader.ReadLines(area, plan.Deep);
                 lock (gate)
                 {
+                    if (readSession != session) return Reading.Empty;
                     schedule.Record(read.Text);
                     lastReading = read;
                 }
@@ -77,6 +83,10 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
         lock (gate)
         {
+            if (readSession != session) return;
+            Volatile.Write(ref currentSubtitle, reading.Box is { } detected
+                ? new TextLine(reading.Text, detected.PlacedIn(area))
+                : null);
             var action = stabilizer.Feed(reading.Text);
             switch (action.Kind)
             {
@@ -208,6 +218,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             latestTranslation = null;
             lineOnScreen = null;
             lastReading = Reading.Empty;
+            Volatile.Write(ref currentSubtitle, null);
             schedule.Reset();
             if (stabilizer.Reset() == StabilizerAction.Clear) sender.Clear();
         }

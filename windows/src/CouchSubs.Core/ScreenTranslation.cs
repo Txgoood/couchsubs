@@ -37,6 +37,10 @@ public static class ScreenTranslation
             ["restore all"] = "Tümünü sıfırla",
             ["restore default"] = "Varsayılana dön",
             ["photo studio"] = "Fotoğraf stüdyosu",
+            ["pause preview"] = "Önizlemeyi duraklat",
+            ["resume preview"] = "Önizlemeyi sürdür",
+            ["dualsense wireless controller features"] = "DualSense kablosuz kontrol cihazı özellikleri",
+            ["dualsense® wireless controller features"] = "DualSense kablosuz kontrol cihazı özellikleri",
             ["display"] = "Görüntü",
             ["ui"] = "Arayüz",
             ["camera"] = "Kamera",
@@ -57,27 +61,69 @@ public static class ScreenTranslation
         return true;
     }
 
+    // Compare local text contrast so panels can change even when the overall background stays the same.
+    public static bool SameTextRegion(Frame first, Frame second, TextBox box)
+    {
+        if (ReferenceEquals(first, second)) return true;
+        if (first.Width != second.Width || first.Height != second.Height) return false;
+        var left = Math.Clamp((int)(box.Left * first.Width), 0, first.Width - 1);
+        var right = Math.Clamp((int)Math.Ceiling(box.Right * first.Width), left + 1, first.Width);
+        var top = Math.Clamp((int)(box.Top * first.Height), 0, first.Height - 1);
+        var bottom = Math.Clamp((int)Math.Ceiling(box.Bottom * first.Height), top + 1, first.Height);
+        var dx = Math.Max(1, (right - left) / 64);
+        var dy = Math.Max(1, (bottom - top) / 10);
+        var changed = 0;
+        var edges = 0;
+        for (var y = top; y < bottom; y += dy)
+        for (var x = left; x + 1 < right; x += dx)
+        {
+            var a = Luma(first, x + 1, y) - Luma(first, x, y);
+            var b = Luma(second, x + 1, y) - Luma(second, x, y);
+            if (Math.Max(Math.Abs(a), Math.Abs(b)) < 25) continue;
+            edges++;
+            if (Math.Abs(a - b) >= 26) changed++;
+        }
+        return changed < 6 || changed * 5 < edges;
+    }
+
+    private static int Luma(Frame frame, int x, int y)
+    {
+        var index = y * frame.Stride + x * 4;
+        return (frame.Pixels[index] + 2 * frame.Pixels[index + 1] + frame.Pixels[index + 2]) / 4;
+    }
+
+    public static bool SameOverlayPosition(TextBox a, TextBox b)
+    {
+        var width = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
+        var height = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
+        return width > Math.Min(a.Right - a.Left, b.Right - b.Left) * .65 &&
+            height > Math.Min(a.Bottom - a.Top, b.Bottom - b.Top) * .6;
+    }
+
     public static async Task<IReadOnlyList<Item>> TranslateOverlayAsync(
         Frame frame, ITextReader reader, ITextTranslator translator,
         CropRegion? exclude = null, Action<IReadOnlyList<Item>>? progress = null,
         CancellationToken cancellationToken = default, string? subtitle = null, Func<bool>? isCurrent = null,
-        bool englishToTurkish = false)
+        bool englishToTurkish = false, Func<TextLine?>? currentSubtitle = null, Func<TextBox, bool>? isRegionCurrent = null)
     {
         var reading = await Task.Run(() => reader.ReadScreenLines(frame), cancellationToken).ConfigureAwait(false);
-        var lines = OverlayLines(reading).Where(line => exclude is null || line.IsControllerHint ||
-            !AmbientTextTranslation.IsDialogueRegion(line.Box!.Value, exclude) ||
-            subtitle is not null && !IsSubtitleLine(line.Text, subtitle));
+        var lines = OverlayLines(reading).Where(line => !ExcludeOverlayLine(line));
         var items = new List<Item>();
-        foreach (var group in OverlayParagraphs(lines))
+        var groups = OverlayParagraphs(lines);
+        if (englishToTurkish)
+            groups = groups.OrderByDescending(group => TurkishMenuLabels.ContainsKey(group.Text));
+        foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (isCurrent?.Invoke() == false) break;
+            if (isRegionCurrent?.Invoke(group.Box) == false || IsCurrentDialogue(group.Text, group.Box)) continue;
             string target;
             if (englishToTurkish && TurkishMenuLabels.TryGetValue(group.Text, out var label))
                 target = IsUppercase(group.Text) ? label.ToUpper(System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) : label;
             else
                 target = (await translator.TranslateAsync(group.Text, cancellationToken).ConfigureAwait(false)).Trim();
             if (isCurrent?.Invoke() == false) break;
+            if (isRegionCurrent?.Invoke(group.Box) == false) continue;
             if (target.Length == 0 || TextMatch.Normalize(group.Text) == TextMatch.Normalize(target))
                 continue;
             items.Add(new Item(group.Text, target, group.Box, group.Height)
@@ -85,8 +131,38 @@ public static class ScreenTranslation
             progress?.Invoke([.. items]);
         }
         return items;
+
+        bool ExcludeOverlayLine(TextLine line)
+        {
+            if (exclude is null || line.IsControllerHint ||
+                !AmbientTextTranslation.IsDialogueRegion(line.Box!.Value, exclude)) return false;
+            if (currentSubtitle is not null)
+                return IsActiveSubtitle(line, currentSubtitle()) || LooksLikeUnconfirmedDialogue(line);
+            return subtitle is null || IsSubtitleLine(line.Text, subtitle);
+        }
+
+        bool IsCurrentDialogue(string text, TextBox box) =>
+            exclude is not null && currentSubtitle is not null &&
+            AmbientTextTranslation.IsDialogueRegion(box, exclude) &&
+            IsActiveSubtitle(new TextLine(text, box), currentSubtitle());
     }
 
+    public static bool IsActiveSubtitle(TextLine line, TextLine? active)
+    {
+        if (line.Box is not { } box || active?.Box is not { } other) return false;
+        var width = Math.Min(box.Right, other.Right) - Math.Max(box.Left, other.Left);
+        var height = Math.Min(box.Bottom, other.Bottom) - Math.Max(box.Top, other.Top);
+        if (width < (box.Right - box.Left) * .3 || height < (box.Bottom - box.Top) * .45) return false;
+        return IsSubtitleLine(line.Text, active.Text) ||
+            TextMatch.IsSameSubtitle(TextMatch.Normalize(line.Text), TextMatch.Normalize(active.Text));
+    }
+
+    private static bool LooksLikeUnconfirmedDialogue(TextLine line)
+    {
+        var box = line.Box!.Value;
+        return box.Top >= .68 && Math.Abs((box.Left + box.Right) / 2 - .5) <= .10 &&
+            WordCount(line.Text) >= 3 && (line.Text.Contains(':') || SubtitleStabilizer.EndsSentence(line.Text));
+    }
     private static bool IsSubtitleLine(string text, string subtitle)
     {
         var line = TextMatch.Normalize(text);
@@ -203,7 +279,9 @@ public static class ScreenTranslation
         value.Equals("scroll", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("restore all", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("restore default", StringComparison.OrdinalIgnoreCase) ||
-        value.Equals("photo studio", StringComparison.OrdinalIgnoreCase);
+        value.Equals("photo studio", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("pause preview", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("resume preview", StringComparison.OrdinalIgnoreCase);
 
     private static OverlayPaint PaintFor(Frame frame, TextLine line)
     {

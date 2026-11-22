@@ -70,20 +70,23 @@ public sealed class WindowsOcrReader : ITextReader
                     top > 0 && box.Top <= area.Top + 2.0 / image.Height ||
                     bottom < image.Height && box.Bottom >= area.Bottom - 2.0 / image.Height)
                     continue;
-                if (!lines.Any(existing => existing.Box is { } other && SameScreenLine(box, other)))
+                var match = lines.FindIndex(existing => existing.Box is { } other &&
+                    ScreenTranslation.SameOverlayPosition(box, other));
+                if (match < 0)
                     lines.Add(line);
+                else
+                {
+                    var original = TextMatch.Normalize(lines[match].Text);
+                    var candidate = TextMatch.Normalize(line.Text);
+                    if (original.Length > 2 && candidate.Length > original.Length + 3 &&
+                        (" " + candidate + " ").Contains(" " + original + " ", StringComparison.Ordinal))
+                        lines[match] = line;
+                }
             }
         }
         return new Reading(lines);
     }
 
-    private static bool SameScreenLine(TextBox a, TextBox b)
-    {
-        var width = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
-        var height = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
-        return width > Math.Min(a.Right - a.Left, b.Right - b.Left) * 0.65 &&
-            height > Math.Min(a.Bottom - a.Top, b.Bottom - b.Top) * 0.6;
-    }
 
     /// <summary>
     /// Kare hem olduğu gibi hem de yalnız beyaz yazısı bırakılarak okunur; daha sözcüğe benzeyen okuma seçilir.
