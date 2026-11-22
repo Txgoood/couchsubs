@@ -31,38 +31,39 @@ public static class OptionalGpuSessionFactory
         if (deviceId is < 0 or > MaxDeviceId)
             deviceId = 0;
 
-        if (gpuOptIn)
-        {
-            // CPU-only managed distributions may not expose the provider
-            // method at all; separately installed native DLLs can be absent
-            // or incompatible. In each case, safely open a fresh CPU session.
-            try
-            {
-                using var gpuOptions = NewOptions();
-                var enable = typeof(SessionOptions).GetMethod(
-                    "AppendExecutionProvider_DML",
-                    BindingFlags.Public | BindingFlags.Instance,
-                    binder: null, types: [typeof(int)], modifiers: null);
-                if (enable is not null)
-                {
-                    enable.Invoke(gpuOptions, [deviceId]);
-                    return (new InferenceSession(modelPath, gpuOptions), true,
-                        "DirectML GPU provider initialized");
-                }
-            }
-            catch (Exception error) when (error is TargetInvocationException or
-                                            OnnxRuntimeException or DllNotFoundException or
-                                            EntryPointNotFoundException or BadImageFormatException or
-                                            InvalidOperationException)
-            {
-                // GPU native provider not bundled or model unsupported.
-                // Never retain a partially initialized provider/session.
-            }
-        }
+        if (gpuOptIn && TryOpenDirectMl(modelPath, deviceId, out var gpuSession))
+            return (gpuSession!, true, "DirectML GPU provider initialized");
         using var cpuOptions = NewOptions();
         return (new InferenceSession(modelPath, cpuOptions), false,
             gpuOptIn ? "DirectML unavailable; safe CPU fallback" :
                        "CPU default (DirectML not requested)");
+    }
+
+    internal static bool TryOpenDirectMl(string modelPath, int deviceId, out InferenceSession? session)
+    {
+        session = null;
+        try
+        {
+            using var gpuOptions = NewOptions();
+            gpuOptions.EnableMemoryPattern = false;
+            var enable = typeof(SessionOptions).GetMethod(
+                "AppendExecutionProvider_DML",
+                BindingFlags.Public | BindingFlags.Instance,
+                binder: null, types: [typeof(int)], modifiers: null);
+            if (enable is not null)
+            {
+                enable.Invoke(gpuOptions, [deviceId]);
+                session = new InferenceSession(modelPath, gpuOptions);
+            }
+        }
+        catch (Exception error) when (error is TargetInvocationException or
+                                      OnnxRuntimeException or DllNotFoundException or
+                                      EntryPointNotFoundException or BadImageFormatException or
+                                      InvalidOperationException)
+        {
+            // The caller can open a fresh CPU session with its own options.
+        }
+        return session is not null;
     }
 
     private static SessionOptions NewOptions() => new()

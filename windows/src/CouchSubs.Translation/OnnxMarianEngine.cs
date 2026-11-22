@@ -7,7 +7,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 namespace CouchSubs.Translation;
 
 /// <summary>
-/// Marian kodlayıcı/kod çözücüsünü ONNX Runtime (CPU) ile çalıştırır: ışın aramalı kod çözme, KV önbellekli.
+/// Marian kodlayıcı/kod çözücüsünü ONNX Runtime ile çalıştırır: ışın aramalı kod çözme, KV önbellekli.
 /// Birleşik kod çözücü (decoder_model_merged) ilk adımda çapraz dikkat anahtarlarını üretir,
 /// sonraki adımlarda yalnızca yeni belirteci işler (use_cache_branch).
 /// </summary>
@@ -29,7 +29,10 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
     public const int DefaultBeams = 4;
 
     private readonly MarianTokenizer _tokenizer;
-    private readonly InferenceSession _encoder;
+    private InferenceSession _encoder;
+    private readonly string _encoderPath;
+    private readonly int _onnxThreads;
+    private bool _gpuEncoder;
     private readonly InferenceSession _decoder;
     private readonly int _maxOutputTokens;
     private readonly int _beams;
@@ -46,19 +49,17 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
         _tokenizer = MarianTokenizer.Load(
             Path.Combine(modelDirectory, ModelStore.SourceSpmFile), Path.Combine(modelDirectory, ModelStore.VocabFile));
 
-        using var options = new SessionOptions
-        {
-            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
-        };
-        // Optional CPU inference thread cap for measured latency tuning.
-        // Keep ONNX defaults in normal mode; GPU providers are NOT bundled.
-        var onnxThreads = DubbingComputeBudget.OnnxThreads(Environment.ProcessorCount,
+        _onnxThreads = DubbingComputeBudget.OnnxThreads(Environment.ProcessorCount,
             Environment.GetEnvironmentVariable(DubbingComputeBudget.OnnxThreadsSetting));
-        if (onnxThreads > 0) options.IntraOpNumThreads = onnxThreads;
-        // Bellek havuzunu ya da ağırlık ön paketlemeyi kapatmak denendi: yüklemede bellek düşse de
-        // çeviriler başladıktan sonra bellek artıyor, satır süresi de %20'ye kadar uzuyordu. Varsayılanlar kalır.
-        _encoder = new InferenceSession(Path.Combine(modelDirectory, ModelStore.EncoderFile), options);
+        _encoderPath = Path.Combine(modelDirectory, ModelStore.EncoderFile);
+        _gpuEncoder = OptionalGpuSessionFactory.IsOptedIn(
+            Environment.GetEnvironmentVariable("COUCHSUBS_MARIAN_DIRECTML"));
+        InferenceSession? gpuSession = null;
+        _gpuEncoder = _gpuEncoder && OptionalGpuSessionFactory.TryOpenDirectMl(_encoderPath,
+            OptionalGpuSessionFactory.ParseDeviceId(Environment.GetEnvironmentVariable(
+                OptionalGpuSessionFactory.DeviceIdVariable)), out gpuSession);
+        using var options = CpuOptions();
+        _encoder = gpuSession ?? new InferenceSession(_encoderPath, options);
         try
         {
             _decoder = new InferenceSession(Path.Combine(modelDirectory, ModelStore.DecoderFile), options);
@@ -74,6 +75,35 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
         _decoderOutputNames = ["logits", .. _pastNames.Select(n => "present." + n["past_key_values.".Length..])];
         _isSelfAttention = _pastNames.Select(n => n.EndsWith(".decoder.key", StringComparison.Ordinal) ||
                                                   n.EndsWith(".decoder.value", StringComparison.Ordinal)).ToArray();
+    }
+
+    internal bool GpuEncoderActive => _gpuEncoder;
+
+    private SessionOptions CpuOptions() => new()
+    {
+        GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+        ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+        IntraOpNumThreads = _onnxThreads
+    };
+
+    private IDisposableReadOnlyCollection<OrtValue> RunEncoder(
+        RunOptions options, OrtValue input, OrtValue mask)
+    {
+        try
+        {
+            return _encoder.Run(options, ["input_ids", "attention_mask"], [input, mask],
+                ["last_hidden_state"]);
+        }
+        catch (OnnxRuntimeException) when (_gpuEncoder)
+        {
+            using var cpu = CpuOptions();
+            var fallback = new InferenceSession(_encoderPath, cpu);
+            _encoder.Dispose();
+            _encoder = fallback;
+            _gpuEncoder = false;
+            return _encoder.Run(options, ["input_ids", "attention_mask"], [input, mask],
+                ["last_hidden_state"]);
+        }
     }
 
     public string Translate(string sentence, CancellationToken cancellationToken)
@@ -98,8 +128,7 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
         using var inputValue = OrtValue.CreateTensorValueFromMemory(inputIds, sourceShape);
         using var sourceMask = OrtValue.CreateTensorValueFromMemory(Enumerable.Repeat(1L, length).ToArray(), sourceShape);
         using var runOptions = new RunOptions();
-        using var encoderOutputs = _encoder.Run(runOptions, ["input_ids", "attention_mask"], [inputValue, sourceMask],
-            ["last_hidden_state"]);
+        using var encoderOutputs = RunEncoder(runOptions, inputValue, sourceMask);
         // Her ışın aynı kaynak cümleye bakar: kodlayıcı çıktısı ışın sayısı kadar çoğaltılır.
         var encoded = encoderOutputs[0].GetTensorDataAsSpan<float>();
         var hiddenData = new float[encoded.Length * beams];
