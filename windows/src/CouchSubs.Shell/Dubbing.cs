@@ -435,17 +435,11 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             ? null : emotions.Resolve(line, EmotionMode, allowCarry);
         // Build #159: optional text-grounded emotion safety. A mixed
         // soundtrack can indicate speech activity, never emotional identity.
-        if (ExpressiveSafety && emotion is not null)
+        if (ExpressiveSafety && Engine != DubbingEngine.Fast)
         {
-            var confirmed = EmotionMode switch
-            {
-                DubbingEmotionMode.Neural => NeuralSpeech?.RecentSpeech == true,
-                DubbingEmotionMode.Acoustic => Prosody?.RecentSpeechCandidate() == true,
-                _ => true
-            };
             lock (gate)
                 emotion = expressivePlanner.Resolve(line, emotion, EmotionMode,
-                    Environment.TickCount64, confirmed);
+                    Environment.TickCount64, allowCarry);
         }
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");

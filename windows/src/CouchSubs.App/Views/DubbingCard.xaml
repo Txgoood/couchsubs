@@ -30,6 +30,9 @@
                         <ComboBoxItem Content="Ses destekli (PS5 deneysel)" Tag="Acoustic" />
                         <ComboBoxItem Content="Yapay zekâ konuşma tespiti (Silero ONNX)" Tag="Neural" />
                     </ComboBox>
+                    <CheckBox x:Name="ExpressiveSafety" Margin="0,8,0,0"
+                              Content="Duyguyu aynı konuşma içinde sürdür"
+                              Checked="OnExpressiveSafety" Unchecked="OnExpressiveSafety" />
                     <TextBlock Text="Konuşma algılama motoru" FontWeight="SemiBold" Margin="0,8,0,6" />
                     <ComboBox x:Name="SpeechDetectionPicker" Width="320" HorizontalAlignment="Left"
                               SelectionChanged="OnSpeechDetection">

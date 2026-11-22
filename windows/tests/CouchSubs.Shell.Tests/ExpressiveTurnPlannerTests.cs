@@ -40,10 +40,24 @@ public sealed class ExpressiveTurnPlannerTests
             SpeechEmotion.Sad, DubbingEmotionMode.Cinematic, 1000, true);
         Assert.Null(plan.Resolve(new SpokenLine("Please!", "Lütfen!", "Lucia", NewTurn: true),
             SpeechEmotion.Sad, DubbingEmotionMode.Cinematic, 1500, true));
+        Assert.Null(plan.Resolve(new SpokenLine("Please!", "Lütfen!", "Lucia"),
+            SpeechEmotion.Sad, DubbingEmotionMode.Cinematic, 1550, true));
         Assert.Null(plan.Resolve(new SpokenLine("Please!", "Lütfen!", "Jason"),
             SpeechEmotion.Sad, DubbingEmotionMode.Cinematic, 1600, true));
         Assert.Null(plan.Resolve(new SpokenLine("Please!", "Lütfen!", "Lucia"),
             SpeechEmotion.Sad, DubbingEmotionMode.Cinematic, 3500, true));
+    }
+
+    [Fact]
+    public void AnonymousNewTurnClearsPreviousCharacterEmotion()
+    {
+        var plan = new ExpressiveTurnPlanner();
+        plan.Resolve(new SpokenLine("I'm sorry.", "Üzgünüm.", "Lucia"),
+            SpeechEmotion.Sad, DubbingEmotionMode.Cinematic, 1000, true);
+        Assert.Null(plan.Resolve(new SpokenLine("The door.", "Kapı.", NewTurn: true),
+            null, DubbingEmotionMode.Cinematic, 1100, true));
+        Assert.Null(plan.Resolve(new SpokenLine("Please!", "Lütfen!", "Lucia"),
+            SpeechEmotion.Sad, DubbingEmotionMode.Cinematic, 1200, true));
     }
 
     [Fact]
