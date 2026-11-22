@@ -15,6 +15,7 @@ public sealed class DialogueStemSafetyGateTests
     [InlineData(0.99f, -1, true)]
     [InlineData(0.99f, 10, false)]
     [InlineData(float.NaN, 10, true)]
+    [InlineData(1.01f, 10, true)]
     public void LowConfidenceStaleOrInactiveStemPassesThroughUnchanged(
         float confidence, int age, bool active)
     {
@@ -54,6 +55,16 @@ public sealed class DialogueStemSafetyGateTests
         Assert.False(DialogueStemSafetyGate.TryApply(
             Game, [1f, 1f, 1f, 1f], output, 1f, 0, true));
         Assert.Equal(Game, output);
+    }
+
+    [Fact]
+    public void ClippingOneChannelPreservesBothOriginalSamples()
+    {
+        float[] game = [0.99f, -0.1f];
+        float[] stem = [-0.4f, -0.4f];
+        var output = new float[2];
+        Assert.True(DialogueStemSafetyGate.TryApply(game, stem, output, 1f, 0, true));
+        Assert.Equal(game, output);
     }
 
     [Fact]

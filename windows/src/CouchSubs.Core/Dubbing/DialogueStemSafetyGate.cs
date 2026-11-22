@@ -33,7 +33,7 @@ public static class DialogueStemSafetyGate
 
         // Preserve original on every failure (including model absence).
         if (!turkishDubActive || !float.IsFinite(confidence) ||
-            confidence < MinimumConfidence || ageMilliseconds < 0 ||
+            confidence < MinimumConfidence || confidence > 1f || ageMilliseconds < 0 ||
             ageMilliseconds > MaximumAgeMilliseconds ||
             stem.Length != original.Length || original.Length == 0 ||
             original.Length % 2 != 0)
@@ -70,9 +70,19 @@ public static class DialogueStemSafetyGate
 
         // By design cannot erase dialogue, which could remove sirens, music,
         // and impact effects. The attenuation cap is intentionally 25%.
-        for (var i = 0; i < original.Length; i++)
-            destination[i] = Math.Clamp(original[i] -
-                stem[i] * MaximumStemSuppression, -1f, 1f);
+        for (var i = 0; i < original.Length; i += 2)
+        {
+            var left = original[i] - stem[i] * MaximumStemSuppression;
+            var right = original[i + 1] - stem[i + 1] * MaximumStemSuppression;
+            if (MathF.Abs(left) > 1f || MathF.Abs(right) > 1f)
+            {
+                destination[i] = original[i];
+                destination[i + 1] = original[i + 1];
+                continue;
+            }
+            destination[i] = left;
+            destination[i + 1] = right;
+        }
         return true;
     }
 }
