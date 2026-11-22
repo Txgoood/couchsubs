@@ -227,3 +227,18 @@ Output age p95 was 23.3 ms, with no frames above 90 ms. The final frame
 was returned by flush. A separate replay with a missing input ID
 terminated before producing a mismatched stem. These were synthetic
 tests of the worker process and its pipes.
+
+## Live PS5 read-only diagnostic
+
+The owner started a real PS5 session with PULSE 3D. The MSI ran a local
+Windows build from `3df7dc1` and the RNNoise CPU worker. The application
+reported 17,245 valid capture chunks, 8,621 matched stems, p95 31 ms
+from the completing audio callback to the worker reply, and 4 stems
+over 90 ms. It reported no capture or model queue drops, unmatched
+stems, or worker faults.
+
+This measures the live diagnostic path inside CouchSubs. PS5 transport
+before the callback and headset rendering are outside the timing.
+The game mix was not modified and audio was not recorded. The run
+therefore does not validate suppression quality, music/effects
+preservation during suppression, or per-frame stem confidence.
