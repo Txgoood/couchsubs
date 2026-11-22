@@ -69,6 +69,9 @@ public partial class ShellWindow : Window
             case HotkeyAction.Snapshot: controller.RequestSnapshot(); break;
             case HotkeyAction.FreeArea: FreeAreaWindow.Open(controller); break;
             case HotkeyAction.Screen: _ = controller.TranslateScreenAsync(); break;
+            case HotkeyAction.SaveInspection:
+                if (Host.Content is MainView main) _ = main.SaveInspectionAsync();
+                break;
         }
     }
 

@@ -158,6 +158,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private int lateLines;
     public bool SmartTiming { get; set; }
     public int LateLines => Volatile.Read(ref lateLines);
+    public event Action<SpokenLine>? PlaybackStarted;
     public int SuppressedDuplicates { get { lock (gate) return timingPolicy.SuppressedDuplicates; } }
     private ISpeechSynthesizer? synthesizer;
     // Ses motorunun HTTP isteği bitmeden dispose edilmesini önler.
@@ -362,7 +363,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
 
     private async Task RunAsync(int number)
     {
-        Task<(SpeechAudio Audio, bool Preview, long SubmittedMs)?>? next = Next(number);
+        Task<(SpeechAudio Audio, bool Preview, long SubmittedMs, SpokenLine Line)?>? next = Next(number);
         while (next is not null)
         {
             var result = await next;
@@ -389,6 +390,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             next = finishCurrent ? null : Next(number);
             try
             {
+                if (!ready.Preview) PlaybackStarted?.Invoke(ready.Line);
                 await PlayAsync(ready.Audio, ready.Preview ? DubbingOutput.Computer : Output, number);
             }
             finally
@@ -408,7 +410,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         await RunAsync(number);
     }
 
-    private Task<(SpeechAudio, bool, long)?>? Next(int number)
+    private Task<(SpeechAudio, bool, long, SpokenLine)?>? Next(int number)
     {
         SpokenLine line;
         DubbingVoice? preview;
@@ -462,7 +464,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         }
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
-        return TrackSynth<(SpeechAudio, bool, long)?>(async engine =>
+        return TrackSynth<(SpeechAudio, bool, long, SpokenLine)?>(async engine =>
         {
             try
             {
@@ -478,7 +480,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
                         latencyTracker.Record(lastSynthesisMilliseconds);
                     }
                 }
-                return (result, preview is not null, submittedMs);
+                return (result, preview is not null, submittedMs, line);
             }
             catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
             {

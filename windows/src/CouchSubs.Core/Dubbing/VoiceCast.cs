@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using System.Globalization;
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace CouchSubs.Core.Dubbing;
@@ -48,12 +50,41 @@ public sealed class VoiceCast
     public DubbingVoice Narrator { get; set; } = DubbingVoice.Male1;
     /// <summary>Tireli konuşmada sıradaki kişinin sesi.</summary>
     public DubbingVoice Partner { get; set; } = DubbingVoice.Female1;
+    public DubbingVoice? MaleNpcVoice { get; set; }
+    public DubbingVoice? FemaleNpcVoice { get; set; }
+    public DubbingVoice? UnknownNpcVoice { get; set; }
 
     // Etiketsiz repliklerde sadece açık diyalog tiresi varsa dönüşümlü ses verilir.
     // İlk tireli konuşma anlatıcıdan başlar.
     private bool _lastWasPartner = true;
 
     public static string Key(string name) => name.Trim().ToUpperInvariant();
+
+    public static CharacterGroup? GenericSpeakerGroup(string name)
+    {
+        var label = string.Concat(name.Normalize(NormalizationForm.FormD)
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark &&
+                        char.IsLetter(c))).ToUpperInvariant();
+        return label switch
+        {
+            "MAN" or "MEN" or "MALE" or "OLDMAN" or "BOY" or "MALEVOICE" => CharacterGroup.Male,
+            "WOMAN" or "WOMEN" or "FEMALE" or "OLDWOMAN" or "GIRL" or "FEMALEVOICE" => CharacterGroup.Female,
+            "WORKER" or "WORKERS" or "VORKER" or "WOIKERS" or "LOCAL" or "LOCALS" or "LDCAL" or
+            "TOURIST" or "TOURISTS" or "STAFFMEMBER" or "STAFFMEMBERS" or "STAFFMEMBE" or
+            "STAFF" or "CIVILIAN" or "CIVILIANS" or "PEDESTRIAN" or "PEDESTRIANS" or
+            "CUSTOMER" or "CUSTOMERS" or "CLERK" or "SHOPKEEPER" or "CASHIER" or
+            "GUNSMITH" or "GUNSTORECLERK" or "UNKNOWN" or "UNKNOWNSPEAKER" or "IN" or "INSPANISH"
+                => CharacterGroup.Unknown,
+            _ => null
+        };
+    }
+
+    public DubbingVoice NpcVoice(CharacterGroup group) => group switch
+    {
+        CharacterGroup.Male => MaleNpcVoice ?? Narrator,
+        CharacterGroup.Female => FemaleNpcVoice ?? Partner,
+        _ => UnknownNpcVoice ?? Narrator
+    };
 
     /// <summary>
     /// İki sesli mod: bilinen erkek isimleri anlatıcı, bilinen kadın isimleri partner.
@@ -65,6 +96,7 @@ public sealed class VoiceCast
         assigned = false;
         if (!string.IsNullOrWhiteSpace(line.Speaker))
         {
+            if (GenericSpeakerGroup(line.Speaker) is { } group) return NpcVoice(group);
             var key = Key(line.Speaker);
             if (Assignments.TryGetValue(key, out var known)) return known;
             // Anonymous voices come from the acoustic embedding model, not a gender guess.
@@ -99,7 +131,8 @@ public sealed class VoiceCast
     public bool SuggestName(string name)
     {
         name = name.Trim();
-        if (name.Length is < 2 or > 32 || SuggestedNames.Count > 250) return false;
+        if (name.Length is < 2 or > 32 || SuggestedNames.Count > 250 || GenericSpeakerGroup(name) is not null)
+            return false;
         var key = Key(name);
         if (Assignments.ContainsKey(key) || SuggestedNames.GetValueOrDefault(key) >= 3) return false;
         SuggestedNames[key] = SuggestedNames.GetValueOrDefault(key) + 1;
@@ -175,6 +208,9 @@ public sealed class VoiceCast
         SuggestedNames = new Dictionary<string, int>(SuggestedNames, StringComparer.OrdinalIgnoreCase),
         Narrator = Narrator,
         Partner = Partner,
+        MaleNpcVoice = MaleNpcVoice,
+        FemaleNpcVoice = FemaleNpcVoice,
+        UnknownNpcVoice = UnknownNpcVoice,
     };
 }
 

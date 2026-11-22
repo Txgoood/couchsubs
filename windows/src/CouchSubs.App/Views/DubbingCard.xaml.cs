@@ -274,13 +274,9 @@ public partial class DubbingCard : UserControl
         _ => "Bilinmeyen",
     };
 
-    private Grid CharacterRow(string name, VoiceCast cast)
+    private WrapPanel CharacterRow(string name, VoiceCast cast)
     {
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(195) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
 
         var nameEditor = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
         var nameText = new System.Windows.Controls.TextBox
@@ -288,7 +284,7 @@ public partial class DubbingCard : UserControl
             Text = DisplayName(name), Width = 126, VerticalContentAlignment = VerticalAlignment.Center,
             ToolTip = "Karakterin adını düzelt; Türkçe ses tercihi kaybolmaz."
         };
-        var rename = new Button { Content = "✓", Width = 27, Margin = new Thickness(4, 0, 0, 0),
+        var rename = new Button { Content = "✓", MinWidth = 38, Padding = new Thickness(7, 4, 7, 4), Margin = new Thickness(4, 0, 0, 0),
             ToolTip = "Yeni ismi kaydet" };
         rename.Click += (_, _) =>
         {
@@ -302,7 +298,7 @@ public partial class DubbingCard : UserControl
         nameEditor.Children.Add(nameText);
         nameEditor.Children.Add(rename);
         row.Children.Add(nameEditor);
-        var kind = new ComboBox { Margin = new Thickness(0, 0, 6, 0) };
+        var kind = new ComboBox { Width = 125, Margin = new Thickness(0, 0, 6, 0) };
         foreach (var group in Enum.GetValues<CharacterGroup>())
             kind.Items.Add(new ComboBoxItem
             {
@@ -314,10 +310,9 @@ public partial class DubbingCard : UserControl
             if (!loading && kind.SelectedItem is ComboBoxItem { Tag: CharacterGroup group })
                 controller?.SetCharacterGroup(name, group);
         };
-        Grid.SetColumn(kind, 1);
         row.Children.Add(kind);
 
-        var voicePicker = new ComboBox { Margin = new Thickness(0, 0, 6, 0) };
+        var voicePicker = new ComboBox { Width = 164, Margin = new Thickness(0, 0, 6, 0) };
         foreach (var voice in DubbingVoices.All)
             voicePicker.Items.Add(new ComboBoxItem
             {
@@ -329,11 +324,9 @@ public partial class DubbingCard : UserControl
             if (!loading && voicePicker.SelectedItem is ComboBoxItem { Tag: DubbingVoice voice })
                 controller?.AssignVoice(voice, name);
         };
-        Grid.SetColumn(voicePicker, 2);
         row.Children.Add(voicePicker);
         var remove = new Button { Content = "Sil", ToolTip = "Bu oyundan karakter kaydını sil" };
         remove.Click += (_, _) => controller?.RemoveCharacter(name);
-        Grid.SetColumn(remove, 3);
         row.Children.Add(remove);
         return row;
     }
@@ -357,7 +350,7 @@ public partial class DubbingCard : UserControl
         if (controller is null) return;
         var query = CharacterSearch.Text.Trim();
         var total = controller.Settings.Dubbing.Cast.Assignments.Keys.Count(name =>
-            name.Contains(query, StringComparison.OrdinalIgnoreCase));
+            VoiceCast.GenericSpeakerGroup(name) is null && name.Contains(query, StringComparison.OrdinalIgnoreCase));
         characterPage = Math.Min(Math.Max(0, (total - 1) / PageSize), characterPage + 1);
         BuildVoices(controller.Settings.Dubbing.Cast);
     }
@@ -370,9 +363,15 @@ public partial class DubbingCard : UserControl
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, narrator: voice) } })));
         Voices.Children.Add(VoiceRow(Localizer.Current["Second speaker in dialogue"], cast.Partner,
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, partner: voice) } })));
+        Voices.Children.Add(VoiceRow("Genel NPC · Erkek", cast.NpcVoice(CharacterGroup.Male),
+            voice => ChangeNpcVoice(CharacterGroup.Male, voice)));
+        Voices.Children.Add(VoiceRow("Genel NPC · Kadın", cast.NpcVoice(CharacterGroup.Female),
+            voice => ChangeNpcVoice(CharacterGroup.Female, voice)));
+        Voices.Children.Add(VoiceRow("Genel NPC · Bilinmeyen", cast.NpcVoice(CharacterGroup.Unknown),
+            voice => ChangeNpcVoice(CharacterGroup.Unknown, voice)));
         var filter = CharacterSearch.Text.Trim();
         var names = cast.Assignments.Keys.Where(name =>
-            name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            VoiceCast.GenericSpeakerGroup(name) is null && name.Contains(filter, StringComparison.OrdinalIgnoreCase))
             .OrderBy(name => name, StringComparer.Ordinal).ToArray();
         characterPage = Math.Min(characterPage, Math.Max(0, (names.Length - 1) / PageSize));
         CharacterPageInfo.Text = names.Length == 0 ? "0 karakter" :
@@ -387,11 +386,25 @@ public partial class DubbingCard : UserControl
             Voices.Children.Add(CharacterRow(name, cast));
     }
 
+    private void ChangeNpcVoice(CharacterGroup group, DubbingVoice voice) =>
+        Update(s =>
+        {
+            var cast = s.Dubbing.Cast.Copy();
+            switch (group)
+            {
+                case CharacterGroup.Male: cast.MaleNpcVoice = voice; break;
+                case CharacterGroup.Female: cast.FemaleNpcVoice = voice; break;
+                default: cast.UnknownNpcVoice = voice; break;
+            }
+            return s with { Dubbing = s.Dubbing with { Cast = cast } };
+        });
+
     private void RefreshSuggestedNames(VoiceCast cast)
     {
         NameSuggestions.Children.Clear();
         var suggestions = cast.SuggestedNames
-            .Where(pair => !cast.Assignments.ContainsKey(pair.Key))
+            .Where(pair => !cast.Assignments.ContainsKey(pair.Key)
+                && VoiceCast.GenericSpeakerGroup(pair.Key) == null)
             .OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key)
             .Take(12).ToArray();
         if (suggestions.Length == 0)

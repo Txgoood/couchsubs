@@ -143,6 +143,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<GameDisplay> PcDisplays => services.GameScreen?.Displays() ?? [];
     public string? PcCaptureError { get; private set; }
     public event Action<string, int, string>? PcSubtitleReady;
+    public event Action<string, string>? InspectionSubtitle;
+    public event Action<SpokenLine>? InspectionPlayback;
     /// <summary>PC üzerinde diyalogdan ayrı envanter/menü/nesne çevirileri.</summary>
     public event Action<IReadOnlyList<ScreenTranslation.Item>, string, int>? PcWorldTextReady;
     public event Action? PcWorldTextClear;
@@ -1074,6 +1076,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         };
         built.PairShown += (source, translation) =>
         {
+            InspectionSubtitle?.Invoke(source, translation);
             var box = built.LastBox;
             post(() =>
             {
@@ -1752,6 +1755,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             };
         };
         made.Failed += message => DubbingError = message;
+        made.PlaybackStarted += line => InspectionPlayback?.Invoke(line);
         dubber = made;
         return made;
     }

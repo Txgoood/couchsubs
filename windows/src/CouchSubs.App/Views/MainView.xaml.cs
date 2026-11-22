@@ -2,11 +2,15 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using CouchSubs.App.Controls;
+using CouchSubs.App.Services;
 using CouchSubs.Core;
+using CouchSubs.Core.Dubbing;
 using CouchSubs.Shell;
 
 namespace CouchSubs.App.Views;
@@ -16,6 +20,8 @@ public partial class MainView : UserControl
 {
     private readonly AppController controller;
     private bool selectingSource;
+    private readonly TranslationClip inspection = new();
+    private readonly DispatcherTimer inspectionTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
     // Çeviri sürerken PS5 ve TV bağlanamıyorsa güvenlik duvarı kartı önerilir.
     private readonly DispatcherTimer connectionWatch = new() { Interval = TimeSpan.FromSeconds(5) };
 
@@ -24,6 +30,9 @@ public partial class MainView : UserControl
         this.controller = controller;
         DataContext = controller;
         InitializeComponent();
+        inspectionTimer.Tick += SampleInspection;
+        controller.InspectionSubtitle += RecordSubtitle;
+        controller.InspectionPlayback += RecordPlayback;
         controller.PropertyChanged += OnChanged;
         connectionWatch.Tick += async (_, _) => await controller.CheckConnectionsAsync();
         Loaded += (_, _) => connectionWatch.Start();
@@ -31,6 +40,10 @@ public partial class MainView : UserControl
         {
             controller.PropertyChanged -= OnChanged;
             connectionWatch.Stop();
+            inspectionTimer.Stop();
+            inspection.Arm(false);
+            controller.InspectionSubtitle -= RecordSubtitle;
+            controller.InspectionPlayback -= RecordPlayback;
         };
         selectingSource = true;
         SourceSelection.SelectedIndex = controller.IsPcMode ? 1 : 0;
@@ -39,6 +52,61 @@ public partial class MainView : UserControl
         Refresh();
         ShowUpdate();
         _ = controller.CheckForUpdateAsync();
+    }
+
+    private void OnInspectionToggle(object sender, RoutedEventArgs e)
+    {
+        if (SaveInspectionButton is null) return;
+        var enabled = InspectionEnabled.IsChecked == true;
+        inspection.Arm(enabled);
+        SaveInspectionButton.IsEnabled = enabled;
+        if (enabled) inspectionTimer.Start();
+        else inspectionTimer.Stop();
+    }
+
+    private void RecordSubtitle(string english, string turkish) =>
+        inspection.Add("subtitle", english, turkish);
+
+    private void RecordPlayback(SpokenLine line) =>
+        inspection.Add("dubbing-start", line.English, line.Turkish, line.Speaker);
+
+    private async void SampleInspection(object? sender, EventArgs e)
+    {
+        if (!controller.IsRunning || controller.LastFrame is not { } frame) return;
+        try { await inspection.SampleAsync(frame); }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or COMException)
+        {
+            InspectionStatus.Text = "Ekran karesi inceleme kaydı için hazırlanamadı.";
+        }
+    }
+
+    private async void OnSaveInspection(object sender, RoutedEventArgs e) => await SaveInspectionAsync();
+
+    internal async Task SaveInspectionAsync()
+    {
+        if (InspectionEnabled.IsChecked != true || !SaveInspectionButton.IsEnabled)
+        {
+            InspectionStatus.Text = "Önce son 20 saniyeyi bellekte tutma seçeneğini aç.";
+            return;
+        }
+        SaveInspectionButton.IsEnabled = false;
+        try
+        {
+            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "CouchSubs İnceleme Kayıtları");
+            var directory = await inspection.SaveAsync(root);
+            InspectionStatus.Text = directory is null
+                ? "Henüz görüntü yok. Çeviriyi başlatıp birkaç saniye bekle."
+                : $"Kaydedildi: {directory}";
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            InspectionStatus.Text = "İnceleme dosyası kaydedilemedi.";
+        }
+        finally
+        {
+            SaveInspectionButton.IsEnabled = InspectionEnabled.IsChecked == true;
+        }
     }
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)

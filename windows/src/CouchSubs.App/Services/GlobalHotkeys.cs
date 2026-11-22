@@ -23,6 +23,7 @@ public enum HotkeyAction
     PauseSubtitles,
     /// <summary>F11 (configurable): one-shot full screen translation/toggle.</summary>
     Screen,
+    SaveInspection,
 }
 
 /// <summary>
@@ -35,6 +36,7 @@ public sealed partial class GlobalHotkeys : IDisposable
     private const int WmHotkey = 0x0312;
     private const uint ModNoRepeat = 0x4000;
     private const int FirstId = 0x4353;
+    private const int InspectionId = FirstId + 7;
 
     /// <summary>Action order is fixed; assigned keys are independently configurable.</summary>
     private static readonly (HotkeyAction Action, uint VirtualKey)[] Keys =
@@ -113,6 +115,9 @@ public sealed partial class GlobalHotkeys : IDisposable
             var id = FirstId + index;
             if (RegisterHotKey(window, id, ModNoRepeat, configuredKeys[index])) registered.Add(id);
         }
+        const uint controlAndShift = 0x0006;
+        if (RegisterHotKey(window, InspectionId, ModNoRepeat | controlAndShift, 0x78))
+            registered.Add(InspectionId);
     }
 
     private void Unregister()
@@ -127,7 +132,7 @@ public sealed partial class GlobalHotkeys : IDisposable
         var id = wParam.ToInt32();
         if (!registered.Contains(id)) return IntPtr.Zero;
         handled = true;
-        pressed(Keys[id - FirstId].Action);
+        pressed(id == InspectionId ? HotkeyAction.SaveInspection : Keys[id - FirstId].Action);
         return IntPtr.Zero;
     }
 

@@ -18,7 +18,7 @@ on:
 
 env:
   FFMPEG_VERSION: "7.1.2"
-  CouchSubsOnnxDirectML: "${{ github.ref_name == 'feat/windows-four-priority-test' || github.ref_name == 'feat/windows-positioned-menu-translation' }}"
+  CouchSubsOnnxDirectML: "${{ github.ref_name == 'feat/windows-four-priority-test' || github.ref_name == 'feat/windows-positioned-menu-translation' || github.ref_name == 'feat/windows-translation-clip-and-npc' }}"
 
 jobs:
   native:

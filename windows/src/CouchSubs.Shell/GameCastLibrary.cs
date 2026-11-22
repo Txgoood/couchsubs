@@ -120,6 +120,9 @@ public static class GameCastLibrary
         {
             Narrator = settings.Cast.Narrator,
             Partner = settings.Cast.Partner,
+            MaleNpcVoice = settings.Cast.MaleNpcVoice,
+            FemaleNpcVoice = settings.Cast.FemaleNpcVoice,
+            UnknownNpcVoice = settings.Cast.UnknownNpcVoice,
         };
         return settings with { ActiveGame = target, Cast = next, GameCasts = saved };
     }

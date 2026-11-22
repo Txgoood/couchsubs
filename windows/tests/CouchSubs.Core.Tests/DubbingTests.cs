@@ -43,6 +43,22 @@ public class SpeechTextTests
 public class VoiceCastTests
 {
     [Fact]
+    public void GenericSpeakerAliasesUseSharedVoicesWithoutAddingCharacters()
+    {
+        var cast = new VoiceCast { UnknownNpcVoice = DubbingVoice.Male3 };
+        cast.Assign(DubbingVoice.Female3, "Jason");
+        cast.Assign(DubbingVoice.Female2, "Worker");
+        foreach (var name in new[] { "Worker", "Vorker", "Woikers", "Ldcal", "Töu'rists", "Staff-member", "In Spanish" })
+        {
+            Assert.Equal(DubbingVoice.Male3, cast.VoiceFor(new SpokenLine("Hello.", "Merhaba.", name), out var assigned));
+            Assert.False(assigned);
+        }
+        Assert.Equal(DubbingVoice.Female3, cast.VoiceFor(new SpokenLine("Hello.", "Merhaba.", "Jason"), out _));
+        Assert.Equal(DubbingVoice.Female1, cast.VoiceFor(new SpokenLine("Hello.", "Merhaba.", "Woman"), out _));
+        Assert.Equal(2, cast.Assignments.Count);
+        Assert.Equal(DubbingVoice.Male3, cast.Copy().UnknownNpcVoice);
+    }
+    [Fact]
     public void EachCharacterKeepsItsVoice()
     {
         var cast = new VoiceCast();

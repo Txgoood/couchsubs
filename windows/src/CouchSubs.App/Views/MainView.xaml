@@ -101,6 +101,17 @@
             </c:Card>
 
             <!-- Son altyazı -->
+            <c:Card Title="Çeviri inceleme kaydı" Margin="0,16,0,0">
+                <StackPanel>
+                    <CheckBox x:Name="InspectionEnabled" Content="Son 20 saniyeyi bellekte tut"
+                              Foreground="{DynamicResource textPrimaryBrush}"
+                              Checked="OnInspectionToggle" Unchecked="OnInspectionToggle" />
+                    <Button x:Name="SaveInspectionButton" Content="Son 20 saniyeyi kaydet · Ctrl+Shift+F9"
+                            Click="OnSaveInspection" IsEnabled="False" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                    <TextBlock x:Name="InspectionStatus" Style="{StaticResource HintText}" TextWrapping="Wrap"
+                               Margin="0,6,0,0" Text="Kaydedince seçilen ekranın sessiz görüntüsü ve çeviri dökümü bu bilgisayara yazılır." />
+                </StackPanel>
+            </c:Card>
             <c:Card Title="{t:T 'Last subtitle'}" Margin="0,16,0,0">
                 <StackPanel>
                     <TextBlock Text="{t:T 'Subtitles will appear here while you play.'}" Style="{StaticResource HintText}"
