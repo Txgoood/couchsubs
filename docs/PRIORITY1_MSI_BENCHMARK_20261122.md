@@ -188,3 +188,35 @@ On the MSI, a 6-second FP32 replay with zero lookahead tested 20, 21,
 22, 24, 25, 26, 28, 30 and 40 ms chunks. The best p95 was 101.29 ms
 with 24 ms chunks. 52 of 297 complete frames exceeded 90 ms in that
 configuration. These measurements omit PS5 transport and playback.
+
+## RNNoise candidate
+
+A separate CPU experiment used the Windows PyPI wheel for pyrnnoise
+0.4.6. It ran the model in 480-sample blocks at 48 kHz. Model-call p95
+was 0.35–0.40 ms across the synthetic cases. A 30-second replay delivered
+960 samples every 20 ms and measured from the scheduled end of the
+previous packet, assuming 960 samples of model delay. It returned p95
+22.83 ms, maximum 29.57 ms, with 0 of 1,499 frames above 90 ms.
+This timing omits PS5 transport, application IPC, and playback.
+
+A least-squares projection of the output on the aligned clean speech
+and background yielded the following amplitude coefficients:
+
+| Synthetic input | Speech | Background |
+|---|---:|---:|
+| Speech with test tones | 0.779 | 0.158 |
+| Speech with music and effects | 0.674 | 0.155 |
+| Overlapping speech with music and effects | 0.602 | 0.229 |
+
+The correlation peak aligned within one sample of 960 samples for
+these speech clips. This is not an alignment guarantee for live use.
+Background in the estimated speech stem would also be attenuated
+when the stem is subtracted. RNNoise needs representative game audio
+quality, a reliable safety criterion, and live headset validation
+before it can drive the mix.
+
+To reproduce in an isolated Python environment with pyrnnoise 0.4.6:
+
+```powershell
+python -B tools/priority1/rnnoise_model_probe.py clean-synthetic-speech.wav matched-synthetic-mix.wav
+```
