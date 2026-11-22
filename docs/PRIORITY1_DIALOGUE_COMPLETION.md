@@ -165,6 +165,18 @@ that completes the frame to the worker reply. It excludes console
 transport before that callback and headset playback. The report contains
 timings and counts only.
 
+For an authorized local stereo game clip, compare the original and the
+same mix with 25% of the model stem subtracted from its center:
+
+```powershell
+python tools/priority1/rnnoise_listening_probe.py game-48khz.wav listening-test
+```
+
+Compare `A-original.wav` and `B-reduced.wav` at the same listening level.
+Check dialogue, music, and effects during dialogue and during quiet
+sections. `speech-estimate.wav` helps identify background leakage.
+The listening pair applies a fixed reduction in an offline experiment.
+
 The tap can observe genuine stereo Remote Play PCM when it is captured
 and can call the genuine Inworld subprocess. **It does not yet replace
 or attenuate the English audio.** The bounded diagnostic queue can drop
