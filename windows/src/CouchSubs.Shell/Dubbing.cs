@@ -170,6 +170,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private int generation;
     private int droppedLines;
     private int interruptedGenerations;
+    private bool finishingExpressiveLine;
     private int lastSynthesisMilliseconds;
     private readonly DubbingLatencyTracker latencyTracker = new();
     public (long Calls, double AverageMs, long PeakMs, long SlowCalls) SynthesisLatency =>
@@ -220,16 +221,17 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         int number;
         lock (gate)
         {
-            // Yeni altyazı geldiyse öncekilerin cümleleri artık geç kalmıştır: bekleyenler atılır, çalan da kesilir.
-            // Ses yazının gerisinde kalıp oyunu karıştırmasın; dublaj hep ekrandaki altyazıyı söyler.
             if (SmartTiming && !timingPolicy.Accept(lines, Environment.TickCount64))
                 return;
-            activeLineCancellation?.Cancel();
             droppedLines += queue.Count;
             queue.Clear();
             var submittedMs = Environment.TickCount64;
             foreach (var line in lines) queue.Enqueue((line, null, submittedMs));
             while (queue.Count > Backlog) { queue.Dequeue(); droppedLines++; }
+            // In expressive mode, keep the current audible line and only queue
+            // the latest subtitle for when it finishes.
+            if (finishingExpressiveLine) return;
+            activeLineCancellation?.Cancel();
             interrupt = working;
             if (interrupt) interruptedGenerations++;
             working = true;
@@ -268,6 +270,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             droppedLines += queue.Count;
             queue.Clear();
             working = false;
+            finishingExpressiveLine = false;
             generation++;
         }
         lock (gate)
@@ -375,10 +378,26 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
                 next = Next(number);
                 continue;
             }
-            // Bu cümle çalarken sonraki hazırlanır.
-            next = Next(number);
-            await PlayAsync(ready.Audio, ready.Preview ? DubbingOutput.Computer : Output, number);
+            var finishCurrent = !ready.Preview && ExpressiveSafety &&
+                Engine != DubbingEngine.Fast && EmotionMode != DubbingEmotionMode.Off;
+            lock (gate)
+            {
+                if (number != generation) return;
+                finishingExpressiveLine = finishCurrent;
+            }
+            // The ordinary path still prepares the next line during playback.
+            next = finishCurrent ? null : Next(number);
+            try
+            {
+                await PlayAsync(ready.Audio, ready.Preview ? DubbingOutput.Computer : Output, number);
+            }
+            finally
+            {
+                lock (gate)
+                    if (number == generation) finishingExpressiveLine = false;
+            }
             if (number != Generation) return;
+            if (finishCurrent) next = Next(number);
         }
         lock (gate)
         {

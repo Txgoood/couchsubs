@@ -39,8 +39,35 @@ public class DubberTests
     {
         public int Played;
         public int Stopped;
-        public void Play(byte[] wav) => Interlocked.Increment(ref Played);
+        public Action? OnPlay;
+        public void Play(byte[] wav)
+        {
+            Interlocked.Increment(ref Played);
+            OnPlay?.Invoke();
+        }
         public void Stop() => Interlocked.Increment(ref Stopped);
+    }
+
+    [Fact]
+    public async Task ExpressivePlaybackFinishesAndKeepsOnlyNewestSubtitle()
+    {
+        var synth = new FakeSynth();
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        await using var dubber = new Dubber(new FakeModel(synth), audio, () => server, () => 8787,
+            action => action()) { Output = DubbingOutput.Computer, ExpressiveSafety = true };
+        audio.OnPlay = () =>
+        {
+            if (audio.Played != 1) return;
+            dubber.Speak([new SpokenLine("Old.", "Eski.")]);
+            dubber.Speak([new SpokenLine("Latest.", "Son.")]);
+        };
+
+        dubber.Speak([new SpokenLine("First.", "İlk.")]);
+        await WaitUntil(() => audio.Played == 2);
+
+        Assert.Equal(0, audio.Stopped);
+        Assert.Equal(["ilk.", "son."], synth.Calls.Select(call => call.Text));
     }
 
     private static async Task WaitUntil(Func<bool> condition)
