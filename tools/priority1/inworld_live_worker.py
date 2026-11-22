@@ -122,6 +122,21 @@ def main():
         torch.cuda.synchronize()
         del warmup
     stream = isolator.stream()
+
+    def render(center):
+        with torch.inference_mode():
+            output = stream.push(torch.from_numpy(center))
+        return output.detach().cpu().numpy().reshape(-1)
+
+    def finish():
+        with torch.inference_mode():
+            output = stream.flush()
+        return output.detach().cpu().numpy().reshape(-1)
+
+    serve(np, render, finish)
+
+
+def serve(np, render, finish, require_contiguous=False):
     out = sys.stdout.buffer
     inp = sys.stdin.buffer
     out.write(b"READY\n")
@@ -132,21 +147,17 @@ def main():
         if message is None:
             break
         frame_id = HEADER.unpack_from(message)[0]
+        if require_contiguous and ids.last_id >= 0 and frame_id != ids.last_id + 1:
+            raise ValueError("Missing input frame; restart diagnostic stream")
         pcm = np.frombuffer(message, dtype="<f4", count=GAME_SAMPLES,
                             offset=HEADER.size).reshape(FRAME_SAMPLES, 2)
         if not np.isfinite(pcm).all() or float(np.max(np.abs(pcm))) > 1:
             raise ValueError("Invalid PCM; host must return unmodified originals")
         center = pcm.mean(axis=1, dtype=np.float32)
-        with torch.inference_mode():
-            rendered = stream.push(torch.from_numpy(center))
-        voice = rendered.detach().cpu().numpy().reshape(-1).tolist()
-        for frame_id, audio_bytes in ids.accept(frame_id, voice):
+        for frame_id, audio_bytes in ids.accept(frame_id, render(center).tolist()):
             out.write(HEADER.pack(frame_id) + audio_bytes)
         out.flush()
-    with torch.inference_mode():
-        tail = stream.flush()
-    for frame_id, audio_bytes in ids.finalize(
-            tail.detach().cpu().numpy().reshape(-1).tolist()):
+    for frame_id, audio_bytes in ids.finalize(finish().tolist()):
         out.write(HEADER.pack(frame_id) + audio_bytes)
     out.flush()
 

@@ -148,6 +148,15 @@ variables before launching the Windows app:
 - `COUCHSUBS_INWORLD_WORKER_SCRIPT=<absolute path to inworld_live_worker.py>`
 - `COUCHSUBS_INWORLD_DEVICE=cuda` (optional; default CPU)
 
+For an RNNoise diagnostic session, point
+`COUCHSUBS_INWORLD_WORKER_SCRIPT` at the absolute path to
+`tools/priority1/rnnoise_live_worker.py`, use an isolated Python environment
+with `pyrnnoise==0.4.6`, and set `COUCHSUBS_INWORLD_DEVICE=cpu`.
+The existing tap receives the stems over its PCM protocol. The worker
+discards the measured startup delay and stops on a discontinuity in
+frame IDs. RNNoise voice activity scores are unsuitable as stem confidence
+without game-audio calibration. The tap keeps its read-only behavior.
+
 The tap can observe genuine stereo Remote Play PCM when it is captured
 and can call the genuine Inworld subprocess. **It does not yet replace
 or attenuate the English audio.** The bounded diagnostic queue can drop

@@ -220,3 +220,10 @@ To reproduce in an isolated Python environment with pyrnnoise 0.4.6:
 ```powershell
 python -B tools/priority1/rnnoise_model_probe.py clean-synthetic-speech.wav matched-synthetic-mix.wav
 ```
+
+The opt-in RNNoise worker also passed a binary-stdio replay on the same
+MSI. All 1,500 input frame IDs matched the returned IDs in order.
+Output age p95 was 23.3 ms, with no frames above 90 ms. The final frame
+was returned by flush. A separate replay with a missing input ID
+terminated before producing a mismatched stem. These were synthetic
+tests of the worker process and its pipes.
