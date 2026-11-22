@@ -181,3 +181,10 @@ Reproduce with the installed Inworld CUDA environment:
 ```powershell
 python -B tools/priority1/inworld_paced_probe.py path/to/local-48khz.wav --chunk-ms 20 25 30
 ```
+
+To simulate fixed 20 ms delivery, add `--packet-ms 20`. The model then
+waits for the packet containing the last sample of each input chunk.
+On the MSI, a 6-second FP32 replay with zero lookahead tested 20, 21,
+22, 24, 25, 26, 28, 30 and 40 ms chunks. The best p95 was 101.29 ms
+with 24 ms chunks. 52 of 297 complete frames exceeded 90 ms in that
+configuration. These measurements omit PS5 transport and playback.

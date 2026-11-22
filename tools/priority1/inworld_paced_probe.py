@@ -13,8 +13,9 @@ def percentile95(values):
     return sorted(values)[math.ceil(len(values) * .95) - 1]
 
 
-def measure(isolator, mono, chunk_ms, cache_frames):
+def measure(isolator, mono, chunk_ms, cache_frames, packet_ms):
     chunk = RATE * chunk_ms // 1000
+    packet = RATE * packet_ms // 1000 if packet_ms else chunk
     frame = RATE // 50  # Report complete 20 ms output frames.
     warmup = isolator.stream(cache_frames=cache_frames)
     for start in range(0, min(len(mono), chunk * 16), chunk):
@@ -30,7 +31,9 @@ def measure(isolator, mono, chunk_ms, cache_frames):
     calls = []
     for start in range(0, len(mono), chunk):
         block = mono[start:start + chunk]
-        scheduled = origin + (start + len(block)) / RATE
+        block_end = start + len(block)
+        packet_end = min(len(mono), ((block_end + packet - 1) // packet) * packet)
+        scheduled = origin + packet_end / RATE
         time.sleep(max(0, scheduled - time.perf_counter()))
         began = time.perf_counter()
         output = stream.push(block)
@@ -44,7 +47,8 @@ def measure(isolator, mono, chunk_ms, cache_frames):
     if produced + tail.size != len(mono) or not ages:
         raise RuntimeError("Replay did not produce the expected complete sound frames")
     print(
-        f"{chunk_ms} ms input: push p95 {percentile95(calls):.2f} ms, "
+        f"{chunk_ms} ms model input / {packet_ms or chunk_ms} ms packets: "
+        f"push p95 {percentile95(calls):.2f} ms, "
         f"output age p95 {percentile95(ages):.2f} ms, "
         f"above 90 ms {sum(age > 90 for age in ages)}/{len(ages)}, "
         f"flush samples excluded {tail.size}",
@@ -56,6 +60,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Local authorized 48 kHz PCM16 WAV")
     parser.add_argument("--chunk-ms", type=int, nargs="+", default=[20, 25, 30, 40])
+    parser.add_argument("--packet-ms", type=int, default=0,
+                        help="Deliver samples only on packet boundaries (0 follows chunk size)")
     parser.add_argument("--seconds", type=int, default=12, choices=range(1, 61),
                         metavar="1..60")
     parser.add_argument("--precision", choices=["fp32", "bf16"], default="fp32")
@@ -64,6 +70,8 @@ def main():
     args = parser.parse_args()
     if any(not 10 <= ms <= 100 for ms in args.chunk_ms):
         parser.error("Chunk size must be 10 to 100 ms")
+    if not 0 <= args.packet_ms <= 100:
+        parser.error("Packet size must be 0 to 100 ms")
     if args.cache_frames is not None and args.cache_frames < 1:
         parser.error("Cache frame count must be positive")
 
@@ -83,7 +91,7 @@ def main():
         "inworld/voice-isolator", device="cuda", mode="streaming",
         precision=args.precision, lookahead_frames=0)
     for chunk_ms in args.chunk_ms:
-        measure(isolator, mono, chunk_ms, args.cache_frames)
+        measure(isolator, mono, chunk_ms, args.cache_frames, args.packet_ms)
 
 
 if __name__ == "__main__":
