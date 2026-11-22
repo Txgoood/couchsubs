@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Channels;
 using CouchSubs.Core.Dubbing;
@@ -10,7 +11,7 @@ namespace CouchSubs.Shell;
 /// Phase-1 real PS5 sample tap for the genuine Inworld streaming model.
 /// Crucial: READ ONLY. Original PCM continues on the unchanged PULSE3D
 /// mixing path regardless of worker stalls, errors and model output.
-/// The tap is opt-in, does not start by default and never saves audio.
+/// The tap is opt-in and only writes a local clip if separately requested.
 /// This is a diagnostic precursor, NOT live English-voice suppression.
 /// </summary>
 public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
@@ -34,6 +35,14 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
     private long validChunks;
     private long unmatchedStems;
     private long rejectedCaptureChunks;
+    private const int ClipSampleCount = 15 * 48000 * 2;
+    private readonly string? clipPath = Environment.GetEnvironmentVariable("COUCHSUBS_INWORLD_LOCAL_GAME_CLIP");
+    private short[]? clip;
+    private int clipSamples;
+    private bool clipWritten;
+    private bool clipWriteFailed;
+    private readonly long sessionStarted = Stopwatch.GetTimestamp();
+    private GameAudioBufferStats? playbackStats;
     private int disposed;
     private readonly record struct AudioChunk(short[] Pcm, int Channels, int Rate, long CapturedAt);
 
@@ -68,6 +77,8 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
     public long ValidCaptureChunks => Interlocked.Read(ref validChunks);
     public string? Failure => model.Failure;
 
+    internal void SetFinalPlaybackStats(GameAudioBufferStats? stats) => playbackStats = stats;
+
     public async Task StartAsync(string pythonExe, string scriptPath, string device,
         CancellationToken cancellationToken = default)
     {
@@ -95,6 +106,9 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
 
     private async Task ConsumeAsync(CancellationToken token)
     {
+        if (!string.IsNullOrWhiteSpace(clipPath) && Path.IsPathFullyQualified(clipPath) &&
+            !File.Exists(clipPath))
+            clip = new short[ClipSampleCount];
         try
         {
             await foreach (var chunk in input.Reader.ReadAllAsync(token))
@@ -111,7 +125,10 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
                             Interlocked.Increment(ref modelQueueRejected);
                         }
                     }))
+                {
                     Interlocked.Increment(ref validChunks);
+                    CaptureClip(chunk.Pcm);
+                }
                 else
                     Interlocked.Increment(ref rejectedCaptureChunks);
                 // Unlike the game mix, dropped diagnostic input causes NO
@@ -119,6 +136,53 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+    }
+
+    private void CaptureClip(short[] pcm)
+    {
+        if (clip is null) return;
+        var count = Math.Min(pcm.Length, clip.Length - clipSamples);
+        pcm.AsSpan(0, count).CopyTo(clip.AsSpan(clipSamples));
+        clipSamples += count;
+        if (clipSamples != clip.Length) return;
+
+        var audio = clip;
+        clip = null;
+        if (DroppedCaptureChunks != 0 || Interlocked.Read(ref rejectedCaptureChunks) != 0)
+        {
+            clipWriteFailed = true;
+            return;
+        }
+
+        try
+        {
+            WriteClip(audio);
+            clipWritten = true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            clipWriteFailed = true;
+        }
+    }
+
+    private void WriteClip(short[] audio)
+    {
+        using var stream = new FileStream(clipPath!, FileMode.CreateNew);
+        using var writer = new BinaryWriter(stream);
+        var bytes = MemoryMarshal.AsBytes(audio.AsSpan());
+        writer.Write("RIFF"u8);
+        writer.Write(36 + bytes.Length);
+        writer.Write("WAVEfmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)2);
+        writer.Write(48000);
+        writer.Write(48000 * 4);
+        writer.Write((short)4);
+        writer.Write((short)16);
+        writer.Write("data"u8);
+        writer.Write(bytes.Length);
+        writer.Write(bytes);
     }
 
     public async ValueTask DisposeAsync()
@@ -156,7 +220,11 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
             measured,
             p95MsCappedAt2000 = p95,
             over90Ms = ageBuckets.Skip(91).Sum(),
-            workerFailed = Failure is not null
+            workerFailed = Failure is not null,
+            sessionSeconds = Math.Round(Stopwatch.GetElapsedTime(sessionStarted).TotalSeconds, 1),
+            playback = playbackStats,
+            clipWritten,
+            clipWriteFailed
         });
         await File.AppendAllTextAsync(path, report + Environment.NewLine).ConfigureAwait(false);
     }

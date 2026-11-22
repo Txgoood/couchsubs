@@ -33,6 +33,8 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
     private readonly string _encoderPath;
     private readonly int _onnxThreads;
     private bool _gpuEncoder;
+    private bool _reportEncoderBackend = true;
+    private readonly string? _backendReport = Environment.GetEnvironmentVariable("COUCHSUBS_MARIAN_BACKEND_REPORT");
     private readonly InferenceSession _decoder;
     private readonly int _maxOutputTokens;
     private readonly int _beams;
@@ -91,8 +93,14 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
     {
         try
         {
-            return _encoder.Run(options, ["input_ids", "attention_mask"], [input, mask],
+            var result = _encoder.Run(options, ["input_ids", "attention_mask"], [input, mask],
                 ["last_hidden_state"]);
+            if (_reportEncoderBackend)
+            {
+                ReportEncoderBackend(_gpuEncoder ? "DirectML" : "CPU");
+                _reportEncoderBackend = false;
+            }
+            return result;
         }
         catch (OnnxRuntimeException) when (_gpuEncoder)
         {
@@ -101,8 +109,24 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
             _encoder.Dispose();
             _encoder = fallback;
             _gpuEncoder = false;
+            ReportEncoderBackend("CPU fallback after DirectML error");
+            _reportEncoderBackend = false;
             return _encoder.Run(options, ["input_ids", "attention_mask"], [input, mask],
                 ["last_hidden_state"]);
+        }
+    }
+
+    private void ReportEncoderBackend(string backend)
+    {
+        if (string.IsNullOrWhiteSpace(_backendReport) || !Path.IsPathFullyQualified(_backendReport))
+            return;
+        try
+        {
+            File.AppendAllText(_backendReport, backend + Environment.NewLine);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // Optional diagnostics must not block translation.
         }
     }
 

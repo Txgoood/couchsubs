@@ -18,6 +18,7 @@ on:
 
 env:
   FFMPEG_VERSION: "7.1.2"
+  CouchSubsOnnxDirectML: "${{ github.ref_name == 'feat/windows-four-priority-test' }}"
 
 jobs:
   native:

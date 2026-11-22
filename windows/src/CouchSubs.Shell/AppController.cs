@@ -956,11 +956,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         session = null;
         var oldInworldTap = Interlocked.Exchange(ref inworldDiagnosticTap, null);
         if (oldInworldTap is not null)
+        {
+            oldInworldTap.SetFinalPlaybackStats(services.GameAudio?.AudioBufferStatistics);
             _ = Task.Run(async () =>
             {
                 try { await oldInworldTap.DisposeAsync(); }
                 catch { /* diagnostic shutdown must never interrupt PS5 audio */ }
             });
+        }
         pulseAudioActive = false;
         services.GameAudio?.Dispose();
         services.NeuralSpeech?.Stop();
