@@ -159,6 +159,8 @@ public interface ITextReader
     string Read(Frame image, bool deep) => Read(image);
     /// <summary>Satırlar ayrı ayrı ve görüntüdeki yerleriyle.</summary>
     Reading ReadLines(Frame image, bool deep) => Reading.FromText(Read(image, deep));
+
+    Reading ReadScreenLines(Frame image) => ReadLines(image.Height < 900 ? image.Scaled(2) : image, false);
 }
 
 /// <summary>

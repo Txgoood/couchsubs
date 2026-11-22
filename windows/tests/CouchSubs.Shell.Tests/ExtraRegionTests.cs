@@ -186,4 +186,21 @@ public class ScreenTranslationControllerTests
         Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
         controller.Stop();
     }
+
+    [Fact]
+    public async Task NewSceneRemovesTheOldScreenTranslationWithoutAnotherToggle()
+    {
+        var (controller, services) = Ready();
+        using var cleanup = controller;
+        services.ReaderLines = new Reading([new TextLine("Settings", new TextBox(.1, .1, .3, .14))]);
+        await controller.StartAsync();
+        var stream = services.Streams[0];
+        stream.Emit(Frame.Blank(64, 64));
+        Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
+        var replacement = Frame.Blank(64, 64);
+        Array.Fill(replacement.Pixels, (byte)180);
+        await Task.Delay(220);
+        stream.Emit(replacement);
+        Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
+    }
 }

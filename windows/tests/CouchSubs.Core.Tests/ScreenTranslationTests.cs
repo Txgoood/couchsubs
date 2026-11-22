@@ -110,6 +110,63 @@ public class ScreenTranslationTests
     }
 
     [Fact]
+    public async Task PositionedScanReachesFooterAndSkipsOnlyTheActiveSubtitle()
+    {
+        var topRows = Enumerable.Range(0, 35)
+            .Select(i => Line("Menu item " + i, .05, .02 + i * .017, .25, .012));
+        var reading = new Reading(topRows.Concat([
+            Line("A separate lower setting", .3, .72, .6),
+            Line("We should go home.", .4, .8, .65),
+            Line("RESTORE DEFAULT", .62, .92, .75),
+        ]));
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(reading),
+            new FakeTranslator(), new CropRegion(), subtitle: "We should go home.");
+        Assert.Equal(37, items.Count);
+        Assert.Contains(items, item => item.Source == "A separate lower setting");
+        Assert.Equal("RESTORE DEFAULT", items[^1].Source);
+        Assert.DoesNotContain(items, item => item.Source == "We should go home.");
+    }
+
+    [Fact]
+    public async Task PositionedScanSeparatesTabsAndJoinsWrappedSentence()
+    {
+        var tabs = Line("DISPLAY UI CAMERA", .3, .05, .54) with
+        {
+            Words = [Line("DISPLAY", .3, .05, .35), Line("UI", .4, .05, .42), Line("CAMERA", .47, .05, .54)]
+        };
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(new Reading([
+            tabs, Line("Choose your preferred language", .6, .3, .9), Line("for the game interface.", .6, .34, .82)
+        ])), new FakeTranslator());
+        Assert.Equal(["DISPLAY", "UI", "CAMERA", "Choose your preferred language for the game interface."],
+            items.Select(item => item.Source));
+        Assert.Equal(.37, items[^1].Box.Bottom, 6);
+        Assert.Equal(.03, items[^1].LineHeight, 6);
+    }
+
+    [Fact]
+    public async Task PositionedScanStopsPublishingAfterScreenChanges()
+    {
+        var checks = 0;
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image,
+            new LinesReader(new Reading([Line("Old menu", .1, .1, .3)])), new FakeTranslator(),
+            progress: _ => Assert.Fail("An old translation must not be published."),
+            isCurrent: () => ++checks == 1);
+        Assert.Empty(items);
+    }
+
+    [Fact]
+    public async Task TurkishControllerLabelsKeepTheirMeaningAndSourceBox()
+    {
+        var label = Line("RESTORE DEFAULT", .6, .92, .78);
+        var reading = new Reading([label]);
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(reading),
+            new FakeTranslator(), englishToTurkish: true);
+        var item = Assert.Single(items);
+        Assert.Equal("VARSAYILANA DÖN", item.Translation);
+        Assert.Equal(label.Box!.Value, item.Box);
+    }
+
+    [Fact]
     public async Task TextThatTranslatesToItselfIsNotShown()
     {
         var items = await ScreenTranslation.TranslateAsync(Image, new LinesReader(new Reading([

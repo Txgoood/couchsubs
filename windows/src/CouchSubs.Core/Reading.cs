@@ -128,7 +128,11 @@ public sealed class Reading
     private static int WordCount(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
 
     /// <summary>Satır kutularını <paramref name="area"/> içindeki oranlardan dış çerçevenin oranlarına taşır.</summary>
-    public Reading PlacedIn(TextBox area) => new(Lines.Select(line => line with { Box = line.Box?.PlacedIn(area) }));
+    public Reading PlacedIn(TextBox area) => new(Lines.Select(line => line with
+    {
+        Box = line.Box?.PlacedIn(area),
+        Words = line.Words.Select(word => word with { Box = word.Box?.PlacedIn(area) }).ToArray()
+    }));
 }
 
 /// <summary>

@@ -35,6 +35,56 @@ public sealed class WindowsOcrReader : ITextReader
 
     public Reading ReadLines(Frame image, bool deep) => deep ? ReadingFallback.FirstLines(image, Recognize) : Recognize(image);
 
+    public Reading ReadScreenLines(Frame image)
+    {
+        var limit = OcrEngine.MaxImageDimension;
+        var scale = image.Height < 900 && image.Width <= limit / 2 && image.Height <= limit / 2 ? 2 : 1;
+        var full = scale == 2 ? image.Scaled(scale) : image;
+        var lines = RecognizeOnce(full).Lines.ToList();
+        // Overlapping bands recover small labels and text near the bottom. Keep complete lines from the full pass.
+        var columns = Math.Max(1, (int)Math.Ceiling(image.Width / (limit * 0.85)));
+        var rows = Math.Max(3, (int)Math.Ceiling(image.Height / (limit * 0.85)));
+        for (var row = 0; row < rows; row++)
+        for (var column = 0; column < columns; column++)
+        {
+            var left = image.Width * column / columns;
+            var right = image.Width * (column + 1) / columns;
+            var top = image.Height * row / rows;
+            var bottom = image.Height * (row + 1) / rows;
+            var xPad = columns == 1 ? 0 : (right - left) / 14;
+            var yPad = (bottom - top) / 14;
+            left = Math.Max(0, left - xPad);
+            right = Math.Min(image.Width, right + xPad);
+            top = Math.Max(0, top - yPad);
+            bottom = Math.Min(image.Height, bottom + yPad);
+            var area = new TextBox((double)left / image.Width, (double)top / image.Height,
+                (double)right / image.Width, (double)bottom / image.Height);
+            var part = image.Crop(left, top, right - left, bottom - top);
+            if (image.Height < 900 && part.Width <= limit / 2 && part.Height <= limit / 2)
+                part = part.Scaled(2);
+            foreach (var line in Recognize(part).PlacedIn(area).Lines)
+            {
+                if (line.Box is not { } box) continue;
+                if (left > 0 && box.Left <= area.Left + 2.0 / image.Width ||
+                    right < image.Width && box.Right >= area.Right - 2.0 / image.Width ||
+                    top > 0 && box.Top <= area.Top + 2.0 / image.Height ||
+                    bottom < image.Height && box.Bottom >= area.Bottom - 2.0 / image.Height)
+                    continue;
+                if (!lines.Any(existing => existing.Box is { } other && SameScreenLine(box, other)))
+                    lines.Add(line);
+            }
+        }
+        return new Reading(lines);
+    }
+
+    private static bool SameScreenLine(TextBox a, TextBox b)
+    {
+        var width = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
+        var height = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
+        return width > Math.Min(a.Right - a.Left, b.Right - b.Left) * 0.65 &&
+            height > Math.Min(a.Bottom - a.Top, b.Bottom - b.Top) * 0.6;
+    }
+
     /// <summary>
     /// Kare hem olduğu gibi hem de yalnız beyaz yazısı bırakılarak okunur; daha sözcüğe benzeyen okuma seçilir.
     /// Parlak sahnelerde ikincisi, renkli altyazılarda birincisi kazanır.

@@ -267,13 +267,22 @@
         el.style.top = (box.top * 100) + '%';
         el.style.width = ((box.right - box.left) * 100) + '%';
         el.style.height = ((box.bottom - box.top) * 100) + '%';
-        el.style.fontSize = Math.max(7, (item.line || box.bottom - box.top) * height * 1.12) + 'px';
+        var sourceLine = item.line || box.bottom - box.top;
+        var font = Math.max(7, sourceLine * height * 1.12);
+        el.style.fontSize = font + 'px';
         el.style.backgroundColor = paint.left;
         el.style.backgroundImage = 'linear-gradient(90deg,' + paint.left + ',' + paint.right + ')';
         el.style.color = paint.foreground;
         el.style.fontWeight = paint.bold ? '600' : '400';
         host.appendChild(el);
-        if (label.offsetWidth > el.clientWidth - 2)
+        if (box.bottom - box.top > sourceLine * 1.4) {
+          label.style.whiteSpace = 'normal';
+          label.style.maxWidth = '100%';
+          while (label.offsetHeight > el.clientHeight && font > 7) {
+            font = Math.max(7, font - 1);
+            el.style.fontSize = font + 'px';
+          }
+        } else if (label.offsetWidth > el.clientWidth - 2)
           label.style.transform = 'scaleX(' + Math.max(0, (el.clientWidth - 2) / label.offsetWidth) + ')';
         continue;
       }

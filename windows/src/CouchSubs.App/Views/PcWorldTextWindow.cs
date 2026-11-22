@@ -98,13 +98,16 @@ public sealed class PcWorldTextWindow : Window
             var height = (box.Bottom - box.Top) * content.ActualHeight;
             if (width <= 0 || height <= 0) continue;
             var paint = item.Paint;
+            var multiline = box.Bottom - box.Top > item.LineHeight * 1.4;
             var label = new TextBlock
             {
                 Text = item.Translation,
                 Foreground = paint is null ? Brushes.White : new SolidColorBrush(ParseColor(paint.Foreground)),
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = Math.Clamp(item.LineHeight * content.ActualHeight * 1.12, 7, 150),
-                FontWeight = paint?.Bold == true ? FontWeights.SemiBold : FontWeights.Normal
+                FontWeight = paint?.Bold == true ? FontWeights.SemiBold : FontWeights.Normal,
+                MaxWidth = multiline ? width : double.PositiveInfinity,
+                TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap
             };
             Brush backdrop = paint is null ? Brushes.DimGray :
                 new LinearGradientBrush(ParseColor(paint.Left), ParseColor(paint.Right), 0);
