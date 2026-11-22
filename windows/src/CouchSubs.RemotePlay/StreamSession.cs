@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
@@ -205,6 +206,9 @@ public sealed class StreamSession : IStreamSession
     /// <summary>Kayıtlı adreste PS5 yoksa (modem adresini değiştirmiş olabilir) ağda arar; bulursa adresi günceller.</summary>
     private ConsoleInfo? Relocate()
     {
+        if (string.Equals(console.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+            (IPAddress.TryParse(console.Host, out var address) && IPAddress.IsLoopback(address)))
+            return null;
         if (DateTime.UtcNow < nextRelocate) return null;
         nextRelocate = DateTime.UtcNow + RelocateInterval;
         var moved = ConsoleDiscovery.PickMoved(ConsoleDiscovery.Discover(null, TimeSpan.FromSeconds(3)), console.Name);
