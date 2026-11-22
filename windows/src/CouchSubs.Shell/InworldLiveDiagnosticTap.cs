@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+using System.Diagnostics;
+using System.Text.Json;
 using System.Threading.Channels;
 using CouchSubs.Core.Dubbing;
 
@@ -22,23 +24,40 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
     private readonly Ps5DialogueFrameSegmenter segmenter = new();
     private readonly CancellationTokenSource stopping = new();
     private readonly InworldRealtimeWorkerClient model;
+    private readonly object metricsGate = new();
+    private readonly (long Frame, long CapturedAt)[] pending = new (long, long)[64];
+    private readonly long[] ageBuckets = new long[2001];
     private Task? consumer;
     private long chunksDropped;
     private long modelQueueRejected;
     private long stemsReceived;
     private long validChunks;
+    private long unmatchedStems;
+    private long rejectedCaptureChunks;
     private int disposed;
-    private readonly record struct AudioChunk(short[] Pcm, int Channels, int Rate);
+    private readonly record struct AudioChunk(short[] Pcm, int Channels, int Rate, long CapturedAt);
 
     public InworldLiveDiagnosticTap()
     {
-        model = new InworldRealtimeWorkerClient((_, stem) =>
+        model = new InworldRealtimeWorkerClient((id, stem) =>
         {
             // Actual model output is intentionally NOT routed to the game
             // mixer until trustworthy per-frame speech confidence and stable
             // total measured latency have been demonstrated.
-            if (stem.Length == InworldStemWireProtocol.StemSamplesMono)
-                Interlocked.Increment(ref stemsReceived);
+            if (stem.Length != InworldStemWireProtocol.StemSamplesMono) return;
+            Interlocked.Increment(ref stemsReceived);
+            lock (metricsGate)
+            {
+                ref var entry = ref pending[id % pending.Length];
+                if (entry.Frame != id || entry.CapturedAt == 0)
+                {
+                    unmatchedStems++;
+                    return;
+                }
+                var age = Stopwatch.GetElapsedTime(entry.CapturedAt).TotalMilliseconds;
+                ageBuckets[(int)Math.Min(ageBuckets.Length - 1, Math.Ceiling(age))]++;
+                entry = default;
+            }
         });
     }
 
@@ -66,7 +85,7 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
     {
         if (!Ready || Volatile.Read(ref disposed) != 0 || pcm.Length == 0)
             return false;
-        if (!input.Writer.TryWrite(new AudioChunk(pcm, channels, rate)))
+        if (!input.Writer.TryWrite(new AudioChunk(pcm, channels, rate, Stopwatch.GetTimestamp())))
         {
             Interlocked.Increment(ref chunksDropped);
             return false;
@@ -83,10 +102,18 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
                 if (segmenter.Append(chunk.Pcm, chunk.Channels, chunk.Rate,
                     (id, frame) =>
                     {
+                        lock (metricsGate)
+                            pending[id % pending.Length] = (id, chunk.CapturedAt);
                         if (!model.TryQueue(id, frame))
+                        {
+                            lock (metricsGate)
+                                pending[id % pending.Length] = default;
                             Interlocked.Increment(ref modelQueueRejected);
+                        }
                     }))
                     Interlocked.Increment(ref validChunks);
+                else
+                    Interlocked.Increment(ref rejectedCaptureChunks);
                 // Unlike the game mix, dropped diagnostic input causes NO
                 // game-audio artifact: this tap is observation only.
             }
@@ -106,5 +133,31 @@ public sealed class InworldLiveDiagnosticTap : IAsyncDisposable
         }
         await model.DisposeAsync().ConfigureAwait(false);
         stopping.Dispose();
+        var path = Environment.GetEnvironmentVariable("COUCHSUBS_INWORLD_METRICS_PATH");
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) return;
+        var measured = ageBuckets.Sum();
+        var rank = (long)Math.Ceiling(measured * .95);
+        int? p95 = null;
+        for (var i = 0; i < ageBuckets.Length && measured > 0; i++)
+        {
+            rank -= ageBuckets[i];
+            if (rank > 0) continue;
+            p95 = i;
+            break;
+        }
+        var report = JsonSerializer.Serialize(new
+        {
+            validCaptureChunks = ValidCaptureChunks,
+            rejectedCaptureChunks,
+            droppedCaptureChunks = DroppedCaptureChunks,
+            rejectedModelFrames = RejectedModelFrames,
+            receivedStems = ReceivedStems,
+            unmatchedStems,
+            measured,
+            p95MsCappedAt2000 = p95,
+            over90Ms = ageBuckets.Skip(91).Sum(),
+            workerFailed = Failure is not null
+        });
+        await File.AppendAllTextAsync(path, report + Environment.NewLine).ConfigureAwait(false);
     }
 }

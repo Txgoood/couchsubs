@@ -157,6 +157,14 @@ discards the measured startup delay and stops on a discontinuity in
 frame IDs. RNNoise voice activity scores are unsuitable as stem confidence
 without game-audio calibration. The tap keeps its read-only behavior.
 
+Set `COUCHSUBS_INWORLD_METRICS_PATH` to an absolute path in an existing
+writable directory to append one JSON summary when the session stops.
+It contains counts of dropped or rejected chunks and stems, p95 age,
+and the count over 90 ms. Age runs from the application audio callback
+that completes the frame to the worker reply. It excludes console
+transport before that callback and headset playback. The report contains
+timings and counts only.
+
 The tap can observe genuine stereo Remote Play PCM when it is captured
 and can call the genuine Inworld subprocess. **It does not yet replace
 or attenuate the English audio.** The bounded diagnostic queue can drop
