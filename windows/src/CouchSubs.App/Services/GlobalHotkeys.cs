@@ -24,6 +24,7 @@ public enum HotkeyAction
     /// <summary>F11 (configurable): one-shot full screen translation/toggle.</summary>
     Screen,
     SaveInspection,
+    SmoothVideo,
 }
 
 /// <summary>
@@ -37,6 +38,7 @@ public sealed partial class GlobalHotkeys : IDisposable
     private const uint ModNoRepeat = 0x4000;
     private const int FirstId = 0x4353;
     private const int InspectionId = FirstId + 7;
+    private const int SmoothVideoId = FirstId + 8;
 
     /// <summary>Action order is fixed; assigned keys are independently configurable.</summary>
     private static readonly (HotkeyAction Action, uint VirtualKey)[] Keys =
@@ -118,6 +120,8 @@ public sealed partial class GlobalHotkeys : IDisposable
         const uint controlAndShift = 0x0006;
         if (RegisterHotKey(window, InspectionId, ModNoRepeat | controlAndShift, 0x78))
             registered.Add(InspectionId);
+        if (RegisterHotKey(window, SmoothVideoId, ModNoRepeat | controlAndShift, 0x77))
+            registered.Add(SmoothVideoId);
     }
 
     private void Unregister()
@@ -132,7 +136,12 @@ public sealed partial class GlobalHotkeys : IDisposable
         var id = wParam.ToInt32();
         if (!registered.Contains(id)) return IntPtr.Zero;
         handled = true;
-        pressed(id == InspectionId ? HotkeyAction.SaveInspection : Keys[id - FirstId].Action);
+        pressed(id switch
+        {
+            InspectionId => HotkeyAction.SaveInspection,
+            SmoothVideoId => HotkeyAction.SmoothVideo,
+            _ => Keys[id - FirstId].Action
+        });
         return IntPtr.Zero;
     }
 

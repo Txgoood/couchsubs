@@ -21,6 +21,9 @@ public partial class MainView : UserControl
     private readonly AppController controller;
     private bool selectingSource;
     private readonly TranslationClip inspection = new();
+    private CancellationTokenSource? smoothVideoWork;
+    private SmoothVideoWindow? smoothVideoWindow;
+    private string? smoothDisplay;
     private readonly DispatcherTimer inspectionTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
     // Çeviri sürerken PS5 ve TV bağlanamıyorsa güvenlik duvarı kartı önerilir.
     private readonly DispatcherTimer connectionWatch = new() { Interval = TimeSpan.FromSeconds(5) };
@@ -40,6 +43,7 @@ public partial class MainView : UserControl
         {
             controller.PropertyChanged -= OnChanged;
             connectionWatch.Stop();
+            StopSmoothVideo();
             inspectionTimer.Stop();
             inspection.Arm(false);
             controller.InspectionSubtitle -= RecordSubtitle;
@@ -52,6 +56,84 @@ public partial class MainView : UserControl
         Refresh();
         ShowUpdate();
         _ = controller.CheckForUpdateAsync();
+    }
+
+    private void OnSmoothVideo(object sender, RoutedEventArgs e) => ToggleSmoothVideo();
+
+    internal void ToggleSmoothVideo()
+    {
+        if (smoothVideoWork is not null)
+        {
+            StopSmoothVideo();
+            return;
+        }
+        if (!controller.IsPcMode || !controller.IsRunning) return;
+        var display = controller.Settings.PcDisplayId;
+        System.Drawing.Rectangle bounds;
+        try { bounds = WindowsGameScreenCapture.BoundsFor(display); }
+        catch (InvalidOperationException error)
+        {
+            SmoothVideoStatus.Text = error.Message;
+            return;
+        }
+        var factor = Math.Min(1, Math.Min(1280.0 / bounds.Width, 720.0 / bounds.Height));
+        var width = Math.Max(2, (int)(bounds.Width * factor) & ~1);
+        var height = Math.Max(2, (int)(bounds.Height * factor) & ~1);
+        var window = new SmoothVideoWindow(display, width, height);
+        var work = new CancellationTokenSource();
+        smoothDisplay = display;
+        smoothVideoWindow = window;
+        smoothVideoWork = work;
+        window.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(smoothVideoWork, work)) return;
+            smoothVideoWindow = null;
+            StopSmoothVideo();
+        };
+        SmoothVideoButton.Content = "Akıcı görüntüyü kapat";
+        SmoothVideoStatus.Text = "NVIDIA kare üretme hazırlanıyor…";
+        _ = RunSmoothVideoAsync(window, bounds, work);
+    }
+
+    private async Task RunSmoothVideoAsync(SmoothVideoWindow window, System.Drawing.Rectangle bounds,
+        CancellationTokenSource work)
+    {
+        try
+        {
+            await Task.Run(() => window.PlayAsync(bounds, () =>
+            {
+                if (ReferenceEquals(smoothVideoWork, work))
+                    SmoothVideoStatus.Text = "Açık · Ctrl+Shift+F8 ile kapat";
+            }, work.Token));
+        }
+        catch (OperationCanceledException) when (work.IsCancellationRequested) { }
+        catch (Exception error) when (error is IOException or InvalidOperationException or
+                                      Win32Exception or COMException or OperationCanceledException)
+        {
+            if (ReferenceEquals(smoothVideoWork, work))
+            {
+                var reason = error is InvalidOperationException &&
+                    (error.Message.StartsWith("Akıcı görüntü", StringComparison.Ordinal) ||
+                     error.Message.StartsWith("NVIDIA kare üretme bileşeni", StringComparison.Ordinal))
+                    ? error.Message
+                    : "NVIDIA kare üretme kullanılamadı. Normal görüntüye dönüldü.";
+                StopSmoothVideo();
+                SmoothVideoStatus.Text = reason;
+            }
+        }
+        finally { work.Dispose(); }
+    }
+
+    private void StopSmoothVideo()
+    {
+        if (smoothVideoWork is not { } work) return;
+        smoothVideoWork = null;
+        smoothDisplay = null;
+        work.Cancel();
+        smoothVideoWindow?.Close();
+        smoothVideoWindow = null;
+        SmoothVideoButton.Content = "Akıcı görüntü · 2×";
+        SmoothVideoStatus.Text = "Kapalı · Ctrl+Shift+F8";
     }
 
     private void OnInspectionToggle(object sender, RoutedEventArgs e)
@@ -135,6 +217,9 @@ public partial class MainView : UserControl
 
     private void Refresh()
     {
+        if (!controller.IsRunning || !controller.IsPcMode || smoothDisplay != controller.Settings.PcDisplayId)
+            StopSmoothVideo();
+        SmoothVideoCard.Visibility = controller.IsPcMode ? Visibility.Visible : Visibility.Collapsed;
         var running = controller.IsRunning;
         Toggle.Style = (Style)FindResource(running ? "DangerButton" : "PrimaryButton");
         ToggleGlyph.Text = running ? Glyphs.Stop : Glyphs.Play;

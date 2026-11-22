@@ -28,6 +28,13 @@ public sealed class PcResultWindow : Window
     // Windows 10 2004+: bu pencere ekran görüntüsü alırken görünmez, oyuncuya görünür.
     private const uint WdaExcludeFromCapture = 0x11;
 
+    internal static void KeepAboveGameVideo()
+    {
+        if (current is not { } window) return;
+        window.Topmost = false;
+        window.Topmost = true;
+    }
+
     /// <summary>Çeviriyi gösterir; önceki kutu varsa yerine geçer.</summary>
     public static void Display(string text, int milliseconds)
     {

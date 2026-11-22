@@ -72,6 +72,9 @@ public partial class ShellWindow : Window
             case HotkeyAction.SaveInspection:
                 if (Host.Content is MainView main) _ = main.SaveInspectionAsync();
                 break;
+            case HotkeyAction.SmoothVideo:
+                if (Host.Content is MainView video) video.ToggleSmoothVideo();
+                break;
         }
     }
 

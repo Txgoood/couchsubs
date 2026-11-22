@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\logo.png" />
+    <None Update="Services\SmoothVideoWorker.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- ShellWindow.xaml pencere simgesi olarak bunu okur; ApplicationIcon yalnız exe simgesidir. -->
     <Resource Include="Assets\CouchSubs.ico" />
   </ItemGroup>

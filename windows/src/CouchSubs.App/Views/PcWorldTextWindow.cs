@@ -55,6 +55,13 @@ public sealed class PcWorldTextWindow : Window
         current = null;
     }
 
+    internal static void KeepAboveGameVideo()
+    {
+        if (current is not { } window) return;
+        window.Topmost = false;
+        window.Topmost = true;
+    }
+
     private PcWorldTextWindow(string displayId)
     {
         this.displayId = displayId;

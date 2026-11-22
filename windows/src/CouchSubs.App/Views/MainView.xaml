@@ -62,6 +62,17 @@
                 </StackPanel>
             </Button>
 
+            <c:Card x:Name="SmoothVideoCard" Margin="0,16,0,0" Visibility="Collapsed">
+                <StackPanel>
+                    <Button x:Name="SmoothVideoButton" Content="Akıcı görüntü · 2×" Click="OnSmoothVideo"
+                            HorizontalAlignment="Left" IsEnabled="{Binding IsRunning}"
+                            AutomationProperties.Name="Akıcı görüntüyü aç veya kapat" />
+                    <TextBlock x:Name="SmoothVideoStatus"
+                               Text="Kapalı · Ctrl+Shift+F8"
+                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                </StackPanel>
+            </c:Card>
+
             <!-- Durumlar -->
             <c:Card x:Name="ConsoleStatusCard" Margin="0,24,0,0">
                 <StackPanel>
