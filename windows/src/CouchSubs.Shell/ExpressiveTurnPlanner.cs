@@ -25,6 +25,13 @@ public sealed class ExpressiveTurnPlanner
         // The string label alone never warrants a new character voice.
         var speaker = line.Speaker?.Trim();
         var hasSpeaker = !string.IsNullOrWhiteSpace(speaker) && speaker.Length <= 64;
+        if (line.NewTurn)
+        {
+            if (hasSpeaker)
+                previous.Remove(speaker!);
+            else
+                previous.Clear();
+        }
         var english = line.English.Trim();
         var lexical = SpeechEmotions.Guess(english);
 

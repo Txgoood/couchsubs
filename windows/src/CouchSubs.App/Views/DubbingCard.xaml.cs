@@ -88,6 +88,8 @@ public partial class DubbingCard : UserControl
             item.IsSelected = string.Equals(item.Tag as string, settings.EmotionMode.ToString(), StringComparison.Ordinal);
         EnginePanel.Visibility = controller.FastDubbingAvailable ? Visibility.Visible : Visibility.Collapsed;
         var fast = controller.FastDubbingAvailable && settings.Engine == DubbingEngine.Fast;
+        ExpressiveSafety.IsChecked = settings.ExpressiveSafety;
+        ExpressiveSafety.IsEnabled = !fast && settings.EmotionMode != DubbingEmotionMode.Off;
         (fast ? FastEngine : NaturalEngine).IsChecked = true;
         EngineHint.Text = Localizer.Current[fast
             ? "Windows' own Turkish voice: speaks at once, nothing to download. Sounds more mechanical."
@@ -475,6 +477,12 @@ public partial class DubbingCard : UserControl
         if (loading || controller is null || EmotionModePicker.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
         if (Enum.TryParse<DubbingEmotionMode>(tag, out var mode))
             Update(s => s with { Dubbing = s.Dubbing with { EmotionMode = mode } });
+    }
+
+    private void OnExpressiveSafety(object sender, RoutedEventArgs e)
+    {
+        if (loading || controller is null) return;
+        Update(s => s with { Dubbing = s.Dubbing with { ExpressiveSafety = ExpressiveSafety.IsChecked == true } });
     }
 
     private void OnAtmosphereModeChange(object sender, SelectionChangedEventArgs e)
