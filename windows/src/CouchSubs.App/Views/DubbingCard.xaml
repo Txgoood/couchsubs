@@ -21,55 +21,6 @@
                     </Border>
                     <TextBlock x:Name="EngineHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
                 </StackPanel>
-                <StackPanel Margin="0,0,0,14">
-                    <TextBlock Text="Duygusal Türkçe dublaj" FontWeight="SemiBold" Margin="0,0,0,7" />
-                    <ComboBox x:Name="EmotionModePicker" Width="260" HorizontalAlignment="Left" SelectionChanged="OnEmotionMode">
-                        <ComboBoxItem Content="Kapalı (önceki dublaj)" Tag="Off" IsSelected="True" />
-                        <ComboBoxItem Content="Dengeli (metinden duygu)" Tag="Balanced" />
-                        <ComboBoxItem Content="Sinematik (güçlü vurgu)" Tag="Cinematic" />
-                        <ComboBoxItem Content="Ses destekli (PS5 deneysel)" Tag="Acoustic" />
-                        <ComboBoxItem Content="Yapay zekâ konuşma tespiti (Silero ONNX)" Tag="Neural" />
-                    </ComboBox>
-                    <CheckBox x:Name="ExpressiveSafety" Margin="0,8,0,0"
-                              Content="Duyguyu aynı konuşma içinde sürdür"
-                              Checked="OnExpressiveSafety" Unchecked="OnExpressiveSafety" />
-                    <TextBlock Text="Konuşma algılama motoru" FontWeight="SemiBold" Margin="0,8,0,6" />
-                    <ComboBox x:Name="SpeechDetectionPicker" Width="320" HorizontalAlignment="Left"
-                              SelectionChanged="OnSpeechDetection">
-                        <ComboBoxItem Content="Otomatik (mevcut Silero, önerilen)" Tag="Automatic" />
-                        <ComboBoxItem Content="Silero ONNX (yerel)" Tag="SileroOnnx" />
-                        <ComboBoxItem Content="Yapay zekâ kapalı (metin tabanlı)" Tag="TextOnly" />
-                    </ComboBox>
-                    <TextBlock Text="Diğer yapay zekâ motorları henüz paketlenmedi. Metin tabanlı mod orijinal OCR, çeviri ve Türkçe dublajı korur; ses iziyle konuşmacı ayrıştırma devreden çıkar."
-                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,5,0,8" />
-                    <TextBlock Text="Build #160 · Dublaj sağlık paneli" FontWeight="SemiBold" Margin="0,10,0,5" />
-                    <TextBlock x:Name="DubbingHealthInfo" Style="{StaticResource HintText}"
-                               TextWrapping="Wrap" Margin="0,0,0,6" />
-                    <TextBlock Text="Yalnızca istatistikleri kontrol eder; oyun sesi ve dublaj otomatik durdurulmaz. 5 saniyede bir güncellenir."
-                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
-                    <TextBlock Text="Yapay zekâ performansı" FontWeight="SemiBold" Margin="0,8,0,5" />
-                    <TextBlock x:Name="AiPerformanceInfo" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,5" />
-                    <Button Content="Performans ölçümlerini yenile" Click="OnRefreshAiPerformance"
-                            HorizontalAlignment="Left" Margin="0,0,0,10" />
-                    <CheckBox x:Name="AutoSpeakerTracking" Margin="0,9,0,5" Checked="OnSpeakerTracking"
-                              Unchecked="OnSpeakerTracking"
-                              Content="Konuşmacı adını bulamazsa sesinden otomatik eşleştir (deneysel)" />
-                    <TextBlock Text="Build #147 güvenlik düzeltmesi: yerel Sherpa ses tanıma çökme riski nedeniyle geçici olarak kapalı. İsimli altyazı, manuel karakter sesleri ve normal Türkçe dublaj çalışmaya devam eder."
-                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,6" />
-                    <CheckBox x:Name="InterruptionGuard" Checked="OnInterruptionGuard"
-                              Unchecked="OnInterruptionGuard" Margin="0,6,0,5"
-                              Content="Söz kesme durumunda yanlış karakter sesini engelle (deneysel)" />
-                    <TextBlock Text="Konuşmacı kısa sürede değişirse ses ataması geçici olarak belirsiz kabul edilir. Bu yöntem iki ayrı sesi ayırmaz; yalnız yanlış kişiye dublaj yapılma riskini azaltır. Varsayılan kapalıdır."
-                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,1,0,6" />
-                    <TextBlock x:Name="InterruptionStats" Style="{StaticResource HintText}"
-                               TextWrapping="Wrap" Margin="0,0,0,6" />
-                    <Button Content="Söz kesme sayacını yenile" Click="OnRefreshInterruption"
-                            HorizontalAlignment="Left" Margin="0,0,0,8" />
-                    <TextBlock Text="Ses tanıma modeli PS5 karışık sesinden çalışır; müzik, efekt, üst üste konuşma ve kısa replikler tanımayı yanıltabilir. Emin olunmayan satırlarda anlatıcı/karşılıklı seslere döner."
-                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,2,0,8" />
-                    <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Ses destekli mod, PS5 sesindeki konuşmaya benzer hareketlilik en az kısa bir süre devam ederse duygu sürekliliğine yardımcı olur. Müzik ve efektlerden konuşmayı kesin olarak ayıramaz. Yapay zekâ modu yerel Silero ONNX ile konuşma olup olmadığını tahmin eder; müzik/efekti ayırmaz ve duyguyu sesten sınıflandırmaz. PC modunda metin tabanlı devam eder. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
-                               Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,7,0,0" />
-                </StackPanel>
                 <StackPanel x:Name="DownloadPanel">
                     <TextBlock Text="{t:T 'The voices are downloaded once (440 MB).'}" Style="{StaticResource HintText}" Margin="0,0,0,8" />
                     <Button x:Name="DownloadButton" Content="{t:T 'Download voices'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Click="OnDownload" />
@@ -79,12 +30,12 @@
                 <StackPanel x:Name="ReadyPanel">
                     <TextBlock Text="{t:T 'Play the voice on'}" Margin="0,0,0,8" />
                     <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,16" HorizontalAlignment="Left">
-                        <StackPanel Orientation="Horizontal">
+                        <WrapPanel>
                             <RadioButton x:Name="OnTv" Content="LG TV (webOS)" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
                             <RadioButton x:Name="OnAgon" Content="Agon monitör" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Agon" />
                             <RadioButton x:Name="OnHeadset" Content="PS5 kulaklık" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Headset" />
                             <RadioButton x:Name="OnComputer" Content="{t:T 'This computer'}" GroupName="output" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
-                        </StackPanel>
+                        </WrapPanel>
                     </Border>
                     <TextBlock x:Name="OutputHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
                     <StackPanel x:Name="AtmospherePanel" Margin="0,0,0,16">
@@ -115,60 +66,119 @@
                         <TextBlock Text="Bu ayarlar yalnız PS5 oyun sesi ve dublajı aynı Windows/PULSE 3D çıkışına gönderildiğinde çalışır. Müzik ve efektler oyun sesinden ayrı değildir; İngilizce diyaloğu tek başına azaltmaz."
                                    Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,0" />
                     </StackPanel>
-                    <!-- Oyun bazlı ses hafızası: ayrı oyun kayıtları, karakter sayısı sınırı yok. -->
-                    <StackPanel Margin="0,0,0,12">
-                        <TextBlock Text="Oyun ve karakter hafızası" FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <TextBlock Text="GTA 5, GTA 6 veya diğer oyunun adını gir. Karakterler bu oyuna özel saklanır; önceki oyunun sesleri silinmez."
-                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
-                        <StackPanel Orientation="Horizontal">
-                            <ComboBox x:Name="GameSelection" Width="170" SelectionChanged="OnGameSelection" Margin="0,0,8,0" />
-                            <TextBox x:Name="GameName" Width="205" VerticalContentAlignment="Center" Margin="0,0,8,0"
-                                     ToolTip="Örneğin: GTA 5, GTA 6, Peppa Pig" />
-                            <Button Content="Oyunu seç / ekle" Click="OnSelectGame" />
+                    <Expander Header="Oyun ve karakter hafızası" Foreground="{DynamicResource textPrimaryBrush}"
+                              Margin="0,8,0,0">
+                        <StackPanel Margin="0,10,0,0">
+                            <!-- Oyun bazlı ses hafızası: ayrı oyun kayıtları, karakter sayısı sınırı yok. -->
+                            <StackPanel Margin="0,0,0,12">
+                                <TextBlock Text="GTA 5, GTA 6 veya diğer oyunun adını gir. Karakterler bu oyuna özel saklanır; önceki oyunun sesleri silinmez."
+                                           Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                <WrapPanel>
+                                    <ComboBox x:Name="GameSelection" Width="170" SelectionChanged="OnGameSelection" Margin="0,0,8,0" />
+                                    <TextBox x:Name="GameName" Width="205" VerticalContentAlignment="Center" Margin="0,0,8,0"
+                                             ToolTip="Örneğin: GTA 5, GTA 6, Peppa Pig" />
+                                    <Button Content="Oyunu seç / ekle" Click="OnSelectGame" />
+                                </WrapPanel>
+                                <TextBlock x:Name="GameInfo" Style="{StaticResource HintText}" Margin="0,8,0,0" />
+                                <CheckBox x:Name="AutoGameLibrary"
+                                          Checked="OnAutoGameLibrary" Unchecked="OnAutoGameLibrary" Margin="0,8,0,4">
+                                    <TextBlock Text="Oyun başlığı görülürse karakter kütüphanesini otomatik oluştur / seç" />
+                                </CheckBox>
+                                <TextBlock Text="PS5 yerel ağ yanıtı çalışan oyunun adını bildirirse kütüphane otomatik seçilir; yanıt gelmezse GTA 5 / GTA 6 başlık ekranından OCR denenir. İkisi de bulunamazsa elle seçim korunur."
+                                           Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                <WrapPanel Margin="0,6,0,0">
+                                    <Button Content="Dışarı aktar (JSON)" Click="OnExportGame" Margin="0,0,8,0" />
+                                    <Button Content="İçe aktar" Click="OnImportGame" Margin="0,0,8,0" />
+                                    <Button Content="Oyunu sil" Click="OnDeleteGame" />
+                                </WrapPanel>
+                                <TextBlock Text="Silme yalnız seçilen oyunun karakter eşleşmelerini temizler. Önce dışarı aktarırsan ileride JSON dosyasından geri yükleyebilirsin; ortak ses modelleri silinmez."
+                                           Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                <TextBlock Text="Elle karakter ekle" FontWeight="SemiBold" Margin="0,12,0,6" />
+                                <WrapPanel>
+                                    <TextBox x:Name="CharacterName" Width="205" Margin="0,0,8,0"
+                                             VerticalContentAlignment="Center" ToolTip="Örneğin: Michael, Franklin, Trevor" />
+                                    <ComboBox x:Name="NewCharacterGroup" Width="145" Margin="0,0,8,0">
+                                        <ComboBoxItem Content="Bilinmeyen" Tag="Unknown" IsSelected="True" />
+                                        <ComboBoxItem Content="Erkek" Tag="Male" />
+                                        <ComboBoxItem Content="Kadın" Tag="Female" />
+                                        <ComboBoxItem Content="Çocuk" Tag="Child" />
+                                        <ComboBoxItem Content="Canlı / Fantastik" Tag="Creature" />
+                                        <ComboBoxItem Content="Anlatıcı" Tag="Narrator" />
+                                    </ComboBox>
+                                    <Button Content="Karakter ekle" Click="OnAddCharacter" />
+                                </WrapPanel>
+                            </StackPanel>
+                            <WrapPanel Margin="0,8,0,8">
+                                <TextBox x:Name="CharacterSearch" Width="240" ToolTip="Karakter adına göre filtrele"
+                                         TextChanged="OnCharacterSearch" Margin="0,0,8,0" />
+                                <Button Content="Önceki" Click="OnPreviousCharacters" Margin="0,0,6,0" />
+                                <Button Content="Sonraki" Click="OnNextCharacters" />
+                                <TextBlock x:Name="CharacterPageInfo" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           Style="{StaticResource HintText}" />
+                            </WrapPanel>
+                            <TextBlock Text="Diyalogdan bulunan isimler (tahmini)" FontWeight="SemiBold"
+                                       Margin="0,12,0,4" />
+                            <TextBlock Text="Bir karakterin adı diyalogda söylenirse burada görünür. Bu isim, konuşan kişiye otomatik bağlanmaz. Onaylayabilir veya yanlışsa silebilirsin."
+                                       TextWrapping="Wrap" Style="{StaticResource HintText}" Margin="0,0,0,6" />
+                            <StackPanel x:Name="NameSuggestions" Margin="0,0,0,10" />
+                            <StackPanel x:Name="Voices" />
                         </StackPanel>
-                        <TextBlock x:Name="GameInfo" Style="{StaticResource HintText}" Margin="0,8,0,0" />
-                        <CheckBox x:Name="AutoGameLibrary" Content="Oyun başlığı görülürse karakter kütüphanesini otomatik oluştur / seç"
-                                  Checked="OnAutoGameLibrary" Unchecked="OnAutoGameLibrary" Margin="0,8,0,4" />
-                        <TextBlock Text="PS5 yerel ağ yanıtı çalışan oyunun adını bildirirse kütüphane otomatik seçilir; yanıt gelmezse GTA 5 / GTA 6 başlık ekranından OCR denenir. İkisi de bulunamazsa elle seçim korunur."
-                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                            <Button Content="Dışarı aktar (JSON)" Click="OnExportGame" Margin="0,0,8,0" />
-                            <Button Content="İçe aktar" Click="OnImportGame" Margin="0,0,8,0" />
-                            <Button Content="Oyunu sil" Click="OnDeleteGame" />
-                        </StackPanel>
-                        <TextBlock Text="Silme yalnız seçilen oyunun karakter eşleşmelerini temizler. Önce dışarı aktarırsan ileride JSON dosyasından geri yükleyebilirsin; ortak ses modelleri silinmez."
-                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,0" />
-                        <TextBlock Text="Elle karakter ekle" FontWeight="SemiBold" Margin="0,12,0,6" />
-                        <StackPanel Orientation="Horizontal">
-                            <TextBox x:Name="CharacterName" Width="205" Margin="0,0,8,0"
-                                     VerticalContentAlignment="Center" ToolTip="Örneğin: Michael, Franklin, Trevor" />
-                            <ComboBox x:Name="NewCharacterGroup" Width="145" Margin="0,0,8,0">
-                                <ComboBoxItem Content="Bilinmeyen" Tag="Unknown" IsSelected="True" />
-                                <ComboBoxItem Content="Erkek" Tag="Male" />
-                                <ComboBoxItem Content="Kadın" Tag="Female" />
-                                <ComboBoxItem Content="Çocuk" Tag="Child" />
-                                <ComboBoxItem Content="Canlı / Fantastik" Tag="Creature" />
-                                <ComboBoxItem Content="Anlatıcı" Tag="Narrator" />
-                            </ComboBox>
-                            <Button Content="Karakter ekle" Click="OnAddCharacter" />
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
-                        <TextBox x:Name="CharacterSearch" Width="240" ToolTip="Karakter adına göre filtrele"
-                                 TextChanged="OnCharacterSearch" Margin="0,0,8,0" />
-                        <Button Content="Önceki" Click="OnPreviousCharacters" Margin="0,0,6,0" />
-                        <Button Content="Sonraki" Click="OnNextCharacters" />
-                        <TextBlock x:Name="CharacterPageInfo" VerticalAlignment="Center" Margin="8,0,0,0"
-                                   Style="{StaticResource HintText}" />
-                    </StackPanel>
-                    <TextBlock Text="Diyalogdan bulunan isimler (tahmini)" FontWeight="SemiBold"
-                               Margin="0,12,0,4" />
-                    <TextBlock Text="Bir karakterin adı diyalogda söylenirse burada görünür. Bu isim, konuşan kişiye otomatik bağlanmaz. Onaylayabilir veya yanlışsa silebilirsin."
-                               TextWrapping="Wrap" Style="{StaticResource HintText}" Margin="0,0,0,6" />
-                    <StackPanel x:Name="NameSuggestions" Margin="0,0,0,10" />
-                    <StackPanel x:Name="Voices" />
+                    </Expander>
                     <TextBlock x:Name="Credits" Style="{StaticResource HintText}" Margin="0,12,0,0" />
                 </StackPanel>
+                <Expander Header="Gelişmiş ses ayarları ve tanılama" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,14,0,0">
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Text="Duygusal Türkçe dublaj" FontWeight="SemiBold" Margin="0,0,0,7" />
+                        <ComboBox x:Name="EmotionModePicker" Width="260" HorizontalAlignment="Left" SelectionChanged="OnEmotionMode">
+                            <ComboBoxItem Content="Kapalı (önceki dublaj)" Tag="Off" IsSelected="True" />
+                            <ComboBoxItem Content="Dengeli (metinden duygu)" Tag="Balanced" />
+                            <ComboBoxItem Content="Sinematik (güçlü vurgu)" Tag="Cinematic" />
+                            <ComboBoxItem Content="Ses destekli (PS5 deneysel)" Tag="Acoustic" />
+                            <ComboBoxItem Content="Yapay zekâ konuşma tespiti (Silero ONNX)" Tag="Neural" />
+                        </ComboBox>
+                        <CheckBox x:Name="ExpressiveSafety" Margin="0,8,0,0"
+                                  Content="Duyguyu aynı konuşma içinde sürdür"
+                                  Checked="OnExpressiveSafety" Unchecked="OnExpressiveSafety" />
+                        <TextBlock Text="Konuşma algılama motoru" FontWeight="SemiBold" Margin="0,8,0,6" />
+                        <ComboBox x:Name="SpeechDetectionPicker" Width="320" HorizontalAlignment="Left"
+                                  SelectionChanged="OnSpeechDetection">
+                            <ComboBoxItem Content="Otomatik (mevcut Silero, önerilen)" Tag="Automatic" />
+                            <ComboBoxItem Content="Silero ONNX (yerel)" Tag="SileroOnnx" />
+                            <ComboBoxItem Content="Yapay zekâ kapalı (metin tabanlı)" Tag="TextOnly" />
+                        </ComboBox>
+                        <TextBlock Text="Diğer yapay zekâ motorları henüz paketlenmedi. Metin tabanlı mod orijinal OCR, çeviri ve Türkçe dublajı korur; ses iziyle konuşmacı ayrıştırma devreden çıkar."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,5,0,8" />
+                        <TextBlock Text="Build #160 · Dublaj sağlık paneli" FontWeight="SemiBold" Margin="0,10,0,5" />
+                        <TextBlock x:Name="DubbingHealthInfo" Style="{StaticResource HintText}"
+                                   TextWrapping="Wrap" Margin="0,0,0,6" />
+                        <TextBlock Text="Yalnızca istatistikleri kontrol eder; oyun sesi ve dublaj otomatik durdurulmaz. 5 saniyede bir güncellenir."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <TextBlock Text="Yapay zekâ performansı" FontWeight="SemiBold" Margin="0,8,0,5" />
+                        <TextBlock x:Name="AiPerformanceInfo" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,5" />
+                        <Button Content="Performans ölçümlerini yenile" Click="OnRefreshAiPerformance"
+                                HorizontalAlignment="Left" Margin="0,0,0,10" />
+                        <CheckBox x:Name="AutoSpeakerTracking" Margin="0,9,0,5" Checked="OnSpeakerTracking"
+                                  Unchecked="OnSpeakerTracking">
+                            <TextBlock Text="Konuşmacı adını bulamazsa sesinden otomatik eşleştir (deneysel)" />
+                        </CheckBox>
+                        <TextBlock Text="Build #147 güvenlik düzeltmesi: yerel Sherpa ses tanıma çökme riski nedeniyle geçici olarak kapalı. İsimli altyazı, manuel karakter sesleri ve normal Türkçe dublaj çalışmaya devam eder."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                        <CheckBox x:Name="InterruptionGuard" Checked="OnInterruptionGuard"
+                                  Unchecked="OnInterruptionGuard" Margin="0,6,0,5">
+                            <TextBlock Text="Söz kesme durumunda yanlış karakter sesini engelle (deneysel)" />
+                        </CheckBox>
+                        <TextBlock Text="Konuşmacı kısa sürede değişirse ses ataması geçici olarak belirsiz kabul edilir. Bu yöntem iki ayrı sesi ayırmaz; yalnız yanlış kişiye dublaj yapılma riskini azaltır. Varsayılan kapalıdır."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,1,0,6" />
+                        <TextBlock x:Name="InterruptionStats" Style="{StaticResource HintText}"
+                                   TextWrapping="Wrap" Margin="0,0,0,6" />
+                        <Button Content="Söz kesme sayacını yenile" Click="OnRefreshInterruption"
+                                HorizontalAlignment="Left" Margin="0,0,0,8" />
+                        <TextBlock Text="Ses tanıma modeli PS5 karışık sesinden çalışır; müzik, efekt, üst üste konuşma ve kısa replikler tanımayı yanıltabilir. Emin olunmayan satırlarda anlatıcı/karşılıklı seslere döner."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,2,0,8" />
+                        <TextBlock Text="Deneysel: İngilizce altyazının metin ve noktalamasından duygu tahmin eder. Ses destekli mod, PS5 sesindeki konuşmaya benzer hareketlilik en az kısa bir süre devam ederse duygu sürekliliğine yardımcı olur. Müzik ve efektlerden konuşmayı kesin olarak ayıramaz. Yapay zekâ modu yerel Silero ONNX ile konuşma olup olmadığını tahmin eder; müzik/efekti ayırmaz ve duyguyu sesten sınıflandırmaz. PC modunda metin tabanlı devam eder. Windows Hızlı ses motorunda duygu etiketleri kullanılmaz."
+                                   Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,7,0,0" />
+                    </StackPanel>
+                </Expander>
                 <TextBlock x:Name="Error" Foreground="{DynamicResource dangerBrush}" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
             </StackPanel>
         </StackPanel>

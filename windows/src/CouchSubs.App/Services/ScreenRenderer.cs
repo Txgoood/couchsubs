@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using CouchSubs.App.Theme;
 using CouchSubs.App.Views;
 using CouchSubs.Core;
+using CouchSubs.Core.Dubbing;
 using CouchSubs.Core.LgTv;
 using CouchSubs.RemotePlay;
 using CouchSubs.Shell;
@@ -44,7 +45,17 @@ public static class ScreenRenderer
             Save(() => new MainView(Demo(OnboardingStep.Done, pc: true)), 640, 720, Path.Combine(folder, $"ana-pc-{suffix}.png"));
             // Uygulamanın gerçek penceresi: XAML'ı (simge dahil) açılıştaki gibi yüklenir.
             Save(() => Detach(new ShellWindow(Demo(OnboardingStep.Done))), 640, 720, Path.Combine(folder, $"pencere-{suffix}.png"));
-            Save(() => Detach(new SettingsWindow(Demo(OnboardingStep.Done))), 600, 720, Path.Combine(folder, $"ayarlar-{suffix}.png"));
+            var settingPages = new[] { "", "-altyazi", "-dublaj", "-ekran", "-kisayollar", "-tv-obs", "-uygulama" };
+            for (var page = 0; page < settingPages.Length; page++)
+            {
+                var index = page;
+                Save(() =>
+                {
+                    var settings = new SettingsWindow(Demo(OnboardingStep.Done, dubbing: true));
+                    settings.SelectSection(index);
+                    return Detach(settings);
+                }, index == 2 ? 730 : 870, 740, Path.Combine(folder, $"ayarlar{settingPages[index]}-{suffix}.png"));
+            }
             Save(() => Detach(new TranslationMemoryWindow(Demo(OnboardingStep.Done))), 730, 620, Path.Combine(folder, $"ceviri-hafizasi-{suffix}.png"));
             Save(() => Detach(new AboutWindow()), 460, 640, Path.Combine(folder, $"hakkinda-{suffix}.png"));
         }
@@ -59,9 +70,9 @@ public static class ScreenRenderer
         return content;
     }
 
-    private static AppController Demo(OnboardingStep step, bool pc = false)
+    private static AppController Demo(OnboardingStep step, bool pc = false, bool dubbing = false)
     {
-        var controller = new AppController(new DemoServices(), new DemoStore(step == OnboardingStep.Done), new DemoSettings(pc), new DemoSleep(),
+        var controller = new AppController(new DemoServices(dubbing), new DemoStore(step == OnboardingStep.Done), new DemoSettings(pc, dubbing), new DemoSleep(),
             Localizer.Current, action => action());
         if (step != OnboardingStep.Done) controller.Step = step;
         return controller;
@@ -109,12 +120,14 @@ public static class ScreenRenderer
         window.Close();
     }
 
-    private sealed class DemoServices : IAppServices
+    private sealed class DemoServices(bool dubbing) : IAppServices
     {
         public ITranslationModel Translation { get; } = new DemoTranslation();
         public ITranslationMemory TranslationMemory { get; } = new FileTranslationMemory(
             Path.Combine(Path.GetTempPath(), $"couchsubs-preview-{Guid.NewGuid():N}.json"));
         public IGameScreenCapture GameScreen { get; } = new DemoScreens();
+        public IDubbingModel? Dubbing { get; } = dubbing ? new DemoVoice() : null;
+        public IDubbingModel? FastDubbing => Dubbing;
         public Task<IReadOnlyList<ConsoleInfo>> DiscoverConsolesAsync() => Task.FromResult<IReadOnlyList<ConsoleInfo>>([new("192.168.1.20", "PS5-123", true)]);
         public Task<byte[]> AccountIdFromRedirectAsync(Uri redirect) => Task.FromResult(new byte[8]);
         public Task<RegisteredConsole> RegisterAsync(string host, byte[] accountId, uint pin) => throw new NotSupportedException();
@@ -165,9 +178,18 @@ public static class ScreenRenderer
         public Frame Capture(string displayId) => throw new NotSupportedException();
     }
 
-    private sealed class DemoSettings(bool pc) : ISettingsStore
+    private sealed class DemoVoice : IDubbingModel
     {
-        public UserSettings Load() => new() { Source = pc ? GameSource.Pc : GameSource.Ps5 };
+        public bool IsInstalled => true;
+        public long DownloadBytes => 0;
+        public Task DownloadAsync(IProgress<double> progress, CancellationToken cancellationToken) => Task.CompletedTask;
+        public byte[] VoiceFile(DubbingVoice voice) => [];
+        public ISpeechSynthesizer CreateSynthesizer() => throw new NotSupportedException();
+    }
+
+    private sealed class DemoSettings(bool pc, bool dubbing) : ISettingsStore
+    {
+        public UserSettings Load() => new() { Source = pc ? GameSource.Pc : GameSource.Ps5, Dubbing = new() { Enabled = dubbing } };
         public void Save(UserSettings settings) { }
     }
 

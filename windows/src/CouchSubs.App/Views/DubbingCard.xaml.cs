@@ -27,7 +27,7 @@ public partial class DubbingCard : UserControl
         InitializeComponent();
         healthTimer.Tick += (_, _) =>
         {
-            if (controller is not null && IsVisible)
+            if (controller is not null && DubbingHealthInfo.IsVisible)
                 DubbingHealthInfo.Text = controller.DubbingHealthSummary;
         };
         Loaded += (_, _) => healthTimer.Start();

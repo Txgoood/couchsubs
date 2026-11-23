@@ -27,6 +27,7 @@ public partial class SettingsWindow : Window
     {
         this.controller = controller;
         InitializeComponent();
+        SelectSection(0);
         var version = Assembly.GetEntryAssembly()?.GetName().Version;
         BuildInfo.Text = version is null ? "" : $"CouchSubs v{version.Major}.{version.Minor}.{version.Build} · Build #{version.Revision}";
         var settings = controller.Settings;
@@ -80,6 +81,17 @@ public partial class SettingsWindow : Window
         loading = false;
     }
 
+    internal void SelectSection(int index) => SettingsNavigation.SelectedIndex = index;
+
+    private void OnSectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.Source, SettingsNavigation) || SettingsPages is null || SettingsNavigation.SelectedIndex < 0)
+            return;
+        for (var i = 0; i < SettingsPages.Children.Count; i++)
+            SettingsPages.Children[i].Visibility = i == SettingsNavigation.SelectedIndex ? Visibility.Visible : Visibility.Collapsed;
+        SettingsScroll.ScrollToTop();
+    }
+
     private ComboBox[] AllHotkeyPickers =>
         [ScreenHotkeyPicker, FreeAreaHotkeyPicker, PauseHotkeyPicker,
          Region1HotkeyPicker, Region2HotkeyPicker, Region3HotkeyPicker, SnapshotHotkeyPicker];
@@ -125,6 +137,7 @@ public partial class SettingsWindow : Window
         var mapping = HotkeyAssignments.From(controller.Settings);
         ScreenActionButton.Content = $"Ekranı çevir · {HotkeyAssignments.KeyLabel(mapping.Screen)}";
         FreeAreaActionButton.Content = $"Alan seç · {HotkeyAssignments.KeyLabel(mapping.FreeArea)}";
+        RefreshPictureButton.Content = $"Görüntüyü yenile · {HotkeyAssignments.KeyLabel(mapping.Snapshot)}";
         ScreenActionButton.IsEnabled = FreeAreaActionButton.IsEnabled = controller.IsRunning;
     }
 
