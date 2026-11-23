@@ -81,6 +81,27 @@ public class DubberTests
     }
 
     [Fact]
+    public async Task DialogueThatEndsDuringSynthesisNeverStartsPlaying()
+    {
+        var synthesis = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var synth = new FakeSynth { Gate = synthesis };
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        await using var dubber = new Dubber(new FakeModel(synth), audio, () => server, () => 8787,
+            action => action()) { Output = DubbingOutput.Computer };
+        var current = 1;
+        dubber.Speak([new SpokenLine("Old line.", "Eski replik.")], () => Volatile.Read(ref current) != 0);
+        try
+        {
+            await WaitUntil(() => { lock (synth.Calls) return synth.Calls.Count > 0; });
+            Volatile.Write(ref current, 0);
+        }
+        finally { synthesis.TrySetResult(); }
+        await WaitUntil(() => dubber.LateLines == 1);
+        Assert.Equal(0, audio.Played);
+    }
+
+    [Fact]
     public async Task LinesAreVoicedInOrderWithEmotionAndTheCharactersVoice()
     {
         var synth = new FakeSynth();

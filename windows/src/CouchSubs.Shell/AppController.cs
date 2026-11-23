@@ -79,10 +79,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? worldScanWork;
     private int worldBusy;
     private DateTime nextWorldScan;
+    private readonly List<CropRegion> changedWorldRegions = [];
     private Frame? latestScreenFrame;
     private ScreenOverlay? worldOverlay;
     private int worldRevision;
     private long nextOverlayCheck;
+    private long fastCaptureUntil;
     private sealed record ScreenOverlay(Frame Frame, IReadOnlyList<ScreenTranslation.Item> Items);
     private Dubber? dubber;
     private CancellationTokenSource? pcCaptureCancellation;
@@ -785,7 +787,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     PublishOverlay(visible, duration, pc, display);
                 });
             }, cancellationToken: work.Token, isCurrent: () => IsCurrentScreen(frame),
-                englishToTurkish: EnglishToTurkishScreen, isRegionCurrent: box => IsCurrentTextRegion(frame, box));
+                englishToTurkish: EnglishToTurkishScreen, isRegionCurrent: box => IsCurrentTextRegion(frame, box),
+                waitForModel: WaitForDialogueAsync);
             if (work.IsCancellationRequested || !IsCurrentScreen(frame)) return ScreenOutcome.Cleared;
             if (!pc) server.Clear();
             if (items.Count == 0)
@@ -890,9 +893,17 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             }
         }
         if (worldOverlay is not { } automatic) return;
-        var remainingItems = IsCurrentScreen(automatic.Frame) ?
-            KeepCurrentItems(automatic.Frame, automatic.Items, pipeline?.CurrentSubtitle) : [];
+        var remainingItems = KeepCurrentItems(automatic.Frame, automatic.Items, pipeline?.CurrentSubtitle);
         if (remainingItems.Count == automatic.Items.Count) return;
+        foreach (var removed in automatic.Items.Except(remainingItems))
+        {
+            if (IsCurrentTextRegion(automatic.Frame, removed.Box)) continue;
+            var box = removed.Box;
+            var padding = Math.Max(.02, box.Bottom - box.Top);
+            var area = new CropRegion(Math.Max(0, box.Top - padding), Math.Min(1, box.Bottom + padding),
+                Math.Max(0, box.Left - .04), Math.Min(1, box.Right + .09));
+            if (!changedWorldRegions.Contains(area) && changedWorldRegions.Count < 5) changedWorldRegions.Add(area);
+        }
         if (remainingItems.Count == 0) ClearWorldOverlay();
         else
         {
@@ -901,7 +912,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         Interlocked.Increment(ref worldRevision);
         worldScanWork?.Cancel();
-        nextWorldScan = default;
+        Volatile.Write(ref fastCaptureUntil, now + 500);
     }
 
     /// <summary>Kurulumu baştan başlatır (kayıtlı her şeyi siler).</summary>
@@ -1078,7 +1089,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                         lastError = captureError;
                         post(() => { if (IsCurrentSession(generation)) PcCaptureError = captureError; });
                     }
-                    try { await Task.Delay(280, token.Token).ConfigureAwait(false); }
+                    var menuActive = Volatile.Read(ref worldOverlay) is not null || Volatile.Read(ref screenWork) is not null ||
+                        Environment.TickCount64 < Volatile.Read(ref fastCaptureUntil);
+                    try { await Task.Delay(menuActive ? 130 : 280, token.Token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
             });
@@ -1117,6 +1130,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         worldReader = null;
         worldTranslator = null;
         worldOverlay = null;
+        changedWorldRegions.Clear();
+        Volatile.Write(ref fastCaptureUntil, 0);
         server.ClearScreen();
         post(() => PcWorldTextClear?.Invoke());
         session?.Stop();
@@ -1215,6 +1230,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         worldReader = settings.AutoWorldText ? services.MakeReader(settings.SourceLanguage) : null;
         worldTranslator = settings.AutoWorldText ? MakeScreenTranslator(scope) : null;
         nextWorldScan = default;
+        changedWorldRegions.Clear();
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage);
         activeReader = reader;
@@ -1255,9 +1271,17 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 Changed(nameof(DeepLNotice));
             }
         });
-        built.SpeechReady += lines => post(() =>
+        built.TranslationStarting += () => post(() =>
         {
-            if (ReferenceEquals(pipeline, built) && !subtitlesPaused) Speak(lines);
+            if (ReferenceEquals(pipeline, built) && built.IsTranslating && worldScanWork is { IsCancellationRequested: false } scan)
+            {
+                scan.Cancel();
+                nextWorldScan = default;
+            }
+        });
+        built.SpeechReady += (lines, canStart) => post(() =>
+        {
+            if (ReferenceEquals(pipeline, built) && !subtitlesPaused) Speak(lines, canStart);
         });
         pipeline = built;
     }
@@ -1425,9 +1449,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         if (!settings.AutoWorldText || worldReader is null || worldTranslator is null) return;
         if (screenWork is not null || DateTime.UtcNow < screenShownUntil) return;
-        if (DateTime.UtcNow < nextWorldScan) return;
+        if (pipeline?.IsTranslating == true) return;
+        if (changedWorldRegions.Count == 0 && DateTime.UtcNow < nextWorldScan) return;
         if (Interlocked.CompareExchange(ref worldBusy, 1, 0) != 0) return;
-        nextWorldScan = DateTime.UtcNow.AddMilliseconds(1200);
+        // Several changed areas usually signal a new menu. A full read can also discover previously unseen panels.
+        var regions = changedWorldRegions.Count is > 0 and <= 4 ? changedWorldRegions.ToArray() : null;
+        if (regions is null) nextWorldScan = DateTime.UtcNow.AddMilliseconds(1200);
         var scanWork = CancellationTokenSource.CreateLinkedTokenSource(worldWork.Token);
         worldScanWork = scanWork;
         var cancellation = scanWork.Token;
@@ -1439,7 +1466,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var pc = settings.Source == GameSource.Pc;
         var englishToTurkish = EnglishToTurkishScreen;
         var revision = Volatile.Read(ref worldRevision);
-        bool IsCurrentScan() => revision == Volatile.Read(ref worldRevision) && IsCurrentScreen(frame);
+        bool IsCurrentScan() => revision == Volatile.Read(ref worldRevision);
         TextLine? CurrentSubtitle() => pipeline?.CurrentSubtitle;
         _ = Task.Run(async () =>
         {
@@ -1456,7 +1483,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     },
                     cancellationToken: cancellation, isCurrent: IsCurrentScan,
                     englishToTurkish: englishToTurkish, currentSubtitle: CurrentSubtitle,
-                    isRegionCurrent: box => IsCurrentTextRegion(frame, box))
+                    isRegionCurrent: box => IsCurrentTextRegion(frame, box), regions: regions,
+                    waitForModel: WaitForDialogueAsync)
                     .ConfigureAwait(false);
                 post(() => ShowResults(results, complete: true));
             }
@@ -1476,9 +1504,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 if (cancellation.IsCancellationRequested || screenWork is not null ||
                     DateTime.UtcNow < screenShownUntil || !IsCurrentScan()) return;
+                if (complete) changedWorldRegions.Clear();
                 var visible = KeepCurrentItems(frame, items, CurrentSubtitle());
                 RecordScreenTranslations(scope, visible);
-                if (!complete && worldOverlay is { } previous && IsCurrentScreen(previous.Frame))
+                if ((!complete || regions is not null) && worldOverlay is { } previous)
                 {
                     var unchanged = KeepCurrentItems(previous.Frame, previous.Items, CurrentSubtitle());
                     visible = [.. visible, .. unchanged.Where(old =>
@@ -1493,6 +1522,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 PublishOverlay(visible, 9000, pc, display);
             }
         });
+    }
+
+    private async Task WaitForDialogueAsync(CancellationToken cancellation)
+    {
+        while (Volatile.Read(ref pipeline)?.IsTranslating == true)
+            await Task.Delay(25, cancellation).ConfigureAwait(false);
     }
 
     private async void HandleFrame(Frame frame, int generation)
@@ -2044,7 +2079,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         return made;
     }
 
-    private void Speak(IReadOnlyList<SpokenLine> lines)
+    private void Speak(IReadOnlyList<SpokenLine> lines, Func<bool> canStart)
     {
         if (!settings.Dubbing.Enabled || !DubbingInstalled) return;
         // Subtitle labels win. When absent, use only a fresh high-confidence
@@ -2074,9 +2109,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (candidate is not null)
             MakeDubber()?.Speak(lines.Select(line =>
                 string.IsNullOrWhiteSpace(line.Speaker)
-                    ? line with { Speaker = candidate } : line).ToArray());
+                    ? line with { Speaker = candidate } : line).ToArray(), canStart);
         else
-            MakeDubber()?.Speak(lines);
+            MakeDubber()?.Speak(lines, canStart);
     }
 
     /// <summary>

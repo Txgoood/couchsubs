@@ -12,6 +12,59 @@ public class ScreenTranslationTests
         new(text, new TextBox(left, top, right, top + height));
 
     [Fact]
+    public async Task SavedLabelsArePublishedBeforeAnyUncachedModelWork()
+    {
+        var translator = new SavedLabelTranslator();
+        var first = new TaskCompletionSource<IReadOnlyList<ScreenTranslation.Item>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var translation = ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(new Reading([
+            Line("Unknown item", .05, .1, .30), Line("Inventory", .05, .4, .30)
+        ])), translator, progress: items => first.TrySetResult(items));
+        try
+        {
+            Assert.Equal("Envanter", Assert.Single(await first.Task.WaitAsync(TimeSpan.FromSeconds(3))).Translation);
+            Assert.False(translation.IsCompleted);
+        }
+        finally { translator.Model.TrySetResult("Yeni öğe"); }
+        Assert.Equal(["Envanter", "Yeni öğe"], (await translation).Select(item => item.Translation));
+    }
+
+    [Fact]
+    public async Task ChangedAreaIsReadAsCropAndMappedBackToScreen()
+    {
+        var reader = new CropOnlyReader();
+        var frame = Frame.Blank(200, 100);
+        var items = await ScreenTranslation.TranslateOverlayAsync(frame, reader, new FakeTranslator(),
+            regions: [new CropRegion(.2, .4, .5, .9)]);
+        Assert.Equal((80, 20), reader.Size);
+        var box = Assert.Single(items).Box;
+        Assert.Equal(.6, box.Left, 6);
+        Assert.Equal(.25, box.Top, 6);
+    }
+
+    private sealed class SavedLabelTranslator : ITextTranslator
+    {
+        public TaskCompletionSource<string> Model { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default) => Model.Task;
+        public bool TryGetSavedTranslation(string source, out string translation)
+        {
+            translation = source == "Inventory" ? "Envanter" : "";
+            return translation.Length != 0;
+        }
+    }
+
+    private sealed class CropOnlyReader : ITextReader
+    {
+        public (int Width, int Height) Size { get; private set; }
+        public string Read(Frame image) => throw new NotSupportedException();
+        public Reading ReadScreenLines(Frame image) => throw new NotSupportedException();
+        public Reading ReadLines(Frame image, bool deep)
+        {
+            Size = (image.Width, image.Height);
+            return new Reading([Line("New panel", .25, .25, .75, .2)]);
+        }
+    }
+
+    [Fact]
     public void LinesFarApartBecomeSeparateGroups()
     {
         // Sol üstte görev paneli, sağ altta bilgi kutusu, ortada altyazı.

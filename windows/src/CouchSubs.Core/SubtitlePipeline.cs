@@ -24,6 +24,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private int lastShown;
     /// <summary>Şu an oyun ekranında duran satırın numarası (bölge boşalınca null).</summary>
     private int? lineOnScreen;
+    private long? sourceMissingSince;
+    private const int SpeechGraceMilliseconds = 650;
     /// <summary>Okuma durdurulunca artar; önceki oturumdan dönen çeviriler gösterilmez.</summary>
     private int session;
     /// <summary>Son okunan satırlar; kare değişmediyse yeniden okunmaz, bunlar kullanılır.</summary>
@@ -42,7 +44,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// <summary>Yeni çeviri gösterilince çağrılır (kaynak, çeviri).</summary>
     public event Action<string, string>? PairShown;
     /// <summary>TV'ye giden her yeni altyazının seslendirilecek cümleleri (dublaj).</summary>
-    public event Action<IReadOnlyList<SpokenLine>>? SpeechReady;
+    public event Action<IReadOnlyList<SpokenLine>, Func<bool>>? SpeechReady;
+    public event Action? TranslationStarting;
+    public bool IsTranslating => Volatile.Read(ref latestTranslation) is not null;
     /// <summary>Her çeviri denemesinden sonra çağrılır (başarılıysa null).</summary>
     public event Action<TranslatorStatus?>? TranslationResult;
 
@@ -87,6 +91,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             Volatile.Write(ref currentSubtitle, reading.Box is { } detected
                 ? new TextLine(reading.Text, detected.PlacedIn(area))
                 : null);
+            sourceMissingSince = reading.Text.Length == 0 ? sourceMissingSince ?? Environment.TickCount64 : null;
             var action = stabilizer.Feed(reading.Text);
             switch (action.Kind)
             {
@@ -104,6 +109,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     var number = ++lastRequested;
                     var current = session;
                     lineOnScreen = number;
+                    TranslationStarting?.Invoke();
                     // Çevirmen burada, istek sırasıyla çağrılır (ayrı görevle başlatılsa sıra karışabilirdi).
                     // Çeviri hemen bittiyse kendini zaten listeden çıkarmıştır; yeniden eklenmez.
                     var box = reading.Box?.PlacedIn(area).CenteredOnScreen();
@@ -205,8 +211,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             // Birçok ITextTranslator uygulaması SpokenLines özelliğini desteklemez ve boş
             // liste döndürür. Çeviri TV'de görünürken sesin tamamen susmasını önle:
             // konuşmacı ataması varsa koru, yoksa GÖSTERİLEN Türkçe metni seslendir.
-            speech(lines is { Count: > 0 } ? lines : SubtitleDialogue.Parse(source, translated));
+            speech(lines is { Count: > 0 } ? lines : SubtitleDialogue.Parse(source, translated), () => CanStartSpeech(current, number));
         }
+    }
+
+    private bool CanStartSpeech(int current, int number)
+    {
+        lock (gate)
+            return current == session && number == lastRequested &&
+                (sourceMissingSince is not { } missing || Environment.TickCount64 - missing <= SpeechGraceMilliseconds);
     }
 
     /// <summary>Okuma durunca TV'deki son altyazıyı kaldırır.</summary>
@@ -218,6 +231,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             latestTranslation?.Cancel();
             latestTranslation = null;
             lineOnScreen = null;
+            sourceMissingSince = null;
             lastReading = Reading.Empty;
             Volatile.Write(ref currentSubtitle, null);
             schedule.Reset();

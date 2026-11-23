@@ -104,35 +104,50 @@ public static class ScreenTranslation
         Frame frame, ITextReader reader, ITextTranslator translator,
         CropRegion? exclude = null, Action<IReadOnlyList<Item>>? progress = null,
         CancellationToken cancellationToken = default, string? subtitle = null, Func<bool>? isCurrent = null,
-        bool englishToTurkish = false, Func<TextLine?>? currentSubtitle = null, Func<TextBox, bool>? isRegionCurrent = null)
+        bool englishToTurkish = false, Func<TextLine?>? currentSubtitle = null, Func<TextBox, bool>? isRegionCurrent = null,
+        IReadOnlyList<CropRegion>? regions = null, Func<CancellationToken, Task>? waitForModel = null)
     {
-        var reading = await Task.Run(() => reader.ReadScreenLines(frame), cancellationToken).ConfigureAwait(false);
+        var reading = await Task.Run(() => ReadScreen(frame, reader, regions, cancellationToken), cancellationToken).ConfigureAwait(false);
         var lines = OverlayLines(reading).Where(line => !ExcludeOverlayLine(line));
         var items = new List<Item>();
-        var groups = OverlayParagraphs(lines);
-        if (englishToTurkish)
-            groups = groups.OrderByDescending(group => TurkishMenuLabels.ContainsKey(group.Text));
-        foreach (var group in groups)
+        var pending = new List<(string Text, TextBox Box, double Height)>();
+        foreach (var group in OverlayParagraphs(lines))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (isCurrent?.Invoke() == false) return items;
+            if (!CanShow(group.Text, group.Box)) continue;
+            if (translator.TryGetSavedTranslation(group.Text, out var saved))
+                Add(group, saved);
+            else if (englishToTurkish && TurkishMenuLabels.TryGetValue(group.Text, out var label))
+                Add(group, IsUppercase(group.Text) ? label.ToUpper(System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) : label);
+            else
+                pending.Add(group);
+        }
+        if (items.Count > 0) progress?.Invoke([.. items]);
+        foreach (var group in pending)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (isCurrent?.Invoke() == false) break;
-            if (isRegionCurrent?.Invoke(group.Box) == false || IsCurrentDialogue(group.Text, group.Box)) continue;
-            string target;
-            if (translator.TryGetSavedTranslation(group.Text, out var saved))
-                target = saved;
-            else if (englishToTurkish && TurkishMenuLabels.TryGetValue(group.Text, out var label))
-                target = IsUppercase(group.Text) ? label.ToUpper(System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) : label;
-            else
-                target = (await translator.TranslateAsync(group.Text, cancellationToken).ConfigureAwait(false)).Trim();
+            if (!CanShow(group.Text, group.Box)) continue;
+            if (waitForModel is not null) await waitForModel(cancellationToken).ConfigureAwait(false);
             if (isCurrent?.Invoke() == false) break;
-            if (isRegionCurrent?.Invoke(group.Box) == false) continue;
-            if (target.Length == 0 || TextMatch.Normalize(group.Text) == TextMatch.Normalize(target))
-                continue;
-            items.Add(new Item(group.Text, target, group.Box, group.Height)
-                { Paint = PaintFor(frame, new TextLine(group.Text, group.Box)) });
-            progress?.Invoke([.. items]);
+            if (!CanShow(group.Text, group.Box)) continue;
+            var target = (await translator.TranslateAsync(group.Text, cancellationToken).ConfigureAwait(false)).Trim();
+            if (isCurrent?.Invoke() == false) break;
+            if (CanShow(group.Text, group.Box) && Add(group, target)) progress?.Invoke([.. items]);
         }
         return items;
+
+        bool CanShow(string text, TextBox box) => isRegionCurrent?.Invoke(box) != false && !IsCurrentDialogue(text, box);
+
+        bool Add((string Text, TextBox Box, double Height) group, string target)
+        {
+            if (target.Length == 0 || TextMatch.Normalize(group.Text) == TextMatch.Normalize(target))
+                return false;
+            items.Add(new Item(group.Text, target, group.Box, group.Height)
+                { Paint = PaintFor(frame, new TextLine(group.Text, group.Box)) });
+            return true;
+        }
 
         bool ExcludeOverlayLine(TextLine line)
         {
@@ -147,6 +162,25 @@ public static class ScreenTranslation
             exclude is not null && currentSubtitle is not null &&
             AmbientTextTranslation.IsDialogueRegion(box, exclude) &&
             IsActiveSubtitle(new TextLine(text, box), currentSubtitle());
+    }
+
+    private static Reading ReadScreen(Frame frame, ITextReader reader, IReadOnlyList<CropRegion>? regions, CancellationToken cancellation)
+    {
+        if (regions is null) return reader.ReadScreenLines(frame);
+        var lines = new List<TextLine>();
+        foreach (var region in regions)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var crop = RegionCropper.Crop(frame, region);
+            var area = new TextBox(region.Left, region.Top, region.Right, region.Bottom);
+            foreach (var line in reader.ReadLines(crop, deep: true).PlacedIn(area).Lines)
+            {
+                if (line.Box is not { } box || lines.Any(other => other.Box is { } position && SameOverlayPosition(box, position)))
+                    continue;
+                lines.Add(line);
+            }
+        }
+        return new Reading(lines);
     }
 
     public static bool IsActiveSubtitle(TextLine line, TextLine? active)

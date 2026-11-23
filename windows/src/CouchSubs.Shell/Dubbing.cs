@@ -153,7 +153,8 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private const string PreviewText = "Merhaba, oyundaki karakterleri Türkçe seslendireceğim.";
 
     private readonly object gate = new();
-    private readonly Queue<(SpokenLine Line, DubbingVoice? Preview, long SubmittedMs)> queue = new();
+    private readonly Queue<(SpokenLine Line, DubbingVoice? Preview, long SubmittedMs, Func<bool>? CanStart)> queue = new();
+    private sealed record ReadySpeech(SpeechAudio Audio, bool Preview, long SubmittedMs, SpokenLine Line, Func<bool>? CanStart);
     private readonly SmartDubbingTimingPolicy timingPolicy = new();
     private int lateLines;
     public bool SmartTiming { get; set; }
@@ -213,9 +214,14 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         });
     }
 
-    public void Speak(IReadOnlyList<SpokenLine> lines)
+    public void Speak(IReadOnlyList<SpokenLine> lines, Func<bool>? canStart = null)
     {
         if (lines.Count == 0) return;
+        if (canStart?.Invoke() == false)
+        {
+            Interlocked.Add(ref lateLines, lines.Count);
+            return;
+        }
         lock (gate) if (disposed) return;
         PublishVoices();
         bool interrupt;
@@ -227,7 +233,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             droppedLines += queue.Count;
             queue.Clear();
             var submittedMs = Environment.TickCount64;
-            foreach (var line in lines) queue.Enqueue((line, null, submittedMs));
+            foreach (var line in lines) queue.Enqueue((line, null, submittedMs, canStart));
             while (queue.Count > Backlog) { queue.Dequeue(); droppedLines++; }
             // In expressive mode, keep the current audible line and only queue
             // the latest subtitle for when it finishes.
@@ -256,7 +262,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         int number;
         lock (gate)
         {
-            queue.Enqueue((new SpokenLine("Listen.", PreviewText), voice, Environment.TickCount64));
+            queue.Enqueue((new SpokenLine("Listen.", PreviewText), voice, Environment.TickCount64, null));
             working = true;
             number = ++generation;
         }
@@ -363,7 +369,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
 
     private async Task RunAsync(int number)
     {
-        Task<(SpeechAudio Audio, bool Preview, long SubmittedMs, SpokenLine Line)?>? next = Next(number);
+        var next = Next(number);
         while (next is not null)
         {
             var result = await next;
@@ -373,7 +379,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             bool tooLate;
             lock (gate)
                 tooLate = SmartTiming && !timingPolicy.ShouldPlay(ready.SubmittedMs, Environment.TickCount64);
-            if (tooLate)
+            if (tooLate || ready.CanStart?.Invoke() == false)
             {
                 Interlocked.Increment(ref lateLines);
                 next = Next(number);
@@ -410,17 +416,18 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         await RunAsync(number);
     }
 
-    private Task<(SpeechAudio, bool, long, SpokenLine)?>? Next(int number)
+    private Task<ReadySpeech?>? Next(int number)
     {
         SpokenLine line;
         DubbingVoice? preview;
         long submittedMs;
+        Func<bool>? canStart;
         CancellationTokenSource operationCancellation;
         lock (gate)
         {
             // Geç başlayan eski döngü yeni altyazının cümlesini alıp atmasın.
             if (disposed || queue.Count == 0 || number != generation) return null;
-            (line, preview, submittedMs) = queue.Dequeue();
+            (line, preview, submittedMs, canStart) = queue.Dequeue();
             operationCancellation = new CancellationTokenSource();
             activeLineCancellation = operationCancellation;
         }
@@ -464,7 +471,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
         }
         var text = SpeechText.Prepare(line.Turkish, emotion);
         var url = new Uri($"http://127.0.0.1:{serverPort()}/voices/{voice.FileName()}.wav");
-        return TrackSynth<(SpeechAudio, bool, long, SpokenLine)?>(async engine =>
+        return TrackSynth<ReadySpeech?>(async engine =>
         {
             try
             {
@@ -480,7 +487,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
                         latencyTracker.Record(lastSynthesisMilliseconds);
                     }
                 }
-                return (result, preview is not null, submittedMs, line);
+                return new ReadySpeech(result, preview is not null, submittedMs, line, canStart);
             }
             catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
             {

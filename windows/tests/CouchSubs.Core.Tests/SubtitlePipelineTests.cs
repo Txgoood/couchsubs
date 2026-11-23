@@ -210,7 +210,7 @@ public class SubtitlePipelineTests
         var pipeline = new SubtitlePipeline(
             new FakeReader("Hold the gate", "Hold the gate"), new FakeTranslator(), sender);
         var speech = new List<CouchSubs.Core.Dubbing.SpokenLine>();
-        pipeline.SpeechReady += lines => speech.AddRange(lines);
+        pipeline.SpeechReady += (lines, _) => speech.AddRange(lines);
         await Run(pipeline, 2);
         Assert.Equal(["TR: Hold the gate"], sender.Sent);
         var spoken = Assert.Single(speech);
@@ -304,7 +304,7 @@ public class SubtitlePipelineTests
         var pipeline = new SubtitlePipeline(
             new FakeReader("First!", "Second!"), translator, sender);
         var spoken = new List<CouchSubs.Core.Dubbing.SpokenLine>();
-        pipeline.SpeechReady += lines => spoken.AddRange(lines);
+        pipeline.SpeechReady += (lines, _) => spoken.AddRange(lines);
 
         await pipeline.ProcessAsync(Image, new CropRegion());
         await translator.FirstStarted;
