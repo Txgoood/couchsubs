@@ -8,6 +8,13 @@ namespace CouchSubs.Core.Tests;
 public class GameEnglishTests
 {
     [Theory]
+    [InlineData("Could you do me a solid and pick up the car?", "Could you do me a favor and pick up the car?")]
+    [InlineData("We need him alive.", "We must keep him alive.")]
+    [InlineData("Do not let the money go to your head.", "Do not let the money make you arrogant.")]
+    public void ColloquialDialogueKeepsItsMeaning(string source, string plain) =>
+        Assert.Equal(plain, GameEnglish.Plain(source));
+
+    [Theory]
     [InlineData("Hold your fire! They're friendlies!", "Hold your fire! They're allies!")]
     [InlineData("I got your six.", "I've got your back.")]
     [InlineData("Check your six!", "Watch behind you!")]

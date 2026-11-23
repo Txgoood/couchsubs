@@ -34,6 +34,21 @@ public class DeepLTranslatorTests
         }
     }
 
+    private sealed class TestClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.UnixEpoch;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private sealed class SlowDeepL : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            throw new InvalidOperationException();
+        }
+    }
+
     private static HttpResponseMessage Json(string json, HttpStatusCode status = HttpStatusCode.OK) =>
         new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
@@ -90,6 +105,61 @@ public class DeepLTranslatorTests
     }
 
     [Fact]
+    public async Task QuotaIsSharedAndRecoversThroughUsageWithoutBlockingDialogue()
+    {
+        var clock = new TestClock();
+        var availability = new DeepLAvailability(clock);
+        var limited = true;
+        var provider = new FakeDeepL((request, body) =>
+        {
+            if (request.Method == HttpMethod.Get)
+                return Json("""{"character_count":0,"character_limit":1000000}""");
+            if (limited) return new HttpResponseMessage((HttpStatusCode)456);
+            return Echo(request, body);
+        });
+        using var http = new HttpClient(provider);
+        var local = new FakeLocal();
+        var first = new DeepLTranslator("abc:fx", local, http, availability);
+        var afterRestart = new DeepLTranslator("abc:fx", local, http, availability);
+
+        Assert.Equal("yerel: Run!", await first.TranslateAsync("Run!"));
+        clock.Now += TimeSpan.FromMinutes(59);
+        Assert.Equal("yerel: Hide!", await afterRestart.TranslateAsync("Hide!"));
+        Assert.Single(provider.Requests);
+        limited = false;
+        clock.Now += TimeSpan.FromMinutes(1);
+        Assert.Equal("yerel: Wait!", await afterRestart.TranslateAsync("Wait!"));
+        Assert.Equal(HttpMethod.Get, provider.Requests[1].Request.Method);
+        Assert.Equal("[tr] Follow me.", await first.TranslateAsync("Follow me."));
+        Assert.Null(afterRestart.LastError);
+    }
+
+    [Fact]
+    public async Task SlowNetworkFallsBackButCallerCancellationDoesNotBlockDeepL()
+    {
+        using var http = new HttpClient(new SlowDeepL());
+        var local = new FakeLocal();
+        var state = new DeepLAvailability();
+        var translator = new DeepLTranslator("abc", local, http, state, TimeSpan.FromMilliseconds(80));
+        using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => translator.TranslateAsync("Old line.", cancelled.Token));
+        Assert.Null(state.LastError);
+        Assert.Equal("yerel: New line.", await translator.TranslateAsync("New line."));
+        Assert.Equal(OnlineKeyState.Unreachable, state.LastError);
+        Assert.Equal(["New line."], local.Calls);
+    }
+
+    [Fact]
+    public async Task InvalidOnlinePayloadFallsBackToLocalTranslation()
+    {
+        using var http = new HttpClient(new FakeDeepL((_, _) => Json("broken")));
+        var translator = new DeepLTranslator("abc:fx", new FakeLocal(), http);
+        Assert.Equal("yerel: Stay here.", await translator.TranslateAsync("Stay here."));
+        Assert.Equal(OnlineKeyState.Unreachable, translator.LastError);
+    }
+
+    [Fact]
     public async Task KeyCheckReportsUsageAndRejectedKeys()
     {
         var usage = new FakeDeepL((_, _) => Json("""{"character_count":1200,"character_limit":500000}"""));
@@ -101,6 +171,12 @@ public class DeepLTranslatorTests
 
         var full = new FakeDeepL((_, _) => Json("""{"character_count":500000,"character_limit":500000}"""));
         Assert.Equal(OnlineKeyState.QuotaExceeded, (await DeepLTranslator.CheckAsync("k", new HttpClient(full))).State);
+
+        var keyFull = new FakeDeepL((_, _) => Json("""
+            {"character_count":750000,"character_limit":1000000,"api_key_character_count":200000,"api_key_character_limit":200000}
+            """));
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.QuotaExceeded, 200000, 200000),
+            await DeepLTranslator.CheckAsync("k", new HttpClient(keyFull)));
 
         Assert.Equal(OnlineKeyState.Invalid, (await DeepLTranslator.CheckAsync("  ")).State);
     }

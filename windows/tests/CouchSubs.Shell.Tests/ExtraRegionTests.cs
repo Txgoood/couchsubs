@@ -146,7 +146,7 @@ public class ExtraRegionTests
 
 public class ScreenTranslationControllerTests
 {
-    private static (AppController Controller, FakeServices Services) Ready()
+    private static (AppController Controller, FakeServices Services) Ready(bool online = false)
     {
         var services = new FakeServices();
         var store = new MemoryStore();
@@ -154,7 +154,13 @@ public class ScreenTranslationControllerTests
         store.Save(StoreKeys.Console, new RegisteredConsole("192.168.1.253", "PS5", Enumerable.Repeat((byte)0x31, 16).ToArray(), Enumerable.Repeat((byte)2, 16).ToArray()));
         store.Save(StoreKeys.Tv, new LgTv("LG TV", "127.0.0.1"));
         store.Save(StoreKeys.TvKey, "tv-key");
-        return (AppControllerTests.Make(services, store), services);
+        var settings = new MemorySettings();
+        if (online)
+        {
+            store.Save(StoreKeys.DeepLKey, "key:fx");
+            settings.Save(new UserSettings { OnlineTranslation = true });
+        }
+        return (AppControllerTests.Make(services, store, settings), services);
     }
 
     [Fact]
@@ -185,6 +191,24 @@ public class ScreenTranslationControllerTests
         Assert.Equal(ScreenOutcome.Cleared, await controller.TranslateScreenAsync());
         Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
         controller.Stop();
+    }
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    public async Task ScreenTranslationUsesDeepLOnlyIfLocalModelIsUnavailable(bool localInstalled, int onlineTranslators)
+    {
+        var (controller, services) = Ready(online: true);
+        using var cleanup = controller;
+        services.Translation.Installed = localInstalled;
+        services.ReaderLines = new Reading([new TextLine("Settings", new TextBox(.1, .1, .3, .14))]);
+        await controller.StartAsync();
+        Assert.Single(services.OnlineTranslators);
+        services.Streams[0].Emit(Frame.Blank(64, 64));
+
+        Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
+
+        Assert.Equal(onlineTranslators, services.OnlineTranslators.Count);
     }
 
     [Fact]

@@ -22,6 +22,9 @@ public static partial class GameEnglish
         (Phrase("lock and load"), "get ready"),
         (Phrase("sitting ducks"), "easy targets"),
         (Phrase("moving in"), "going in"),
+        (Phrase("do me a solid"), "do me a favor"),
+        (Phrase("we need him alive"), "we must keep him alive"),
+        (Phrase("let the money go to your head"), "let the money make you arrogant"),
     ];
 
     private static Regex Phrase(string words) =>

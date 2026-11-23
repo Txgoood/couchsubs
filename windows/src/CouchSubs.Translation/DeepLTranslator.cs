@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using CouchSubs.Core;
 using CouchSubs.Core.Dubbing;
@@ -19,29 +20,33 @@ namespace CouchSubs.Translation;
 public sealed class DeepLTranslator : ITextTranslator
 {
     private const int CacheLimit = 4096;
-    /// <summary>Hata sonrası bu süre DeepL denenmez; her satırda bağlantı zaman aşımını beklemeyelim.</summary>
-    private static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan LiveRequestBudget = TimeSpan.FromMilliseconds(850);
+    private static readonly TimeSpan LocalHeadStart = TimeSpan.FromMilliseconds(300);
 
     private static readonly Lazy<HttpClient> SharedClient = new(() => new HttpClient { Timeout = TimeSpan.FromSeconds(4) });
 
     private readonly string _key;
     private readonly ITextTranslator? _fallback;
     private readonly HttpClient _http;
+    private readonly DeepLAvailability _availability;
+    private readonly TimeSpan _requestBudget;
     private readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, IReadOnlyList<SpokenLine>> _speech = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _names = new(StringComparer.Ordinal);
     private string? _previous;
-    private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
 
-    public DeepLTranslator(string key, ITextTranslator? fallback, HttpClient? http = null)
+    public DeepLTranslator(string key, ITextTranslator? fallback, HttpClient? http = null,
+        DeepLAvailability? availability = null, TimeSpan? requestBudget = null)
     {
         _key = key.Trim();
         _fallback = fallback;
         _http = http ?? SharedClient.Value;
+        _availability = availability ?? new DeepLAvailability();
+        _requestBudget = requestBudget ?? LiveRequestBudget;
     }
 
     /// <summary>Son DeepL hatası; çeviri düzgün gidiyorsa null.</summary>
-    public OnlineKeyState? LastError { get; private set; }
+    public OnlineKeyState? LastError => _availability.LastError;
 
     /// <summary>Ücretsiz anahtarlar ":fx" ile biter ve ayrı adrese gider.</summary>
     internal static Uri BaseUri(string key) =>
@@ -50,8 +55,13 @@ public sealed class DeepLTranslator : ITextTranslator
     public async Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(text);
+        cancellationToken.ThrowIfCancellationRequested();
         if (_cache.TryGetValue(text, out var cached)) return cached;
-        if (DateTimeOffset.UtcNow < _pausedUntil) return await FallbackAsync(text, cancellationToken).ConfigureAwait(false);
+        if (!_availability.UseOnline(out var checkQuota))
+        {
+            if (checkQuota) _ = ProbeQuotaAsync();
+            return await FallbackAsync(text, cancellationToken).ConfigureAwait(false);
+        }
 
         var pieces = SubtitleSegmenter.Split(text);
         foreach (var name in pieces.Select(SubtitleSegmenter.LabelName).OfType<string>())
@@ -61,18 +71,40 @@ public sealed class DeepLTranslator : ITextTranslator
         var sources = pieces.Where(p => p.Translate).Select(p => SubtitleSegmenter.NormalizeCase(p.Text, names)).ToList();
 
         string[] translated;
+        using var localWork = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task<string>? pendingLocal = null;
+        var useLocal = false;
         try
         {
-            translated = sources.Count == 0 ? [] : await RequestAsync(sources, cancellationToken).ConfigureAwait(false);
-            LastError = null;
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (_fallback is not null) budget.CancelAfter(_requestBudget);
+            var online = sources.Count == 0 ? Task.FromResult(Array.Empty<string>()) : RequestAsync(sources, budget.Token);
+            if (_fallback is not null && !online.IsCompleted &&
+                await Task.WhenAny(online, Task.Delay(LocalHeadStart, budget.Token)).ConfigureAwait(false) != online)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                pendingLocal = FallbackAsync(text, localWork.Token);
+            }
+            translated = await online.ConfigureAwait(false);
+            if (sources.Count != 0) _availability.ReportSuccess();
         }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException or DeepLException
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException or DeepLException or JsonException
                                       && !cancellationToken.IsCancellationRequested)
         {
-            LastError = error is DeepLException deepL ? deepL.State : OnlineKeyState.Unreachable;
-            _pausedUntil = DateTimeOffset.UtcNow + RetryAfter;
-            return await FallbackAsync(text, cancellationToken).ConfigureAwait(false);
+            _availability.ReportFailure(error is DeepLException deepL ? deepL.State : OnlineKeyState.Unreachable);
+            useLocal = true;
+            return await (pendingLocal ?? FallbackAsync(text, cancellationToken)).ConfigureAwait(false);
         }
+        finally
+        {
+            if (!useLocal && pendingLocal is not null)
+            {
+                localWork.Cancel();
+                _ = pendingLocal.ContinueWith(task => _ = task.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
 
         var builder = new StringBuilder();
         var translations = new List<string?>(pieces.Count);
@@ -101,6 +133,11 @@ public sealed class DeepLTranslator : ITextTranslator
         _fallback is null ? throw new TranslatorException(TranslatorStatus.NeedsDownload)
             : await _fallback.TranslateAsync(text, cancellationToken).ConfigureAwait(false);
 
+    private async Task ProbeQuotaAsync()
+    {
+        _availability.ObserveUsage(await CheckAsync(_key, _http).ConfigureAwait(false));
+    }
+
     private async Task<string[]> RequestAsync(List<string> sentences, CancellationToken cancellationToken)
     {
         // Oyun konuşması: "siz" değil "sen" (DeepL Türkçede desteklemiyorsa yok sayar).
@@ -113,7 +150,9 @@ public sealed class DeepLTranslator : ITextTranslator
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         ThrowIfFailed(response);
         var reply = await response.Content.ReadFromJsonAsync(DeepLJson.Default.TranslateResponse, cancellationToken).ConfigureAwait(false);
-        if (reply?.Translations is not { } list || list.Count != sentences.Count) throw new DeepLException(OnlineKeyState.Unreachable);
+        if (reply?.Translations is not { } list || list.Count != sentences.Count ||
+            list.Any(item => string.IsNullOrWhiteSpace(item?.Text)))
+            throw new DeepLException(OnlineKeyState.Unreachable);
         return [.. list.Select(t => t.Text)];
     }
 
@@ -129,12 +168,17 @@ public sealed class DeepLTranslator : ITextTranslator
             using var response = await (http ?? SharedClient.Value).SendAsync(request, cancellationToken).ConfigureAwait(false);
             ThrowIfFailed(response);
             var usage = await response.Content.ReadFromJsonAsync(DeepLJson.Default.UsageResponse, cancellationToken).ConfigureAwait(false);
-            if (usage is null) return new(OnlineKeyState.Unreachable);
-            return new(usage.CharacterLimit > 0 && usage.CharacterCount >= usage.CharacterLimit ? OnlineKeyState.QuotaExceeded : OnlineKeyState.Valid,
-                usage.CharacterCount, usage.CharacterLimit);
+            if (usage is not { CharacterCount: long used, CharacterLimit: long limit })
+                return new(OnlineKeyState.Unreachable);
+            if (limit > 0 && used >= limit) return new(OnlineKeyState.QuotaExceeded, used, limit);
+            if (usage is { ApiKeyCharacterCount: long keyUsed, ApiKeyCharacterLimit: long keyLimit } &&
+                keyLimit > 0 && keyUsed >= keyLimit)
+                return new(OnlineKeyState.QuotaExceeded, keyUsed, keyLimit);
+            return new(OnlineKeyState.Valid, used, limit);
         }
         catch (DeepLException error) { return new(error.State); }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException or JsonException
+                                      && !cancellationToken.IsCancellationRequested)
         {
             return new(OnlineKeyState.Unreachable);
         }
@@ -170,8 +214,10 @@ internal sealed record TranslateResponse([property: JsonPropertyName("translatio
 internal sealed record TranslatedText([property: JsonPropertyName("text")] string Text);
 
 internal sealed record UsageResponse(
-    [property: JsonPropertyName("character_count")] long CharacterCount,
-    [property: JsonPropertyName("character_limit")] long CharacterLimit);
+    [property: JsonPropertyName("character_count")] long? CharacterCount,
+    [property: JsonPropertyName("character_limit")] long? CharacterLimit,
+    [property: JsonPropertyName("api_key_character_count")] long? ApiKeyCharacterCount,
+    [property: JsonPropertyName("api_key_character_limit")] long? ApiKeyCharacterLimit);
 
 [JsonSerializable(typeof(TranslateRequest))]
 [JsonSerializable(typeof(TranslateResponse))]

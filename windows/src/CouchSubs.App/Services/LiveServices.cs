@@ -19,9 +19,43 @@ public sealed class LiveServices : IAppServices
 {
     public ITranslationModel Translation { get; } = new MarianModel();
 
-    public ITextTranslator? MakeOnlineTranslator(string key, ITextTranslator? fallback) => new DeepLTranslator(key, fallback);
+    private readonly object deepLGate = new();
+    private string? deepLKey;
+    private DeepLAvailability? deepLAvailability;
 
-    public Task<OnlineKeyCheck> CheckOnlineKeyAsync(string key) => DeepLTranslator.CheckAsync(key);
+    public ITextTranslator? MakeOnlineTranslator(string key, ITextTranslator? fallback)
+    {
+        DeepLAvailability state;
+        lock (deepLGate)
+        {
+            if (deepLKey != key || deepLAvailability is null)
+            {
+                deepLKey = key;
+                deepLAvailability = new DeepLAvailability();
+                _ = PrimeOnlineTranslationAsync(key, deepLAvailability);
+            }
+            state = deepLAvailability;
+        }
+        return new DeepLTranslator(key, fallback, availability: state);
+    }
+
+    private static async Task PrimeOnlineTranslationAsync(string key, DeepLAvailability state) =>
+        state.ObserveUsage(await DeepLTranslator.CheckAsync(key).ConfigureAwait(false), initial: true);
+
+    public async Task<OnlineKeyCheck> CheckOnlineKeyAsync(string key)
+    {
+        var check = await DeepLTranslator.CheckAsync(key).ConfigureAwait(false);
+        lock (deepLGate)
+        {
+            if (deepLKey == key) deepLAvailability?.ObserveUsage(check);
+        }
+        return check;
+    }
+
+    public OnlineKeyState? OnlineTranslationError(string key)
+    {
+        lock (deepLGate) return deepLKey == key ? deepLAvailability?.LastError : null;
+    }
     public IDubbingModel? Dubbing { get; } = PocketDubbingModel.EngineBundled ? new PocketDubbingModel() : null;
     public IDubbingModel? FastDubbing { get; } = WindowsVoiceModel.Available ? new WindowsVoiceModel() : null;
     public IAudioOutput? Audio { get; } = new WindowsAudioOutput();

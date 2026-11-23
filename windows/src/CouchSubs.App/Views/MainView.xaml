@@ -112,6 +112,8 @@
             </c:Card>
 
             <!-- Son altyazı -->
+            <TextBlock Text="{Binding DeepLNotice}" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,16,0,0"
+                       Visibility="{Binding DeepLNotice, Converter={StaticResource VisibleIf}}" />
             <c:Card Title="Çeviri inceleme kaydı" Margin="0,16,0,0">
                 <StackPanel>
                     <CheckBox x:Name="InspectionEnabled" Content="Son 20 saniyeyi bellekte tut"

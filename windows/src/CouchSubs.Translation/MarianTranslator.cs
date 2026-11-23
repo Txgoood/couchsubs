@@ -99,10 +99,9 @@ public sealed class MarianTranslator : ITextTranslator, IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
             // Beklerken başka bir çağrı aynı cümleyi çevirmiş olabilir.
             if (_cache.TryGetValue(sentence, out var cached)) return cached;
-            var engine = _engine ??= CreateEngine();
             // Çıkarım CPU'yu saniyenin onda biri kadar tutar; çağıranın (arayüz) iş parçacığını bloklamasın.
             var input = GameEnglish.Plain(SubtitleSegmenter.NormalizeCase(sentence, _names.Keys.ToHashSet(StringComparer.Ordinal)));
-            var translation = await Task.Run(() => engine.Translate(input, cancellationToken), cancellationToken)
+            var translation = await Task.Run(() => (_engine ??= CreateEngine()).Translate(input, cancellationToken), cancellationToken)
                 .ConfigureAwait(false);
             // Sıra bırakılmadan önce önbelleğe yazılır; sırada bekleyen aynı cümle yeniden çevrilmez.
             Remember(sentence, translation);

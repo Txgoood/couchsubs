@@ -663,7 +663,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             RegionTranslation.Result? result;
             try
             {
-                result = await RegionTranslation.TranslateOnceAsync(frame, region, reader, MakeTranslator());
+                result = await RegionTranslation.TranslateOnceAsync(frame, region, reader, MakeScreenTranslator());
             }
             catch (TranslatorException error)
             {
@@ -745,7 +745,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (!pc) server.SendSubtitle(text["Translating the screen…"], 2500);
         try
         {
-            var translator = MakeTranslator();
+            var translator = MakeScreenTranslator();
             var items = await ScreenTranslation.TranslateOverlayAsync(frame, reader, translator, progress: shown =>
             {
                 post(() =>
@@ -1154,13 +1154,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         worldWork.Cancel();
         worldWork = new CancellationTokenSource();
         worldReader = settings.AutoWorldText ? services.MakeReader(settings.SourceLanguage) : null;
-        worldTranslator = settings.AutoWorldText ? MakeTranslator() : null;
+        worldTranslator = settings.AutoWorldText ? MakeScreenTranslator() : null;
         nextWorldScan = default;
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage);
         activeReader = reader;
         OcrMissing = reader is null || !services.HasOcrLanguage(settings.SourceLanguage);
         if (reader is null) return;
+        var onlineKey = OnlineTranslationActive ? store.Load<string>(StoreKeys.DeepLKey) : null;
+        OnlineKeyState? lastOnlineError = null;
         var built = new SubtitlePipeline(reader, MakeTranslator(), server, new ReadScheduler())
         {
             TimingMode = settings.Style.Timing
@@ -1181,7 +1183,17 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             });
         };
         // Model bu arada inmiş olabilir; her çeviri sonucu durumu günceller.
-        built.TranslationResult += error => post(() => TranslatorStatus = error ?? TranslatorStatus.Ready);
+        built.TranslationResult += error => post(() =>
+        {
+            if (!ReferenceEquals(pipeline, built)) return;
+            TranslatorStatus = error ?? TranslatorStatus.Ready;
+            var onlineError = onlineKey is null ? null : services.OnlineTranslationError(onlineKey);
+            if (onlineError != lastOnlineError)
+            {
+                lastOnlineError = onlineError;
+                Changed(nameof(DeepLNotice));
+            }
+        });
         built.SpeechReady += lines => post(() => Speak(lines));
         pipeline = built;
     }
@@ -1194,6 +1206,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             return online;
         return local;
     }
+
+    private ITextTranslator MakeScreenTranslator() =>
+        ModelInstalled ? MakeLocalTranslator() : MakeTranslator();
 
     private ITextTranslator MakeLocalTranslator()
     {
@@ -1209,6 +1224,23 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     /// <summary>Kayıtlı bir DeepL anahtarı var mı (anahtarın kendisi arayüze hiç dönmez).</summary>
     public bool HasDeepLKey => store.Load<string>(StoreKeys.DeepLKey) is { Length: > 0 };
+
+    public string DeepLNotice
+    {
+        get
+        {
+            if (!OnlineTranslationActive || store.Load<string>(StoreKeys.DeepLKey) is not { } key) return "";
+            var reason = services.OnlineTranslationError(key) switch
+            {
+                OnlineKeyState.QuotaExceeded => "DeepL kotası doldu.",
+                OnlineKeyState.Invalid => "DeepL anahtarı kabul edilmedi.",
+                OnlineKeyState.Unreachable => "DeepL zamanında yanıt vermedi.",
+                _ => ""
+            };
+            if (reason.Length == 0) return "";
+            return reason + (ModelInstalled ? " Çeviri bilgisayarda devam ediyor." : " Devam etmek için yerel çeviri modelini indir.");
+        }
+    }
 
     /// <summary>Anahtar denenir; geçerliyse (kotası bitmiş olsa da) şifreli depoya yazılır ve çevrimiçi çeviri açılır.</summary>
     public async Task<OnlineKeyCheck> SetDeepLKeyAsync(string key)
@@ -1227,9 +1259,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>Kayıtlı anahtarın bu ayki kullanımı.</summary>
-    public Task<OnlineKeyCheck> CheckDeepLKeyAsync() =>
-        store.Load<string>(StoreKeys.DeepLKey) is { Length: > 0 } key ? services.CheckOnlineKeyAsync(key)
-            : Task.FromResult(new OnlineKeyCheck(OnlineKeyState.Invalid));
+    public async Task<OnlineKeyCheck> CheckDeepLKeyAsync()
+    {
+        if (store.Load<string>(StoreKeys.DeepLKey) is not { Length: > 0 } key)
+            return new OnlineKeyCheck(OnlineKeyState.Invalid);
+        var check = await services.CheckOnlineKeyAsync(key);
+        Changed(nameof(DeepLNotice));
+        return check;
+    }
 
     public void RemoveDeepLKey()
     {
@@ -1246,6 +1283,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             : !translation.IsSupported(settings.SourceLanguage, settings.TargetLanguage) ? TranslatorStatus.Unsupported
             : translation.IsInstalled(settings.SourceLanguage, settings.TargetLanguage) ? TranslatorStatus.Ready
             : TranslatorStatus.NeedsDownload;
+        Changed(nameof(DeepLNotice));
     }
 
     /// <summary>PS5'in adresi değişti: sonraki açılışlar yeni adresle başlasın.</summary>
