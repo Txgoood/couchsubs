@@ -142,13 +142,17 @@ public class SubtitlePipelineTests
         Assert.Equal(["TR: Hold the gate"], sender.Sent);
     }
 
-    [Fact]
-    public async Task SubtitleBoxIsSentInFrameCoordinates()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SubtitleBoxIsSentInFrameCoordinates(bool alreadyCropped)
     {
         var sender = new FakeSender();
         var reading = new Reading([new TextLine("Hold the gate.", new TextBox(0.25, 0.5, 0.75, 1))]);
         var pipeline = new SubtitlePipeline(new LinesReader(reading), new FakeTranslator(), sender);
-        await pipeline.ProcessAsync(Image, new CropRegion(Top: 0.6, Bottom: 1.0, Left: 0.1, Right: 0.9));
+        var area = new CropRegion(Top: 0.6, Bottom: 1.0, Left: 0.1, Right: 0.9);
+        if (alreadyCropped) await pipeline.ProcessAreaAsync(RegionCropper.Crop(Image, area), area);
+        else await pipeline.ProcessAsync(Image, area);
         await pipeline.WaitForTranslationsAsync();
         var box = Assert.Single(sender.Boxes)!.Value;
         Assert.Equal(0.3, box.Left, 9);

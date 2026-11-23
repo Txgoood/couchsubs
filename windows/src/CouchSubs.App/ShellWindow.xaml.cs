@@ -68,7 +68,7 @@ public partial class ShellWindow : Window
             case HotkeyAction.ExtraRegion3: _ = controller.TranslateExtraRegionAsync(3); break;
             case HotkeyAction.PauseSubtitles: controller.ToggleSubtitles(); break;
             case HotkeyAction.Snapshot: controller.RequestSnapshot(); break;
-            case HotkeyAction.FreeArea: FreeAreaWindow.Open(controller); break;
+            case HotkeyAction.FreeArea: _ = FreeAreaWindow.OpenAsync(controller); break;
             case HotkeyAction.Screen: _ = controller.TranslateScreenAsync(); break;
             case HotkeyAction.SaveInspection:
                 if (Host.Content is MainView main) _ = main.SaveInspectionAsync();

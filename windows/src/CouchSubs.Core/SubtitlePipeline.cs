@@ -51,7 +51,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public event Action<TranslatorStatus?>? TranslationResult;
 
     /// <summary>Okuma çeviriyi beklemez; böylece çeviri sürerken gelen satırlar da yakalanır.</summary>
-    public async Task ProcessAsync(Frame frame, CropRegion region)
+    public Task ProcessAsync(Frame frame, CropRegion region) => ProcessFrameAsync(frame, region, cropped: false);
+
+    public Task ProcessAreaAsync(Frame frame, CropRegion region) => ProcessFrameAsync(frame, region, cropped: true);
+
+    private async Task ProcessFrameAsync(Frame frame, CropRegion region, bool cropped)
     {
         int readSession;
         lock (gate) readSession = session;
@@ -60,7 +64,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             try
             {
-                var area = RegionCropper.Crop(frame, region);
+                var area = cropped ? frame : RegionCropper.Crop(frame, region);
                 ReadPlan plan;
                 lock (gate)
                 {

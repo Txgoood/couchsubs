@@ -47,6 +47,7 @@ public partial class MainView : UserControl
             StopSmoothVideo();
             inspectionTimer.Stop();
             inspection.Arm(false);
+            controller.SetInspectionCapture(false);
             controller.InspectionSubtitle -= RecordSubtitle;
             controller.InspectionPlayback -= RecordPlayback;
         };
@@ -142,6 +143,7 @@ public partial class MainView : UserControl
         if (SaveInspectionButton is null) return;
         var enabled = InspectionEnabled.IsChecked == true;
         inspection.Arm(enabled);
+        controller.SetInspectionCapture(enabled);
         SaveInspectionButton.IsEnabled = enabled;
         if (enabled) inspectionTimer.Start();
         else inspectionTimer.Stop();

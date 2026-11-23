@@ -86,6 +86,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private int worldRevision;
     private long nextOverlayCheck;
     private long fastCaptureUntil;
+    private int inspectionCapture;
     private sealed record ScreenOverlay(Frame Frame, IReadOnlyList<ScreenTranslation.Item> Items);
     private Dubber? dubber;
     private CancellationTokenSource? pcCaptureCancellation;
@@ -643,6 +644,26 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void RequestSnapshot() => SnapshotRequested?.Invoke();
 
+    public void SetInspectionCapture(bool enabled) => Volatile.Write(ref inspectionCapture, enabled ? 1 : 0);
+
+    public async Task<Frame?> CaptureSnapshotAsync()
+    {
+        if (!isRunning) return null;
+        if (!IsPcMode || services.GameScreen is not { } capture) return LastFrame;
+        var generation = Volatile.Read(ref sessionGeneration);
+        var display = settings.PcDisplayId;
+        try
+        {
+            var frame = await Task.Run(() => capture.Capture(display));
+            return IsCurrentSession(generation) ? frame : null;
+        }
+        catch (Exception error)
+        {
+            if (IsCurrentSession(generation)) PcCaptureError = "Ekran yakalanamadı. " + error.Message;
+            return null;
+        }
+    }
+
     public void RefreshTextRecognition()
     {
         if (isRunning) MakePipeline();
@@ -659,7 +680,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task<ExtraRegionOutcome> TranslateExtraRegionAsync(int slot)
     {
         if (settings.ExtraRegion(slot) is not { } region) return ExtraRegionOutcome.NotConfigured;
-        if (lastFrame is not { } frame) return ExtraRegionOutcome.NotRunning;
+        if (await CaptureSnapshotAsync() is not { } frame) return ExtraRegionOutcome.NotRunning;
         var target = settings.ExtraTarget(slot);
         return (await RunRegionAsync(frame, region, target != ResultTarget.Pc, target != ResultTarget.Tv)).Outcome;
     }
@@ -746,7 +767,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task<ScreenOutcome> TranslateScreenAsync()
     {
         var reader = activeReader;
-        if (!isRunning || reader is null || lastFrame is not { } frame) return ScreenOutcome.NotRunning;
+        if (!isRunning || reader is null) return ScreenOutcome.NotRunning;
         if (screenWork is { } running)
         {
             running.Cancel();
@@ -764,6 +785,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         screenWork = work;
         var pc = IsPcMode;
         var display = settings.PcDisplayId;
+        var generation = Volatile.Read(ref sessionGeneration);
+        var snapshot = await CaptureSnapshotAsync();
+        if (snapshot is not { } frame || work.IsCancellationRequested || !IsCurrentSession(generation))
+        {
+            if (ReferenceEquals(screenWork, work)) screenWork = null;
+            return work.IsCancellationRequested ? ScreenOutcome.Cleared : ScreenOutcome.NotRunning;
+        }
+        if (pc) PublishFrame(frame, generation);
         screenSource = frame;
         worldScanWork?.Cancel();
         ClearWorldOverlay();
@@ -1073,13 +1102,28 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             _ = Task.Run(async () =>
             {
                 string? lastError = null;
+                long lastFullCapture = 0;
                 while (!token.IsCancellationRequested)
                 {
                     string? captureError = null;
                     try
                     {
-                        var frame = capture.Capture(display);
-                        HandleFrame(frame, generation);
+                        var now = Environment.TickCount64;
+                        var region = settings.Region;
+                        var inspection = Volatile.Read(ref inspectionCapture) != 0;
+                        var manual = Volatile.Read(ref screenWork) is not null || Volatile.Read(ref manualOverlay) is not null;
+                        var world = Volatile.Read(ref worldOverlay) is not null || now < Volatile.Read(ref fastCaptureUntil);
+                        var fullInterval = inspection || manual ? 130 : world ? 400 : settings.AutoWorldText ? 1200 : 2500;
+                        if (lastFullCapture == 0 || now - lastFullCapture >= fullInterval)
+                        {
+                            HandleFrame(capture.Capture(display), generation);
+                            lastFullCapture = now;
+                        }
+                        else if (!subtitlesPaused)
+                        {
+                            var area = capture.CaptureSubtitle(display, region);
+                            await ProcessSubtitleFrameAsync(area, region, generation, cropped: true).ConfigureAwait(false);
+                        }
                     }
                     catch (Exception error)
                     {
@@ -1090,8 +1134,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                         lastError = captureError;
                         post(() => { if (IsCurrentSession(generation)) PcCaptureError = captureError; });
                     }
-                    var menuActive = Volatile.Read(ref screenWork) is not null ||
-                        Environment.TickCount64 < Volatile.Read(ref fastCaptureUntil);
+                    var menuActive = Volatile.Read(ref inspectionCapture) != 0 || Volatile.Read(ref screenWork) is not null ||
+                        Volatile.Read(ref manualOverlay) is not null || Environment.TickCount64 < Volatile.Read(ref fastCaptureUntil);
                     try { await Task.Delay(menuActive ? 130 : 280, token.Token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
@@ -1240,7 +1284,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (reader is null) return;
         var onlineKey = OnlineTranslationActive ? store.Load<string>(StoreKeys.DeepLKey) : null;
         OnlineKeyState? lastOnlineError = null;
-        var built = new SubtitlePipeline(reader, WithMemory(MakeTranslator(), scope), server, new ReadScheduler())
+        var built = new SubtitlePipeline(reader, WithMemory(MakeTranslator(), scope), server,
+            IsPcMode ? new ReadScheduler(deepEvery: 6) : new ReadScheduler())
         {
             TimingMode = settings.Style.Timing
         };
@@ -1538,6 +1583,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     private async void HandleFrame(Frame frame, int generation)
     {
+        PublishFrame(frame, generation);
+        await ProcessSubtitleFrameAsync(frame, settings.Region, generation, cropped: false);
+    }
+
+    private void PublishFrame(Frame frame, int generation)
+    {
         bool queueUpdate;
         lock (frameGate)
         {
@@ -1547,6 +1598,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             frameUpdateQueued = true;
         }
         if (queueUpdate) post(UpdateLatestFrame);
+    }
+
+    private async Task ProcessSubtitleFrameAsync(Frame frame, CropRegion region, int generation, bool cropped)
+    {
         // Duraklatıldıysa kare yalnız ek bölgeler ve serbest alan için saklanır; altyazı okunmaz.
         if (subtitlesPaused) return;
         // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
@@ -1554,7 +1609,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (current is null || !IsCurrentSession(generation) || Interlocked.Exchange(ref processing, 1) == 1) return;
         try
         {
-            await current.ProcessAsync(frame, settings.Region);
+            if (cropped) await current.ProcessAreaAsync(frame, region);
+            else await current.ProcessAsync(frame, region);
         }
         catch
         {

@@ -33,14 +33,14 @@ public sealed class FreeAreaWindow : Window
     private int version;
 
     /// <summary>Pencereyi açar; zaten açıksa öne getirir. Çeviri sürmüyorsa (kare yoksa) hiçbir şey yapmaz.</summary>
-    public static void Open(AppController controller)
+    public static async Task OpenAsync(AppController controller)
     {
         if (current is not null)
         {
             current.Activate();
             return;
         }
-        if (controller.LastFrame is not { } frame) return;
+        if (await controller.CaptureSnapshotAsync() is not { } frame || current is not null) return;
         current = new FreeAreaWindow(controller, frame);
         current.Show();
         current.Activate();

@@ -152,7 +152,7 @@ public partial class SettingsWindow : Window
     {
         Close();
         await Task.Delay(350);
-        FreeAreaWindow.Open(controller);
+        await FreeAreaWindow.OpenAsync(controller);
     }
 
     private void OnObsScreenCopy(object sender, RoutedEventArgs e)
@@ -243,9 +243,15 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>Önizlemeyi oyunun şu anki görüntüsüyle yeniler (çerçeve olduğu gibi kalır).</summary>
-    private void OnRefresh(object sender, RoutedEventArgs e) => Region.Frame = controller.LastFrame;
+    private async void OnRefresh(object sender, RoutedEventArgs e) => await RefreshPictureAsync();
 
-    private void OnSnapshot() => Dispatcher.Invoke(() => Region.Frame = controller.LastFrame);
+    private void OnSnapshot() => Dispatcher.BeginInvoke(new Action(async () => await RefreshPictureAsync()));
+
+    private async Task RefreshPictureAsync()
+    {
+        var frame = await controller.CaptureSnapshotAsync();
+        if (IsLoaded) Region.Frame = frame;
+    }
 
     private void OnPosition(object sender, RoutedPropertyChangedEventArgs<double> e) =>
         Update(s => s with { Style = s.Style with { BottomPercent = (int)Math.Round(e.NewValue) } });

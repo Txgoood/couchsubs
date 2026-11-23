@@ -84,9 +84,20 @@ internal sealed class WindowsGameScreenCapture : IGameScreenCapture
             $"{(screen.Primary ? "Birincil ekran" : "Bağlı monitör")} {index + 1} — {screen.Bounds.Width}×{screen.Bounds.Height} ({screen.Id})",
             screen.Primary)).ToArray();
 
-    public Frame Capture(string displayId)
+    public Frame Capture(string displayId) => CaptureBounds(BoundsFor(displayId));
+
+    public Frame CaptureSubtitle(string displayId, CropRegion region)
     {
         var bounds = BoundsFor(displayId);
+        var left = bounds.Left + Math.Clamp((int)Math.Floor(bounds.Width * region.Left), 0, bounds.Width - 1);
+        var top = bounds.Top + Math.Clamp((int)Math.Floor(bounds.Height * region.Top), 0, bounds.Height - 1);
+        var right = bounds.Left + Math.Clamp((int)Math.Ceiling(bounds.Width * region.Right), left - bounds.Left + 1, bounds.Width);
+        var bottom = bounds.Top + Math.Clamp((int)Math.Ceiling(bounds.Height * region.Bottom), top - bounds.Top + 1, bounds.Height);
+        return CaptureBounds(Rectangle.FromLTRB(left, top, right, bottom));
+    }
+
+    private static Frame CaptureBounds(Rectangle bounds)
+    {
         // GDI ekran alımı; oyunlar kenarlıksız tam ekranda yakalanabilir.
         // Exclusive tam ekran/korumalı görüntüde ekran siyah çıkabilir.
         using var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);

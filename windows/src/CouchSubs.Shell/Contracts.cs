@@ -31,6 +31,7 @@ public interface IGameScreenCapture
 {
     IReadOnlyList<GameDisplay> Displays();
     Frame Capture(string displayId);
+    Frame CaptureSubtitle(string displayId, CropRegion region) => RegionCropper.Crop(Capture(displayId), region);
 }
 
 public sealed record UserSettings

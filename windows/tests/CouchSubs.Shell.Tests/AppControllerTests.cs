@@ -89,6 +89,7 @@ internal sealed class FakeReader(Reading? lines = null) : ITextReader
 internal sealed class FakePcScreens : IGameScreenCapture
 {
     public int Captures;
+    public int SubtitleCaptures;
     public string LastDisplay = "";
     public Frame? CurrentFrame;
     public Exception? CaptureFailure;
@@ -100,6 +101,12 @@ internal sealed class FakePcScreens : IGameScreenCapture
         Interlocked.Increment(ref Captures);
         if (Volatile.Read(ref CaptureFailure) is { } failure) throw failure;
         return Volatile.Read(ref CurrentFrame) ?? Frame.Blank(64, 64);
+    }
+
+    public Frame CaptureSubtitle(string displayId, CropRegion region)
+    {
+        Interlocked.Increment(ref SubtitleCaptures);
+        return RegionCropper.Crop(Volatile.Read(ref CurrentFrame) ?? Frame.Blank(64, 64), region);
     }
 }
 
@@ -347,6 +354,25 @@ public class AppControllerTests
         controller.Stop();
         Assert.False(controller.IsRunning);
         controller.Dispose();
+    }
+
+    [Fact]
+    public async Task PcGameplayUsesCroppedCapturesAndExplicitSnapshotUsesFullScreen()
+    {
+        var screens = new FakePcScreens();
+        var services = new FakeServices { GameScreen = screens, HasOcr = false };
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { Source = GameSource.Pc });
+        using var controller = Make(services: services, settings: settings);
+        await controller.StartAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (Volatile.Read(ref screens.SubtitleCaptures) == 0) await Task.Delay(25, timeout.Token);
+        Assert.Equal(1, Volatile.Read(ref screens.Captures));
+
+        var fresh = Frame.Blank(180, 100);
+        Volatile.Write(ref screens.CurrentFrame, fresh);
+        Assert.Same(fresh, await controller.CaptureSnapshotAsync());
+        Assert.Equal(2, Volatile.Read(ref screens.Captures));
     }
 
     [Fact]
