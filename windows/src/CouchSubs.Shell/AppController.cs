@@ -1252,7 +1252,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     private void RecordRecentTranslation(TranslationMemoryLine line)
     {
-        if (!HasTranslationMemory || string.IsNullOrWhiteSpace(line.Translation)) return;
+        if (services.TranslationMemory is not { } memory || string.IsNullOrWhiteSpace(line.Translation)) return;
+        memory.Record(line);
         var index = recentTranslations.FindIndex(previous => previous.Scope == line.Scope && previous.Source == line.Source);
         if (index >= 0)
         {

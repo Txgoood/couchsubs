@@ -29,8 +29,8 @@ public partial class TranslationMemoryWindow : Window
         Entries.ItemsSource = entries;
         Entries.SelectedItem = entries.FirstOrDefault(line => line.Source == selectSource) ?? entries.FirstOrDefault();
         Status.Text = entries.Count == 0
-            ? ListType.SelectedIndex == 1 ? "Bu oyun için henüz kayıt yok." : "Oyun sırasında görünen çeviriler burada listelenir."
-            : "Bir satır seçip çevirisini onaylayabilir veya düzeltebilirsin.";
+            ? "Otomatik kayıt açık. Oyun sırasında görünen çeviriler burada birikir."
+            : "Otomatik kayıt açık. Bir satırı seçip çevirisini düzeltebilirsin.";
         UpdateButtons();
     }
 

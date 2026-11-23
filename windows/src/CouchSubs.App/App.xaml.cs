@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.Runtime.CompilerServices;
+using System.IO;
+using System.Text.Json;
 using System.Windows;
 using CouchSubs.App.Services;
 using CouchSubs.App.Theme;
@@ -11,6 +13,15 @@ namespace CouchSubs.App;
 
 public partial class App : Application
 {
+    private ITranslationMemory? translationMemory;
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        try { translationMemory?.FlushAsync().GetAwaiter().GetResult(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { }
+        base.OnExit(e);
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -45,7 +56,9 @@ public partial class App : Application
         RemotePlayDiagnostics.Start();
         ThemeManager.Apply(Resources);
         ThemeManager.Follow(Resources);
-        var controller = new AppController(new LiveServices(), new DpapiAppStore(), new FileSettingsStore(), new WindowsSleepGuard(),
+        var services = new LiveServices();
+        translationMemory = services.TranslationMemory;
+        var controller = new AppController(services, new DpapiAppStore(), new FileSettingsStore(), new WindowsSleepGuard(),
             Localizer.Current, action => Dispatcher.BeginInvoke(action))
         {
             // Samsung'un sertifika için giriş sayfası varsayılan tarayıcıda açılır.

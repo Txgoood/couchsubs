@@ -24,10 +24,62 @@ public sealed class TranslationMemoryTests : IDisposable
         Assert.Equal("Burada bekle.\nKoş!", text);
         Assert.False(reopened.TryGet(Gta with { Game = "Other game" }, "Back", out _));
         Assert.False(reopened.TryGet(Gta with { TargetLanguage = "es" }, "Back", out _));
-        Assert.False(reopened.TryGet(Gta, "back", out _));
+        Assert.True(reopened.TryGet(Gta, "back", out _));
 
         await reopened.RemoveAsync(Gta, "Back");
         Assert.False(new FileTranslationMemory(FilePath).TryGet(Gta, "Back", out _));
+    }
+
+    [Fact]
+    public async Task AutomaticBatchDeduplicatesFormattingAndKeepsDifferentCommands()
+    {
+        var memory = new FileTranslationMemory(FilePath);
+        memory.Record(new(Gta, "Don’t  turn left.", "Sola dönme."));
+        memory.Record(new(Gta, "DON'T TURN LEFT.", "Tekrar kaydedilmemeli."));
+        memory.Record(new(Gta, "Do turn left.", "Sola dön."));
+        memory.Record(new(Gta, "Don’t turn right.", "Sağa dönme."));
+        memory.Record(new(Gta, "Jason", "Jason"));
+        await memory.FlushAsync();
+
+        var reopened = new FileTranslationMemory(FilePath);
+        Assert.Equal(3, reopened.Saved(Gta).Count);
+        Assert.True(reopened.TryGet(Gta, "Don't turn left.", out var text));
+        Assert.Equal("Sola dönme.", text);
+    }
+
+    [Fact]
+    public async Task RecordAutomaticallyFlushesWithoutAUserSave()
+    {
+        var memory = new FileTranslationMemory(FilePath);
+        memory.Record(new(Gta, "Keep moving.", "İlerlemeye devam et."));
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        while (!File.Exists(FilePath)) await Task.Delay(75, timeout.Token);
+        var reopened = new FileTranslationMemory(FilePath);
+        Assert.Equal("İlerlemeye devam et.", Assert.Single(reopened.Saved(Gta)).Translation);
+    }
+
+    [Fact]
+    public async Task AutomaticBatchPreservesManualEditsAndDeletedEntries()
+    {
+        var legacy = new FileTranslationMemory(FilePath);
+        await legacy.SaveAsync(new(Gta, "Back", "Geri"));
+        var currentPath = Path.Combine(folder, "memory-v2.json");
+        var memory = new FileTranslationMemory(currentPath, FilePath);
+        memory.Record(new(Gta, "Stop.", "Dur."));
+        await memory.SaveAsync(new(Gta, "STOP.", "Dur bakalım."));
+        memory.Record(new(Gta, "BACK", "Arka"));
+        await memory.RemoveAsync(Gta, "Back");
+        await memory.FlushAsync();
+
+        var reopened = new FileTranslationMemory(currentPath, FilePath);
+        reopened.Record(new(Gta, "BACK", "Arka"));
+        await reopened.FlushAsync();
+        var line = Assert.Single(reopened.Saved(Gta));
+        Assert.Equal("Dur bakalım.", line.Translation);
+        Assert.Null(line.AutomaticallySavedAt);
+        Assert.False(reopened.TryGet(Gta, "BACK", out _));
+        Assert.True(new FileTranslationMemory(FilePath).TryGet(Gta, "Back", out _));
     }
 
     [Fact]
@@ -53,7 +105,8 @@ public sealed class TranslationMemoryTests : IDisposable
         Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
         var entry = Assert.Single(controller.RecentTranslations(Gta));
         Assert.Equal("Geri", entry.Translation);
-        Assert.Empty(controller.SavedTranslations(Gta));
+        await services.TranslationMemory.FlushAsync();
+        Assert.NotNull(Assert.Single(new FileTranslationMemory(FilePath).Saved(Gta)).AutomaticallySavedAt);
 
         await controller.SaveTranslationAsync(entry with { Translation = "Geri dön" });
         Assert.Equal(ScreenOutcome.Cleared, await controller.TranslateScreenAsync());

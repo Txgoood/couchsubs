@@ -197,14 +197,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             LastPair = (source, translated);
             LastBox = box;
         }
+        var speech = SpeechReady;
+        var lines = speech is null ? null : translator.SpokenLines(source, translated);
         PairShown?.Invoke(source, translated);
-        if (SpeechReady is { } speech)
+        if (speech is not null)
         {
             // Birçok ITextTranslator uygulaması SpokenLines özelliğini desteklemez ve boş
             // liste döndürür. Çeviri TV'de görünürken sesin tamamen susmasını önle:
             // konuşmacı ataması varsa koru, yoksa GÖSTERİLEN Türkçe metni seslendir.
-            var lines = translator.SpokenLines(source, translated);
-            speech(lines.Count > 0 ? lines : SubtitleDialogue.Parse(source, translated));
+            speech(lines is { Count: > 0 } ? lines : SubtitleDialogue.Parse(source, translated));
         }
     }
 
