@@ -18,6 +18,7 @@ namespace CouchSubs.App.Services;
 public sealed class LiveServices : IAppServices
 {
     public ITranslationModel Translation { get; } = new MarianModel();
+    public ITranslationMemory TranslationMemory { get; } = new FileTranslationMemory(Path.Combine(AppPaths.Data, "translation-memory.json"));
 
     private readonly object deepLGate = new();
     private string? deepLKey;

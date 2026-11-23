@@ -9,8 +9,15 @@ public interface ITextTranslator
 {
     Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default);
 
+    bool TryGetSavedTranslation(string source, out string translation)
+    {
+        translation = "";
+        return false;
+    }
+
     /// <summary>Son çevrilen altyazının seslendirilecek cümleleri (konuşmacısıyla); dublaj için.</summary>
     IReadOnlyList<SpokenLine> SpokenLines(string text) => [];
+    IReadOnlyList<SpokenLine> SpokenLines(string source, string translation) => SpokenLines(source);
 }
 
 public enum TranslatorStatus

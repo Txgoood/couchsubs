@@ -182,6 +182,7 @@ public interface IAppServices
     /// </summary>
     bool HasOcrLanguage(string language) => true;
     ITranslationModel Translation { get; }
+    ITranslationMemory? TranslationMemory => null;
     /// <summary>DeepL çevirmeni; <paramref name="fallback"/> DeepL'e ulaşılamayan satırları çevirir. Bu derlemede yoksa null.</summary>
     ITextTranslator? MakeOnlineTranslator(string key, ITextTranslator? fallback) => null;
     Task<OnlineKeyCheck> CheckOnlineKeyAsync(string key) => Task.FromResult(new OnlineKeyCheck(OnlineKeyState.Unreachable));

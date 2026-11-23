@@ -22,7 +22,8 @@ public static class RegionTranslation
 
     /// <summary>Bölgede yazı yoksa null döner. Çevirmen kullanılamıyorsa <see cref="TranslatorException"/> fırlatır.</summary>
     public static async Task<Result?> TranslateOnceAsync(
-        Frame frame, CropRegion region, ITextReader reader, ITextTranslator translator, CancellationToken cancellationToken = default)
+        Frame frame, CropRegion region, ITextReader reader, ITextTranslator translator,
+        CancellationToken cancellationToken = default, Action<string, string>? onBlockTranslated = null)
     {
         var area = RegionCropper.Crop(frame, region);
         // Tek okuma olduğu için "derin" okuma açık: boş görünen bölgede büyütülmüş okuma da denenir.
@@ -36,6 +37,7 @@ public static class RegionTranslation
         foreach (var block in blocks)
         {
             var text = await translator.TranslateAsync(block.Text, cancellationToken).ConfigureAwait(false);
+            onBlockTranslated?.Invoke(block.Text, text);
             translated.Add(block.Bullet ? "• " + text : text);
         }
         return new Result(string.Join('\n', blocks.Select(block => block.Text)), string.Join('\n', translated), box, blocks.Count > 1);

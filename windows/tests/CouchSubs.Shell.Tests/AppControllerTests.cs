@@ -117,6 +117,7 @@ internal sealed class FakeServices : IAppServices
     public IDubbingModel? Dubbing { get; set; }
     public IDubbingModel? FastDubbing { get; set; }
     public FakeTranslation Translation { get; } = new();
+    public ITranslationMemory? TranslationMemory { get; set; }
     public IGameScreenCapture? GameScreen { get; set; } = new FakePcScreens();
     public IFirewall? Firewall { get; set; }
     ITranslationModel IAppServices.Translation => Translation;

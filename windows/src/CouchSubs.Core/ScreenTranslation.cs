@@ -118,7 +118,9 @@ public static class ScreenTranslation
             if (isCurrent?.Invoke() == false) break;
             if (isRegionCurrent?.Invoke(group.Box) == false || IsCurrentDialogue(group.Text, group.Box)) continue;
             string target;
-            if (englishToTurkish && TurkishMenuLabels.TryGetValue(group.Text, out var label))
+            if (translator.TryGetSavedTranslation(group.Text, out var saved))
+                target = saved;
+            else if (englishToTurkish && TurkishMenuLabels.TryGetValue(group.Text, out var label))
                 target = IsUppercase(group.Text) ? label.ToUpper(System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) : label;
             else
                 target = (await translator.TranslateAsync(group.Text, cancellationToken).ConfigureAwait(false)).Trim();

@@ -133,6 +133,8 @@
                                Visibility="{Binding LastTranslation, Converter={StaticResource VisibleIf}}" />
                     <TextBlock Text="{Binding LastSource}" Style="{StaticResource HintText}" Margin="0,8,0,0"
                                Visibility="{Binding LastTranslation, Converter={StaticResource VisibleIf}}" />
+                    <Button Content="Çeviri hafızası" Click="OnTranslationMemory" HorizontalAlignment="Left" Margin="0,12,0,0"
+                            Visibility="{Binding HasTranslationMemory, Converter={StaticResource VisibleIf}}" />
                 </StackPanel>
             </c:Card>
         </StackPanel>

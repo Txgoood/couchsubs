@@ -146,6 +146,9 @@ public partial class MainView : UserControl
         else inspectionTimer.Stop();
     }
 
+    private void OnTranslationMemory(object sender, RoutedEventArgs e) =>
+        new TranslationMemoryWindow(controller) { Owner = Window.GetWindow(this) }.ShowDialog();
+
     private void RecordSubtitle(string english, string turkish) =>
         inspection.Add("subtitle", english, turkish);
 

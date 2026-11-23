@@ -28,6 +28,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private readonly ISleepGuard sleep;
     private readonly Localizer text;
     private readonly Action<Action> post;
+    private readonly List<TranslationMemoryLine> recentTranslations = [];
 
     private OnboardingStep step;
     private byte[]? accountId;
@@ -196,8 +197,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (old.Style.Timing != value.Style.Timing && pipeline is not null)
                 pipeline.TimingMode = value.Style.Timing;
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
-            if (!string.Equals(old.Dubbing.ActiveGame, value.Dubbing.ActiveGame,
-                    StringComparison.OrdinalIgnoreCase))
+            var gameChanged = !string.Equals(old.Dubbing.ActiveGame, value.Dubbing.ActiveGame,
+                StringComparison.OrdinalIgnoreCase);
+            if (gameChanged)
                 services.SpeakerDetector?.ConfigureGame(value.Dubbing.ActiveGame);
             if (old.AutoWorldText && !value.AutoWorldText && screenWork is null &&
                 DateTime.UtcNow >= screenShownUntil)
@@ -205,7 +207,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 ClearWorldOverlay();
             }
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
-                              || old.OnlineTranslation != value.OnlineTranslation || old.AutoWorldText != value.AutoWorldText))
+                              || old.OnlineTranslation != value.OnlineTranslation || old.AutoWorldText != value.AutoWorldText
+                              || (gameChanged && HasTranslationMemory)))
             {
                 RefreshTranslatorStatus();
                 MakePipeline();
@@ -660,10 +663,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (Interlocked.Exchange(ref extraBusy, 1) == 1) return (ExtraRegionOutcome.Busy, null);
         try
         {
+            var scope = CurrentTranslationMemoryScope;
+            var blocks = new List<TranslationMemoryLine>();
             RegionTranslation.Result? result;
             try
             {
-                result = await RegionTranslation.TranslateOnceAsync(frame, region, reader, MakeScreenTranslator());
+                result = await RegionTranslation.TranslateOnceAsync(frame, region, reader, MakeScreenTranslator(scope),
+                    onBlockTranslated: (source, translation) => blocks.Add(new(scope, source, translation)));
             }
             catch (TranslatorException error)
             {
@@ -695,6 +701,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 LastSource = result.Source;
                 LastTranslation = result.Translation;
+                foreach (var block in blocks) RecordRecentTranslation(block);
                 if (toPcPopup) PcResultReady?.Invoke(result.Translation, milliseconds);
             });
             return (ExtraRegionOutcome.Shown, result);
@@ -745,7 +752,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (!pc) server.SendSubtitle(text["Translating the screen…"], 2500);
         try
         {
-            var translator = MakeScreenTranslator();
+            var scope = CurrentTranslationMemoryScope;
+            var translator = MakeScreenTranslator(scope);
             var items = await ScreenTranslation.TranslateOverlayAsync(frame, reader, translator, progress: shown =>
             {
                 post(() =>
@@ -757,6 +765,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     var duration = ScreenTranslation.DisplayMilliseconds(visible);
                     screenShownUntil = DateTime.UtcNow.AddMilliseconds(duration);
                     manualOverlay = new ScreenOverlay(frame, visible);
+                    RecordScreenTranslations(scope, visible);
                     PublishOverlay(visible, duration, pc, display);
                 });
             }, cancellationToken: work.Token, isCurrent: () => IsCurrentScreen(frame),
@@ -1149,12 +1158,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Okuma hattını güncel dillerle (yeniden) kurar.</summary>
     private void MakePipeline()
     {
+        var scope = CurrentTranslationMemoryScope;
         pipeline?.Reset();
         pipeline = null;
         worldWork.Cancel();
         worldWork = new CancellationTokenSource();
         worldReader = settings.AutoWorldText ? services.MakeReader(settings.SourceLanguage) : null;
-        worldTranslator = settings.AutoWorldText ? MakeScreenTranslator() : null;
+        worldTranslator = settings.AutoWorldText ? MakeScreenTranslator(scope) : null;
         nextWorldScan = default;
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage);
@@ -1163,7 +1173,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (reader is null) return;
         var onlineKey = OnlineTranslationActive ? store.Load<string>(StoreKeys.DeepLKey) : null;
         OnlineKeyState? lastOnlineError = null;
-        var built = new SubtitlePipeline(reader, MakeTranslator(), server, new ReadScheduler())
+        var built = new SubtitlePipeline(reader, WithMemory(MakeTranslator(), scope), server, new ReadScheduler())
         {
             TimingMode = settings.Style.Timing
         };
@@ -1173,8 +1183,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var box = built.LastBox;
             post(() =>
             {
+                if (!ReferenceEquals(pipeline, built)) return;
                 LastSource = source;
                 LastTranslation = translation;
+                RecordRecentTranslation(new(scope, source, translation));
                 AutoSelectRecognizedGame(source);
                 DiscoverDialogueNames(source);
                 if (box is not null) lastSubtitleBox = box;
@@ -1207,8 +1219,49 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         return local;
     }
 
-    private ITextTranslator MakeScreenTranslator() =>
-        ModelInstalled ? MakeLocalTranslator() : MakeTranslator();
+    private ITextTranslator MakeScreenTranslator(TranslationMemoryScope scope) =>
+        WithMemory(ModelInstalled ? MakeLocalTranslator() : MakeTranslator(), scope);
+
+    private ITextTranslator WithMemory(ITextTranslator translator, TranslationMemoryScope scope) =>
+        services.TranslationMemory is { } memory ? new MemoryTranslator(translator, memory, scope) : translator;
+
+    public bool HasTranslationMemory => services.TranslationMemory is not null;
+
+    public TranslationMemoryScope CurrentTranslationMemoryScope => new(GameCastLibrary.Normalize(settings.Dubbing.ActiveGame),
+        settings.SourceLanguage, settings.TargetLanguage);
+
+    public IReadOnlyList<TranslationMemoryLine> RecentTranslations(TranslationMemoryScope scope) => recentTranslations
+        .Where(line => line.Scope == scope).ToArray();
+
+    public IReadOnlyList<TranslationMemoryLine> SavedTranslations(TranslationMemoryScope scope) =>
+        services.TranslationMemory?.Saved(scope) ?? [];
+
+    public string? SavedTranslation(TranslationMemoryLine line) =>
+        services.TranslationMemory?.TryGet(line.Scope, line.Source, out var translation) == true ? translation : null;
+
+    public Task SaveTranslationAsync(TranslationMemoryLine line) =>
+        services.TranslationMemory?.SaveAsync(line) ?? throw new InvalidOperationException();
+
+    public Task RemoveTranslationAsync(TranslationMemoryLine line) =>
+        services.TranslationMemory?.RemoveAsync(line.Scope, line.Source) ?? throw new InvalidOperationException();
+
+    private void RecordScreenTranslations(TranslationMemoryScope scope, IReadOnlyList<ScreenTranslation.Item> items)
+    {
+        foreach (var item in items) RecordRecentTranslation(new(scope, item.Source, item.Translation));
+    }
+
+    private void RecordRecentTranslation(TranslationMemoryLine line)
+    {
+        if (!HasTranslationMemory || string.IsNullOrWhiteSpace(line.Translation)) return;
+        var index = recentTranslations.FindIndex(previous => previous.Scope == line.Scope && previous.Source == line.Source);
+        if (index >= 0)
+        {
+            recentTranslations[index] = line;
+            return;
+        }
+        recentTranslations.Insert(0, line);
+        if (recentTranslations.Count > 100) recentTranslations.RemoveAt(100);
+    }
 
     private ITextTranslator MakeLocalTranslator()
     {
@@ -1327,6 +1380,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var cancellation = scanWork.Token;
         var reader = worldReader;
         var translator = worldTranslator;
+        var scope = CurrentTranslationMemoryScope;
         var subtitleRegion = settings.Region;
         var display = settings.PcDisplayId;
         var pc = settings.Source == GameSource.Pc;
@@ -1370,6 +1424,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 if (cancellation.IsCancellationRequested || screenWork is not null ||
                     DateTime.UtcNow < screenShownUntil || !IsCurrentScan()) return;
                 var visible = KeepCurrentItems(frame, items, CurrentSubtitle());
+                RecordScreenTranslations(scope, visible);
                 if (!complete && worldOverlay is { } previous && IsCurrentScreen(previous.Frame))
                 {
                     var unchanged = KeepCurrentItems(previous.Frame, previous.Items, CurrentSubtitle());

@@ -1,0 +1,49 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<Window x:Class="CouchSubs.App.Views.TranslationMemoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Çeviri hafızası" Width="730" Height="620" MinWidth="490" MinHeight="470"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource backgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Çeviri hafızası" Style="{StaticResource TitleText}" />
+            <TextBlock x:Name="ScopeText" Style="{StaticResource HintText}" Margin="0,6,0,12" />
+        </StackPanel>
+        <DockPanel Grid.Row="1" Margin="0,0,0,8">
+            <Button DockPanel.Dock="Right" Content="Listeyi yenile" Click="OnRefresh" />
+            <ComboBox x:Name="ListType" Width="195" HorizontalAlignment="Left" SelectedIndex="0"
+                      AutomationProperties.Name="Çeviri listesi" SelectionChanged="OnListTypeChanged">
+                <ComboBoxItem Content="Son çeviriler" />
+                <ComboBoxItem Content="Hafızadaki çeviriler" />
+            </ComboBox>
+        </DockPanel>
+        <ListBox x:Name="Entries" Grid.Row="2" DisplayMemberPath="Source" SelectionChanged="OnSelectionChanged"
+                 AutomationProperties.Name="Çeviriler" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 Background="{DynamicResource surfaceBrush}" Foreground="{DynamicResource textPrimaryBrush}"
+                 BorderBrush="{DynamicResource borderBrush}" />
+        <StackPanel Grid.Row="3" Margin="0,12,0,0">
+            <Label Content="Kaynak metin" Target="{Binding ElementName=SourceText}" Padding="0,0,0,4"
+                   Foreground="{DynamicResource textPrimaryBrush}" />
+            <TextBox x:Name="SourceText" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="68" VerticalScrollBarVisibility="Auto" />
+            <Label Content="Çeviri" Target="{Binding ElementName=EditedText}" Padding="0,10,0,4"
+                   Foreground="{DynamicResource textPrimaryBrush}" />
+            <TextBox x:Name="EditedText" AcceptsReturn="True" TextWrapping="Wrap" Height="74" VerticalScrollBarVisibility="Auto"
+                     TextChanged="OnEdited" />
+            <TextBlock x:Name="Status" Margin="0,8,0,10" TextWrapping="Wrap" Style="{StaticResource HintText}" />
+        </StackPanel>
+        <DockPanel Grid.Row="4" LastChildFill="False">
+            <Button x:Name="RemoveButton" Content="Hafızadan sil" Click="OnRemove" DockPanel.Dock="Left" IsEnabled="False" />
+            <Button Content="Kapat" IsCancel="True" DockPanel.Dock="Right" Margin="8,0,0,0" />
+            <Button x:Name="SaveButton" Content="Hafızaya kaydet" Click="OnSave" DockPanel.Dock="Right" IsEnabled="False"
+                    Style="{StaticResource PrimaryButton}" />
+        </DockPanel>
+    </Grid>
+</Window>

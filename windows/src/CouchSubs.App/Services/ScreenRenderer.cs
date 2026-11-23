@@ -44,6 +44,7 @@ public static class ScreenRenderer
             // Uygulamanın gerçek penceresi: XAML'ı (simge dahil) açılıştaki gibi yüklenir.
             Save(() => Detach(new ShellWindow(Demo(OnboardingStep.Done))), 640, 720, Path.Combine(folder, $"pencere-{suffix}.png"));
             Save(() => Detach(new SettingsWindow(Demo(OnboardingStep.Done))), 600, 720, Path.Combine(folder, $"ayarlar-{suffix}.png"));
+            Save(() => Detach(new TranslationMemoryWindow(Demo(OnboardingStep.Done))), 730, 620, Path.Combine(folder, $"ceviri-hafizasi-{suffix}.png"));
             Save(() => Detach(new AboutWindow()), 460, 640, Path.Combine(folder, $"hakkinda-{suffix}.png"));
         }
         app.Shutdown();
