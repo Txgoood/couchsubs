@@ -105,9 +105,11 @@ public static class ScreenTranslation
         CropRegion? exclude = null, Action<IReadOnlyList<Item>>? progress = null,
         CancellationToken cancellationToken = default, string? subtitle = null, Func<bool>? isCurrent = null,
         bool englishToTurkish = false, Func<TextLine?>? currentSubtitle = null, Func<TextBox, bool>? isRegionCurrent = null,
-        IReadOnlyList<CropRegion>? regions = null, Func<CancellationToken, Task>? waitForModel = null)
+        IReadOnlyList<CropRegion>? regions = null, Func<CancellationToken, Task>? waitForModel = null,
+        bool quickRead = false)
     {
-        var reading = await Task.Run(() => ReadScreen(frame, reader, regions, cancellationToken), cancellationToken).ConfigureAwait(false);
+        var reading = await Task.Run(() => ReadScreen(frame, reader, regions, cancellationToken, quickRead), cancellationToken)
+            .ConfigureAwait(false);
         var lines = OverlayLines(reading).Where(line => !ExcludeOverlayLine(line));
         var items = new List<Item>();
         var pending = new List<(string Text, TextBox Box, double Height)>();
@@ -164,9 +166,10 @@ public static class ScreenTranslation
             IsActiveSubtitle(new TextLine(text, box), currentSubtitle());
     }
 
-    private static Reading ReadScreen(Frame frame, ITextReader reader, IReadOnlyList<CropRegion>? regions, CancellationToken cancellation)
+    private static Reading ReadScreen(Frame frame, ITextReader reader, IReadOnlyList<CropRegion>? regions,
+        CancellationToken cancellation, bool quickRead)
     {
-        if (regions is null) return reader.ReadScreenLines(frame);
+        if (regions is null) return quickRead ? reader.ReadScreenPreviewLines(frame) : reader.ReadScreenLines(frame);
         var lines = new List<TextLine>();
         foreach (var region in regions)
         {

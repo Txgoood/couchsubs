@@ -12,6 +12,24 @@ public class ScreenTranslationTests
         new(text, new TextBox(left, top, right, top + height));
 
     [Fact]
+    public async Task PreviewScanAndManualScanUseTheirOwnReaders()
+    {
+        var reader = new PreviewReader();
+        var translator = new FakeTranslator();
+        var preview = await ScreenTranslation.TranslateOverlayAsync(Image, reader, translator, quickRead: true);
+        var manual = await ScreenTranslation.TranslateOverlayAsync(Image, reader, translator);
+        Assert.Equal("Settings", Assert.Single(preview).Source);
+        Assert.Equal("Detailed settings", Assert.Single(manual).Source);
+    }
+
+    private sealed class PreviewReader : ITextReader
+    {
+        public string Read(Frame image) => throw new NotSupportedException();
+        public Reading ReadScreenPreviewLines(Frame image) => new([Line("Settings", .1, .1, .4)]);
+        public Reading ReadScreenLines(Frame image) => new([Line("Detailed settings", .1, .1, .4)]);
+    }
+
+    [Fact]
     public async Task SavedLabelsArePublishedBeforeAnyUncachedModelWork()
     {
         var translator = new SavedLabelTranslator();

@@ -161,6 +161,7 @@ public interface ITextReader
     Reading ReadLines(Frame image, bool deep) => Reading.FromText(Read(image, deep));
 
     Reading ReadScreenLines(Frame image) => ReadLines(image.Height < 900 ? image.Scaled(2) : image, false);
+    Reading ReadScreenPreviewLines(Frame image) => ReadScreenLines(image);
 }
 
 /// <summary>

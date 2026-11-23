@@ -42,8 +42,11 @@ public sealed class PcWorldTextWindow : Window
             current = new PcWorldTextWindow(displayId);
             current.Show();
         }
-        current.items = items;
-        current.RenderItems();
+        if (!current.items.SequenceEqual(items))
+        {
+            current.items = items;
+            current.RenderItems();
+        }
         current.expiry.Stop();
         current.expiry.Interval = TimeSpan.FromMilliseconds(durationMs);
         current.expiry.Start();

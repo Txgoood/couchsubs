@@ -35,6 +35,10 @@ public sealed class WindowsOcrReader : ITextReader
 
     public Reading ReadLines(Frame image, bool deep) => deep ? ReadingFallback.FirstLines(image, Recognize) : Recognize(image);
 
+    public Reading ReadScreenPreviewLines(Frame image) =>
+        image.Width > OcrEngine.MaxImageDimension || image.Height > OcrEngine.MaxImageDimension
+            ? ReadScreenLines(image) : RecognizeOnce(image);
+
     public Reading ReadScreenLines(Frame image)
     {
         var limit = OcrEngine.MaxImageDimension;

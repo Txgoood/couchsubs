@@ -79,6 +79,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? worldScanWork;
     private int worldBusy;
     private DateTime nextWorldScan;
+    private DateTime nextDetailedPcScan;
     private readonly List<CropRegion> changedWorldRegions = [];
     private Frame? latestScreenFrame;
     private ScreenOverlay? worldOverlay;
@@ -1089,7 +1090,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                         lastError = captureError;
                         post(() => { if (IsCurrentSession(generation)) PcCaptureError = captureError; });
                     }
-                    var menuActive = Volatile.Read(ref worldOverlay) is not null || Volatile.Read(ref screenWork) is not null ||
+                    var menuActive = Volatile.Read(ref screenWork) is not null ||
                         Environment.TickCount64 < Volatile.Read(ref fastCaptureUntil);
                     try { await Task.Delay(menuActive ? 130 : 280, token.Token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
@@ -1230,6 +1231,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         worldReader = settings.AutoWorldText ? services.MakeReader(settings.SourceLanguage) : null;
         worldTranslator = settings.AutoWorldText ? MakeScreenTranslator(scope) : null;
         nextWorldScan = default;
+        nextDetailedPcScan = default;
         changedWorldRegions.Clear();
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage);
@@ -1276,7 +1278,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (ReferenceEquals(pipeline, built) && built.IsTranslating && worldScanWork is { IsCancellationRequested: false } scan)
             {
                 scan.Cancel();
-                nextWorldScan = default;
+                if (!IsPcMode) nextWorldScan = default;
             }
         });
         built.SpeechReady += (lines, canStart) => post(() =>
@@ -1445,7 +1447,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Ayrı OCR/çeviri hattı. Aynı anda tek menü taraması sürer, sonuçlar hazır oldukça gösterilir.
     /// </summary>
-    private void ScheduleWorldText(Frame frame)
+    private void ScheduleWorldText(Frame frame, Frame? previousFrame)
     {
         if (!settings.AutoWorldText || worldReader is null || worldTranslator is null) return;
         if (screenWork is not null || DateTime.UtcNow < screenShownUntil) return;
@@ -1464,6 +1466,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var subtitleRegion = settings.Region;
         var display = settings.PcDisplayId;
         var pc = settings.Source == GameSource.Pc;
+        var now = DateTime.UtcNow;
+        var quickRead = pc && regions is null &&
+            (now < nextDetailedPcScan || previousFrame is null || !ScreenTranslation.SameScreen(previousFrame, frame));
+        if (pc && regions is null && !quickRead) nextDetailedPcScan = now.AddSeconds(6);
         var englishToTurkish = EnglishToTurkishScreen;
         var revision = Volatile.Read(ref worldRevision);
         bool IsCurrentScan() => revision == Volatile.Read(ref worldRevision);
@@ -1476,15 +1482,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 var results = await ScreenTranslation.TranslateOverlayAsync(
                     frame, reader, translator, subtitleRegion, progress: items =>
                     {
-                        var now = Environment.TickCount64;
-                        if (now < nextProgress) return;
-                        nextProgress = now + 120;
+                        var ticks = Environment.TickCount64;
+                        if (ticks < nextProgress) return;
+                        nextProgress = ticks + 120;
                         post(() => ShowResults(items, complete: false));
                     },
                     cancellationToken: cancellation, isCurrent: IsCurrentScan,
                     englishToTurkish: englishToTurkish, currentSubtitle: CurrentSubtitle,
                     isRegionCurrent: box => IsCurrentTextRegion(frame, box), regions: regions,
-                    waitForModel: WaitForDialogueAsync)
+                    waitForModel: WaitForDialogueAsync, quickRead: quickRead)
                     .ConfigureAwait(false);
                 post(() => ShowResults(results, complete: true));
             }
@@ -1507,7 +1513,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 if (complete) changedWorldRegions.Clear();
                 var visible = KeepCurrentItems(frame, items, CurrentSubtitle());
                 RecordScreenTranslations(scope, visible);
-                if ((!complete || regions is not null) && worldOverlay is { } previous)
+                if ((!complete || regions is not null || quickRead) && worldOverlay is { } previous)
                 {
                     var unchanged = KeepCurrentItems(previous.Frame, previous.Items, CurrentSubtitle());
                     visible = [.. visible, .. unchanged.Where(old =>
@@ -1569,9 +1575,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             latest = latestScreenFrame;
         }
         if (latest is null) return;
+        var previous = LastFrame;
         LastFrame = latest;
         RefreshScreenOverlay();
-        ScheduleWorldText(latest);
+        ScheduleWorldText(latest, previous);
     }
 
     private async Task StartServerAsync()
