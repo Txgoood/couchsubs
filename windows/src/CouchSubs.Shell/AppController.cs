@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -50,6 +51,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private TranslatorStatus translatorStatus = TranslatorStatus.Ready;
     private bool ocrMissing;
     private Frame? lastFrame;
+    private readonly object frameGate = new();
+    private int sessionGeneration;
+    private bool frameUpdateQueued;
+    private string? startError;
+    private string? pcCaptureError;
     private bool modelDownloading;
     private double modelProgress;
     private string? modelError;
@@ -146,7 +152,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public bool IsPcMode => settings.Source == GameSource.Pc;
     public IReadOnlyList<GameDisplay> PcDisplays => services.GameScreen?.Displays() ?? [];
-    public string? PcCaptureError { get; private set; }
+    public string? PcCaptureError { get => pcCaptureError; private set => Set(ref pcCaptureError, value); }
+    public string? StartError { get => startError; private set => Set(ref startError, value); }
     public event Action<string, int, string>? PcSubtitleReady;
     public event Action<string, string>? InspectionSubtitle;
     public event Action<SpokenLine>? InspectionPlayback;
@@ -188,7 +195,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             var old = settings;
             if (!Set(ref settings, value)) return;
-            if (isRunning && (old.Source != value.Source || old.PcDisplayId != value.PcDisplayId)) Stop();
+            if ((isRunning || isStarting) && (old.Source != value.Source || old.PcDisplayId != value.PcDisplayId)) Stop();
             settingsStore.Save(value);
             Changed(nameof(IsPcMode), nameof(PcDisplays), nameof(KnownGames));
             if (old.Source != value.Source && value.Source == GameSource.Ps5 && !HasPairedPs5)
@@ -633,6 +640,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void RequestSnapshot() => SnapshotRequested?.Invoke();
 
+    public void RefreshTextRecognition()
+    {
+        if (isRunning) MakePipeline();
+        else OcrMissing = !services.HasOcrLanguage(settings.SourceLanguage);
+    }
+
     /// <summary>Çeviri bilgisayarda da gösterilecekse (metin, kalma süresi ms) ile çağrılır.</summary>
     public event Action<string, int>? PcResultReady;
 
@@ -659,6 +672,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         var reader = activeReader;
         if (!isRunning || reader is null) return (ExtraRegionOutcome.NotRunning, null);
+        var generation = Volatile.Read(ref sessionGeneration);
         // Tuşa üst üste basılınca ikinci bir okuma başlamaz.
         if (Interlocked.Exchange(ref extraBusy, 1) == 1) return (ExtraRegionOutcome.Busy, null);
         try
@@ -673,13 +687,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             }
             catch (TranslatorException error)
             {
-                post(() => TranslatorStatus = error.Status);
+                post(() => { if (IsCurrentSession(generation)) TranslatorStatus = error.Status; });
                 return (ExtraRegionOutcome.TranslatorUnavailable, null);
             }
             catch
             {
                 return (ExtraRegionOutcome.Failed, null);
             }
+            if (!IsCurrentSession(generation)) return (ExtraRegionOutcome.NotRunning, null);
             if (result is null)
             {
                 var message = text["No text found in this area."];
@@ -699,6 +714,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             }
             post(() =>
             {
+                if (!IsCurrentSession(generation)) return;
                 LastSource = result.Source;
                 LastTranslation = result.Translation;
                 foreach (var block in blocks) RecordRecentTranslation(block);
@@ -914,11 +930,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             return;
         }
         if (console is null || accountId is null || tv is null) return;
+        var generation = Volatile.Read(ref sessionGeneration);
+        StartError = null;
         IsStarting = true;
         try
         {
             RefreshTranslatorStatus();
             try { await StartServerAsync(); } catch { /* port açılamadıysa TV durumu "bekleniyor" kalır */ }
+            if (!IsCurrentSession(generation)) return;
             server.SendStyle(settings.Style);
             SubtitlesPaused = false;
             MakePipeline();
@@ -952,7 +971,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 pulseAudioActive, acousticMode, neuralMode);
             gameProsody.Clear();
             speakerTurnGuard.Reset();
-        multiSpeakerTracker.Reset();
+            multiSpeakerTracker.Reset();
             if (captureAudio && pulseAudioActive) TryStartInworldDiagnosticTap();
             var stream = captureAudio ? services.MakeAudioStream(console, accountId) : services.MakeStream(console, accountId);
             if (captureAudio && stream is StreamSession audioStream)
@@ -977,11 +996,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                         mixer.PushGameAudio(pcm, channels, rate);
                 };
             }
-            stream.StateChanged += state => post(() => SessionStateChanged(state));
-            stream.ConsoleMoved += moved => post(() => ConsoleMoved(moved));
-            stream.FrameReceived += HandleFrame;
-            stream.Start();
+            stream.StateChanged += state => post(() => { if (IsCurrentSession(generation)) SessionStateChanged(state); });
+            stream.ConsoleMoved += moved => post(() => { if (IsCurrentSession(generation)) ConsoleMoved(moved); });
+            stream.FrameReceived += frame => HandleFrame(frame, generation);
             session = stream;
+            stream.Start();
             if (settings.Dubbing.AutoGameLibrary)
             {
                 gameProbeCancellation = new CancellationTokenSource();
@@ -993,13 +1012,17 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var running = server;
             var tvKeeper = services.MakeKeeper(tv, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(tv) },
                 () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)));
-            tvKeeper.Start(TimeSpan.FromSeconds(5));
             keeper = tvKeeper;
+            tvKeeper.Start(TimeSpan.FromSeconds(5));
             _ = RefreshTvAppAsync();
 
             sleep.Begin();
             IsRunning = true;
             UpdateTroubleClocks();
+        }
+        catch (Exception error)
+        {
+            if (IsCurrentSession(generation)) FailStart(error, "PS5 bağlantısını ve TV ayarlarını kontrol edip yeniden dene.");
         }
         finally
         {
@@ -1010,16 +1033,22 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Windows ekranında oyun: PS5/TV/PSN bağlantısı açılmadan yerel OCR ve dublaj.</summary>
     private async Task StartPcAsync()
     {
-        if (services.GameScreen is not { } capture) return;
+        if (services.GameScreen is not { } capture)
+        {
+            StartError = "Ekran yakalama kullanılamıyor.";
+            return;
+        }
+        var generation = Volatile.Read(ref sessionGeneration);
+        StartError = null;
         IsStarting = true;
         try
         {
             RefreshTranslatorStatus();
             await StartServerAsync();
+            if (!IsCurrentSession(generation)) return;
             server.SendStyle(settings.Style);
             SubtitlesPaused = false;
             PcCaptureError = null;
-            Changed(nameof(PcCaptureError));
             MakePipeline();
             // PC oyun sesi zaten Windows mikserindedir; ikinci bir PS5 ses hattı başlatılmaz.
             pulseAudioActive = false;
@@ -1028,35 +1057,56 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             pcCaptureCancellation = token;
             sleep.Begin();
             IsRunning = true;
+            var display = settings.PcDisplayId;
             _ = Task.Run(async () =>
             {
+                string? lastError = null;
                 while (!token.IsCancellationRequested)
                 {
+                    string? captureError = null;
                     try
                     {
-                        var selected = settings.PcDisplayId;
-                        var frame = capture.Capture(selected);
-                        HandleFrame(frame);
+                        var frame = capture.Capture(display);
+                        HandleFrame(frame, generation);
                     }
                     catch (Exception error)
                     {
-                        post(() =>
-                        {
-                            PcCaptureError = "PC ekran yakalama hatası: " + error.Message;
-                            Changed(nameof(PcCaptureError));
-                        });
-                        // Ekran çıkarılınca boş ID ile birincil ekrana geri dön.
+                        captureError = "Ekran yakalanamadı. " + error.Message;
+                    }
+                    if (captureError != lastError)
+                    {
+                        lastError = captureError;
+                        post(() => { if (IsCurrentSession(generation)) PcCaptureError = captureError; });
                     }
                     try { await Task.Delay(280, token.Token).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                 }
             });
         }
+        catch (Exception error)
+        {
+            if (IsCurrentSession(generation)) FailStart(error, "Oyun ekranını kontrol edip yeniden dene.");
+        }
         finally { IsStarting = false; }
     }
 
+    private void FailStart(Exception error, string suggestion)
+    {
+        Trace.TraceError("CouchSubs startup failed: {0}", error);
+        Stop();
+        StartError = "Çeviri başlatılamadı. " + suggestion;
+    }
+
+    private bool IsCurrentSession(int generation) => generation == Volatile.Read(ref sessionGeneration);
+
     public void Stop()
     {
+        lock (frameGate)
+        {
+            Interlocked.Increment(ref sessionGeneration);
+            Volatile.Write(ref latestScreenFrame, null);
+        }
+        LastFrame = null;
         gameProbeCancellation?.Cancel();
         gameProbeCancellation = null;
         manualGamePinned = false;
@@ -1067,7 +1117,6 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         worldReader = null;
         worldTranslator = null;
         worldOverlay = null;
-        Volatile.Write(ref latestScreenFrame, null);
         server.ClearScreen();
         post(() => PcWorldTextClear?.Invoke());
         session?.Stop();
@@ -1206,7 +1255,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 Changed(nameof(DeepLNotice));
             }
         });
-        built.SpeechReady += lines => post(() => Speak(lines));
+        built.SpeechReady += lines => post(() =>
+        {
+            if (ReferenceEquals(pipeline, built) && !subtitlesPaused) Speak(lines);
+        });
         pipeline = built;
     }
 
@@ -1443,20 +1495,22 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         });
     }
 
-    private async void HandleFrame(Frame frame)
+    private async void HandleFrame(Frame frame, int generation)
     {
-        Volatile.Write(ref latestScreenFrame, frame);
-        post(() =>
+        bool queueUpdate;
+        lock (frameGate)
         {
-            LastFrame = frame;
-            RefreshScreenOverlay();
-            if (Volatile.Read(ref latestScreenFrame) is { } latest) ScheduleWorldText(latest);
-        });
+            if (!IsCurrentSession(generation)) return;
+            Volatile.Write(ref latestScreenFrame, frame);
+            queueUpdate = !frameUpdateQueued;
+            frameUpdateQueued = true;
+        }
+        if (queueUpdate) post(UpdateLatestFrame);
         // Duraklatıldıysa kare yalnız ek bölgeler ve serbest alan için saklanır; altyazı okunmaz.
         if (subtitlesPaused) return;
         // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
         var current = pipeline;
-        if (current is null || Interlocked.Exchange(ref processing, 1) == 1) return;
+        if (current is null || !IsCurrentSession(generation) || Interlocked.Exchange(ref processing, 1) == 1) return;
         try
         {
             await current.ProcessAsync(frame, settings.Region);
@@ -1469,6 +1523,20 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             Volatile.Write(ref processing, 0);
         }
+    }
+
+    private void UpdateLatestFrame()
+    {
+        Frame? latest;
+        lock (frameGate)
+        {
+            frameUpdateQueued = false;
+            latest = latestScreenFrame;
+        }
+        if (latest is null) return;
+        LastFrame = latest;
+        RefreshScreenOverlay();
+        ScheduleWorldText(latest);
     }
 
     private async Task StartServerAsync()
@@ -1818,7 +1886,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     }
                     // Require two independent console observations before switching.
                     if (confirmations >= 2)
-                        post(() => AutoSelectDiscoveredGame(title));
+                        post(() => { if (!stop.IsCancellationRequested) AutoSelectDiscoveredGame(title); });
                 }
                 else { previous = null; confirmations = 0; }
                 await Task.Delay(confirmations >= 2 ? TimeSpan.FromSeconds(25) :

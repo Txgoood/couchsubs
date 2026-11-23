@@ -17,7 +17,8 @@
                     </Grid>
                     <TextBlock Text="CouchSubs" Style="{StaticResource TitleText}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
-                <Button Style="{StaticResource IconButton}" HorizontalAlignment="Right" ToolTip="{t:T 'Settings'}" Click="OnSettings">
+                <Button Style="{StaticResource IconButton}" HorizontalAlignment="Right" ToolTip="{t:T 'Settings'}" Click="OnSettings"
+                        AutomationProperties.Name="{t:T 'Settings'}">
                     <TextBlock Text="{x:Static c:Glyphs.Settings}" Style="{StaticResource GlyphText}" FontSize="18" Foreground="{DynamicResource textSecondaryBrush}" />
                 </Button>
             </Grid>
@@ -37,18 +38,20 @@
             <c:Card Margin="0,0,0,16">
                 <StackPanel>
                     <TextBlock Text="Oyun kaynağı" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <ComboBox x:Name="SourceSelection" SelectionChanged="OnSourceChanged">
-                        <ComboBoxItem Content="PlayStation 5 (mevcut)" Tag="Ps5" />
-                        <ComboBoxItem Content="Bilgisayar oyunu (PS5 gerekmez)" Tag="Pc" />
+                    <ComboBox x:Name="SourceSelection" SelectionChanged="OnSourceChanged" AutomationProperties.Name="Oyun kaynağı">
+                        <ComboBoxItem Content="PS5 · Konsola doğrudan bağlan" Tag="Ps5" />
+                        <ComboBoxItem Content="Bilgisayar ekranı · PC oyunu veya PXPlay" Tag="Pc" />
                     </ComboBox>
                     <StackPanel x:Name="PcDisplayPanel" Margin="0,12,0,0" Visibility="Collapsed">
                         <TextBlock Text="Oyunun açık olduğu ekran" Margin="0,0,0,6" />
-                        <ComboBox x:Name="PcDisplaySelection" SelectionChanged="OnPcDisplayChanged" />
-                        <Button Content="Ekranları yenile" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnRefreshDisplays" />
-                        <TextBlock Text="Laptop ekranı veya bağlı Agon OLED seçilebilir. Oyun kenarlıksız tam ekranda çalışırsa altyazı daha güvenilir görünür. PC sesi Windows üzerinden çıkar."
+                        <ComboBox x:Name="PcDisplaySelection" SelectionChanged="OnPcDisplayChanged" AutomationProperties.Name="Oyun ekranı" />
+                        <Button x:Name="RefreshDisplays" Content="Ekranları yenile" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnRefreshDisplays" />
+                        <TextBlock Text="PXPlay veya PC oyununun göründüğü ekranı seç."
                                    Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                        <TextBlock x:Name="DisplaySelectionStatus" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource VisibleIf}}" />
                         <TextBlock Text="{Binding PcCaptureError}" Foreground="{DynamicResource dangerBrush}" TextWrapping="Wrap"
-                                   Margin="0,8,0,0" />
+                                   Margin="0,8,0,0" Visibility="{Binding PcCaptureError, Converter={StaticResource VisibleIf}}" />
                     </StackPanel>
                 </StackPanel>
             </c:Card>
@@ -61,6 +64,16 @@
                     <TextBlock x:Name="ToggleText" FontSize="{DynamicResource headlineFontSize}" FontWeight="SemiBold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                 </StackPanel>
             </Button>
+            <TextBlock Text="{Binding StartError}" Foreground="{DynamicResource dangerBrush}" TextWrapping="Wrap" Margin="0,8,0,0"
+                       Visibility="{Binding StartError, Converter={StaticResource VisibleIf}}" />
+            <WrapPanel Margin="0,10,0,0">
+                <Button Content="Ekranı çevir" IsEnabled="{Binding IsRunning}" Click="OnTranslateScreen" Margin="0,0,8,6" />
+                <Button x:Name="PauseButton" Content="Altyazıyı duraklat" IsEnabled="{Binding IsRunning}" Click="OnPauseSubtitles" Margin="0,0,8,6" />
+                <Button Content="Çeviri hafızası" Click="OnTranslationMemory" Margin="0,0,0,6"
+                        Visibility="{Binding HasTranslationMemory, Converter={StaticResource VisibleIf}}" />
+            </WrapPanel>
+            <TextBlock x:Name="ScreenActionStatus" Style="{StaticResource HintText}" TextWrapping="Wrap"
+                       Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource VisibleIf}}" />
 
             <c:Card x:Name="SmoothVideoCard" Margin="0,16,0,0" Visibility="Collapsed">
                 <StackPanel>
@@ -88,13 +101,15 @@
             <!-- Çeviri modeli eksik -->
             <c:Card x:Name="ModelCard" Margin="0,16,0,0" Visibility="Collapsed">
                 <StackPanel>
-                    <TextBlock Text="{t:T 'The translation model is not downloaded yet.'}" FontWeight="SemiBold" Foreground="{DynamicResource warningBrush}" />
+                    <TextBlock Text="{t:T 'The translation model is not downloaded yet.'}" FontWeight="SemiBold" Foreground="{DynamicResource warningBrush}" TextWrapping="Wrap" />
                     <StackPanel Visibility="{Binding ModelDownloading, Converter={StaticResource VisibleIf}}" Margin="0,12,0,0">
                         <TextBlock Text="{t:T 'Downloading…'}" Style="{StaticResource HintText}" Margin="0,0,0,8" />
                         <ProgressBar Minimum="0" Maximum="1" Value="{Binding ModelProgress, Mode=OneWay}" />
                     </StackPanel>
                     <Button Content="{t:T 'Download the model'}" Margin="0,12,0,0" Click="OnDownload"
                             Visibility="{Binding ModelDownloading, Converter={StaticResource VisibleIf}, ConverterParameter=invert}" />
+                    <TextBlock Text="{Binding ModelError}" Foreground="{DynamicResource dangerBrush}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Visibility="{Binding ModelError, Converter={StaticResource VisibleIf}}" />
                 </StackPanel>
             </c:Card>
 
@@ -108,14 +123,16 @@
                         <Button x:Name="InstallOcr" Content="{t:T 'Install text recognition'}" Click="OnInstallOcr" />
                         <Button Content="{t:T 'Open language settings'}" Click="OnLanguageSettings" Margin="8,0,0,0" />
                     </StackPanel>
+                    <TextBlock x:Name="OcrInstallStatus" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
                 </StackPanel>
             </c:Card>
 
             <!-- Son altyazı -->
             <TextBlock Text="{Binding DeepLNotice}" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,16,0,0"
                        Visibility="{Binding DeepLNotice, Converter={StaticResource VisibleIf}}" />
-            <c:Card Title="Çeviri inceleme kaydı" Margin="0,16,0,0">
-                <StackPanel>
+            <c:Card Margin="0,16,0,0">
+                <Expander Header="Çeviri inceleme kaydı" Foreground="{DynamicResource textPrimaryBrush}">
+                  <StackPanel Margin="0,10,0,0">
                     <CheckBox x:Name="InspectionEnabled" Content="Son 20 saniyeyi bellekte tut"
                               Foreground="{DynamicResource textPrimaryBrush}"
                               Checked="OnInspectionToggle" Unchecked="OnInspectionToggle" />
@@ -123,7 +140,8 @@
                             Click="OnSaveInspection" IsEnabled="False" HorizontalAlignment="Left" Margin="0,8,0,0" />
                     <TextBlock x:Name="InspectionStatus" Style="{StaticResource HintText}" TextWrapping="Wrap"
                                Margin="0,6,0,0" Text="Kaydedince seçilen ekranın sessiz görüntüsü ve çeviri dökümü bu bilgisayara yazılır." />
-                </StackPanel>
+                  </StackPanel>
+                </Expander>
             </c:Card>
             <c:Card Title="{t:T 'Last subtitle'}" Margin="0,16,0,0">
                 <StackPanel>
@@ -133,8 +151,6 @@
                                Visibility="{Binding LastTranslation, Converter={StaticResource VisibleIf}}" />
                     <TextBlock Text="{Binding LastSource}" Style="{StaticResource HintText}" Margin="0,8,0,0"
                                Visibility="{Binding LastTranslation, Converter={StaticResource VisibleIf}}" />
-                    <Button Content="Çeviri hafızası" Click="OnTranslationMemory" HorizontalAlignment="Left" Margin="0,12,0,0"
-                            Visibility="{Binding HasTranslationMemory, Converter={StaticResource VisibleIf}}" />
                 </StackPanel>
             </c:Card>
         </StackPanel>

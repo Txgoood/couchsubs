@@ -41,6 +41,7 @@ public static class ScreenRenderer
                 Save(() => new OnboardingView(controller), 640, 720, Path.Combine(folder, $"adim-{(int)step + 1}-{step}-{suffix}.png"));
             }
             Save(() => new MainView(Demo(OnboardingStep.Done)), 640, 720, Path.Combine(folder, $"ana-{suffix}.png"));
+            Save(() => new MainView(Demo(OnboardingStep.Done, pc: true)), 640, 720, Path.Combine(folder, $"ana-pc-{suffix}.png"));
             // Uygulamanın gerçek penceresi: XAML'ı (simge dahil) açılıştaki gibi yüklenir.
             Save(() => Detach(new ShellWindow(Demo(OnboardingStep.Done))), 640, 720, Path.Combine(folder, $"pencere-{suffix}.png"));
             Save(() => Detach(new SettingsWindow(Demo(OnboardingStep.Done))), 600, 720, Path.Combine(folder, $"ayarlar-{suffix}.png"));
@@ -58,9 +59,9 @@ public static class ScreenRenderer
         return content;
     }
 
-    private static AppController Demo(OnboardingStep step)
+    private static AppController Demo(OnboardingStep step, bool pc = false)
     {
-        var controller = new AppController(new DemoServices(), new DemoStore(step == OnboardingStep.Done), new DemoSettings(), new DemoSleep(),
+        var controller = new AppController(new DemoServices(), new DemoStore(step == OnboardingStep.Done), new DemoSettings(pc), new DemoSleep(),
             Localizer.Current, action => action());
         if (step != OnboardingStep.Done) controller.Step = step;
         return controller;
@@ -111,6 +112,9 @@ public static class ScreenRenderer
     private sealed class DemoServices : IAppServices
     {
         public ITranslationModel Translation { get; } = new DemoTranslation();
+        public ITranslationMemory TranslationMemory { get; } = new FileTranslationMemory(
+            Path.Combine(Path.GetTempPath(), $"couchsubs-preview-{Guid.NewGuid():N}.json"));
+        public IGameScreenCapture GameScreen { get; } = new DemoScreens();
         public Task<IReadOnlyList<ConsoleInfo>> DiscoverConsolesAsync() => Task.FromResult<IReadOnlyList<ConsoleInfo>>([new("192.168.1.20", "PS5-123", true)]);
         public Task<byte[]> AccountIdFromRedirectAsync(Uri redirect) => Task.FromResult(new byte[8]);
         public Task<RegisteredConsole> RegisterAsync(string host, byte[] accountId, uint pin) => throw new NotSupportedException();
@@ -155,9 +159,15 @@ public static class ScreenRenderer
         public void Remove(string key) { }
     }
 
-    private sealed class DemoSettings : ISettingsStore
+    private sealed class DemoScreens : IGameScreenCapture
     {
-        public UserSettings Load() => new();
+        public IReadOnlyList<GameDisplay> Displays() => [new("display-1", "Birincil ekran · 1920×1080", true)];
+        public Frame Capture(string displayId) => throw new NotSupportedException();
+    }
+
+    private sealed class DemoSettings(bool pc) : ISettingsStore
+    {
+        public UserSettings Load() => new() { Source = pc ? GameSource.Pc : GameSource.Ps5 };
         public void Save(UserSettings settings) { }
     }
 

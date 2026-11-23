@@ -20,6 +20,7 @@ public partial class MainView : UserControl
 {
     private readonly AppController controller;
     private bool selectingSource;
+    private int screenActionRevision;
     private readonly TranslationClip inspection = new();
     private CancellationTokenSource? smoothVideoWork;
     private SmoothVideoWindow? smoothVideoWindow;
@@ -196,7 +197,8 @@ public partial class MainView : UserControl
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AppController.IsRunning) or nameof(AppController.IsPcMode) or nameof(AppController.TranslatorStatus) or nameof(AppController.ModelInstalled))
+        if (e.PropertyName is nameof(AppController.IsRunning) or nameof(AppController.IsStarting) or nameof(AppController.IsPcMode)
+            or nameof(AppController.TranslatorStatus) or nameof(AppController.ModelInstalled) or nameof(AppController.SubtitlesPaused))
             Refresh();
         if (e.PropertyName is nameof(AppController.UpdateVersion) or nameof(AppController.Updating)
             or nameof(AppController.UpdateProgress) or nameof(AppController.UpdateError))
@@ -224,12 +226,20 @@ public partial class MainView : UserControl
             StopSmoothVideo();
         SmoothVideoCard.Visibility = controller.IsPcMode ? Visibility.Visible : Visibility.Collapsed;
         var running = controller.IsRunning;
+        var starting = controller.IsStarting;
         Toggle.Style = (Style)FindResource(running ? "DangerButton" : "PrimaryButton");
         ToggleGlyph.Text = running ? Glyphs.Stop : Glyphs.Play;
-        ToggleText.Text = Localizer.Current[running ? "Stop translating" : "Start translating"];
+        ToggleText.Text = starting ? "Başlatılıyor…" : Localizer.Current[running ? "Stop translating" : "Start translating"];
+        PauseButton.Content = controller.SubtitlesPaused ? "Altyazıyı sürdür" : "Altyazıyı duraklat";
+        if (!running)
+        {
+            screenActionRevision++;
+            ScreenActionStatus.Text = "";
+        }
         ModelCard.Visibility = controller.ModelInstalled ? Visibility.Collapsed : Visibility.Visible;
-        SourceSelection.IsEnabled = !running;
-        PcDisplaySelection.IsEnabled = !running;
+        SourceSelection.IsEnabled = !running && !starting;
+        PcDisplaySelection.IsEnabled = !running && !starting;
+        RefreshDisplays.IsEnabled = !running && !starting;
         PcDisplayPanel.Visibility = controller.IsPcMode ? Visibility.Visible : Visibility.Collapsed;
         ConsoleStatusCard.Visibility = controller.IsPcMode ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -247,17 +257,20 @@ public partial class MainView : UserControl
     private void ReloadDisplays()
     {
         selectingSource = true;
-        PcDisplaySelection.Items.Clear();
-        var displays = controller.PcDisplays;
-        foreach (var display in displays)
-            PcDisplaySelection.Items.Add(new ComboBoxItem
-            {
-                Content = display.Name,
-                Tag = display.Id,
-                IsSelected = display.Id == controller.Settings.PcDisplayId ||
-                    (string.IsNullOrWhiteSpace(controller.Settings.PcDisplayId) && display.Primary)
-            });
-        selectingSource = false;
+        try
+        {
+            PcDisplaySelection.Items.Clear();
+            var displays = controller.PcDisplays;
+            var saved = controller.Settings.PcDisplayId;
+            var match = displays.FirstOrDefault(display => display.Id == saved);
+            var selected = match ?? displays.FirstOrDefault(display => display.Primary) ?? displays.FirstOrDefault();
+            foreach (var display in displays)
+                PcDisplaySelection.Items.Add(new ComboBoxItem { Content = display.Name, Tag = display.Id, IsSelected = display == selected });
+            DisplaySelectionStatus.Text = selected is null ? "Bağlı ekran bulunamadı."
+                : match is null && !string.IsNullOrWhiteSpace(saved) ? "Kayıtlı ekran bulunamadı. Birincil ekran kullanılacak." : "";
+        }
+        catch (InvalidOperationException) { DisplaySelectionStatus.Text = "Windows ekranları okunamadı. Ekranları yenilemeyi dene."; }
+        finally { selectingSource = false; }
     }
 
     private void OnRefreshDisplays(object sender, RoutedEventArgs e) => ReloadDisplays();
@@ -267,11 +280,30 @@ public partial class MainView : UserControl
         if (selectingSource || PcDisplaySelection.SelectedItem is not ComboBoxItem { Tag: string id }) return;
         if (controller.Settings.PcDisplayId != id)
             controller.Settings = controller.Settings with { PcDisplayId = id };
+        DisplaySelectionStatus.Text = "";
     }
 
     private async void OnToggle(object sender, RoutedEventArgs e)
     {
         if (controller.IsRunning) controller.Stop(); else await controller.StartAsync();
+    }
+
+    private void OnPauseSubtitles(object sender, RoutedEventArgs e) => controller.ToggleSubtitles();
+
+    private async void OnTranslateScreen(object sender, RoutedEventArgs e)
+    {
+        var revision = ++screenActionRevision;
+        ScreenActionStatus.Text = "Ekrandaki yazılar okunuyor…";
+        var outcome = await controller.TranslateScreenAsync();
+        if (revision != screenActionRevision || !controller.IsRunning || !IsLoaded) return;
+        ScreenActionStatus.Text = outcome switch
+        {
+            ScreenOutcome.NoText => "Ekranda çevrilecek yazı bulunamadı.",
+            ScreenOutcome.NotRunning => "Oyun görüntüsü henüz gelmedi.",
+            ScreenOutcome.TranslatorUnavailable => "Çeviri hazır değil. Yerel modelin durumunu kontrol et.",
+            ScreenOutcome.Failed => "Ekran çevrilemedi. Yeniden dene.",
+            _ => ""
+        };
     }
 
     private void OnSettings(object sender, RoutedEventArgs e) => SettingsWindow.Open(Window.GetWindow(this), controller);
@@ -285,8 +317,14 @@ public partial class MainView : UserControl
     private async void OnInstallOcr(object sender, RoutedEventArgs e)
     {
         var language = controller.Settings.SourceLanguage;
-        var script = $"Get-WindowsCapability -Online | Where-Object {{ $_.Name -like 'Language.OCR~~~{language}-*' -and $_.State -ne 'Installed' }} | Select-Object -First 1 | Add-WindowsCapability -Online";
+        if (language.Length == 0 || !language.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'))
+        {
+            OcrInstallStatus.Text = "Ayarlar’dan geçerli bir oyun dili seç.";
+            return;
+        }
+        var script = $"$ErrorActionPreference = 'Stop'; Get-WindowsCapability -Online | Where-Object {{ $_.Name -like 'Language.OCR~~~{language}-*' -and $_.State -ne 'Installed' }} | Select-Object -First 1 | Add-WindowsCapability -Online";
         InstallOcr.IsEnabled = false;
+        OcrInstallStatus.Text = "Windows yazı tanıma paketini kuruyor…";
         try
         {
             using var process = Process.Start(new ProcessStartInfo("powershell.exe", $"-NoProfile -WindowStyle Hidden -Command \"{script}\"")
@@ -296,11 +334,16 @@ public partial class MainView : UserControl
                 WindowStyle = ProcessWindowStyle.Hidden,
             });
             if (process is not null) await process.WaitForExitAsync();
-            if (!controller.IsRunning) return;
-            controller.Stop();
-            await controller.StartAsync();
+            if (!IsLoaded) return;
+            if (process?.ExitCode != 0)
+            {
+                OcrInstallStatus.Text = "Paket kurulamadı. Windows dil ayarlarından yazı tanımayı kontrol et.";
+                return;
+            }
+            controller.RefreshTextRecognition();
+            OcrInstallStatus.Text = controller.OcrMissing ? "Paket henüz kullanılamıyor. Windows dil ayarlarını kontrol et." : "";
         }
-        catch (System.ComponentModel.Win32Exception) { /* izin verilmedi */ }
+        catch (Win32Exception) { OcrInstallStatus.Text = "Windows kurulumu başlatılamadı veya iptal edildi."; }
         finally { InstallOcr.IsEnabled = true; }
     }
 

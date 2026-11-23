@@ -38,6 +38,7 @@ public partial class ShellWindow : Window
         controller.PcWorldTextClear += PcWorldTextWindow.Clear;
         Closed += (_, _) =>
         {
+            controller.PropertyChanged -= OnChanged;
             controller.PcResultReady -= PcResultWindow.Display;
             controller.PcSubtitleReady -= PcResultWindow.DisplayOnMonitor;
             controller.PcWorldTextReady -= PcWorldTextWindow.Display;

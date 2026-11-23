@@ -5,6 +5,7 @@ using CouchSubs.Core.Dubbing;
 using CouchSubs.Core.LgTv;
 using CouchSubs.RemotePlay;
 using CouchSubs.Shell;
+using System.Collections.Concurrent;
 
 namespace CouchSubs.Shell.Tests;
 
@@ -41,7 +42,8 @@ internal sealed class FakeStream : IStreamSession
     public void Stop() => Started = false;
     public int Reconnects { get; private set; }
     public void ReconnectNow() => Reconnects++;
-    public void Dispose() { }
+    public bool Disposed { get; private set; }
+    public void Dispose() => Disposed = true;
     public void Emit(SessionState state) => StateChanged?.Invoke(state);
     public void Emit(Frame frame) => FrameReceived?.Invoke(frame);
 }
@@ -89,12 +91,14 @@ internal sealed class FakePcScreens : IGameScreenCapture
     public int Captures;
     public string LastDisplay = "";
     public Frame? CurrentFrame;
+    public Exception? CaptureFailure;
     public IReadOnlyList<GameDisplay> Displays() =>
         [new("\\\\.\\DISPLAY1", "MSI Laptop", true), new("\\\\.\\DISPLAY2", "Agon OLED", false)];
     public Frame Capture(string displayId)
     {
         LastDisplay = displayId;
         Interlocked.Increment(ref Captures);
+        if (Volatile.Read(ref CaptureFailure) is { } failure) throw failure;
         return Volatile.Read(ref CurrentFrame) ?? Frame.Blank(64, 64);
     }
 }
@@ -108,6 +112,7 @@ internal sealed class FakeServices : IAppServices
     public string? LaunchedServer { get; private set; }
     public List<FakeStream> Streams { get; } = [];
     public List<FakeKeeper> Keepers { get; } = [];
+    public Exception? KeeperFailure { get; set; }
     public List<string> ReaderLanguages { get; } = [];
     /// <summary>Okuyucunun her karede bulduğu satırlar (verilmezse karede yazı yoktur).</summary>
     public Reading? ReaderLines { get; set; }
@@ -158,6 +163,7 @@ internal sealed class FakeServices : IAppServices
     }
     public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved)
     {
+        if (KeeperFailure is { } error) throw error;
         var keeper = new FakeKeeper();
         Keepers.Add(keeper);
         return keeper;
@@ -341,6 +347,31 @@ public class AppControllerTests
         controller.Stop();
         Assert.False(controller.IsRunning);
         controller.Dispose();
+    }
+
+    [Fact]
+    public async Task PcCaptureReportsFailureAndClearsItWhenFramesReturn()
+    {
+        var screens = new FakePcScreens { CaptureFailure = new InvalidOperationException("display unavailable") };
+        var services = new FakeServices { GameScreen = screens, HasOcr = false };
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { Source = GameSource.Pc });
+        using var controller = Make(services: services, settings: settings);
+        var failed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recovered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.PropertyChanged += (_, change) =>
+        {
+            if (change.PropertyName != nameof(AppController.PcCaptureError)) return;
+            if (controller.PcCaptureError is null) recovered.TrySetResult();
+            else failed.TrySetResult();
+        };
+        await controller.StartAsync();
+        await failed.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Volatile.Write(ref screens.CaptureFailure, null);
+        await recovered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.NotNull(controller.LastFrame);
+        controller.Stop();
+        Assert.Null(controller.LastFrame);
     }
 
     [Fact]
@@ -538,7 +569,8 @@ public class AppControllerTests
 
 public class AppControllerRunTests
 {
-    private static (AppController Controller, FakeServices Services, FakeSleep Sleep) Ready(FakeServices? services = null)
+    private static (AppController Controller, FakeServices Services, FakeSleep Sleep) Ready(FakeServices? services = null,
+        Action<Action>? post = null)
     {
         services ??= new FakeServices();
         var store = new MemoryStore();
@@ -547,7 +579,7 @@ public class AppControllerRunTests
         store.Save(StoreKeys.Tv, new LgTv("LG TV", "127.0.0.1"));
         store.Save(StoreKeys.TvKey, "tv-key");
         var sleep = new FakeSleep();
-        return (AppControllerTests.Make(services, store, sleep: sleep), services, sleep);
+        return (new AppController(services, store, new MemorySettings(), sleep, Localizer.ForLanguage("en"), post ?? (action => action())), services, sleep);
     }
 
     [Fact]
@@ -559,6 +591,53 @@ public class AppControllerRunTests
         Assert.Single(services.Keepers);
         Assert.True(controller.IsRunning);
         controller.Dispose();
+    }
+
+    [Fact]
+    public async Task FailedStartDisposesPartialSessionAndCanBeRetried()
+    {
+        var (controller, services, sleep) = Ready(new FakeServices { KeeperFailure = new InvalidOperationException("TV startup failed") });
+        using var cleanup = controller;
+        await controller.StartAsync();
+
+        Assert.False(controller.IsRunning);
+        Assert.False(controller.IsStarting);
+        Assert.False(sleep.Active);
+        Assert.NotNull(controller.StartError);
+        Assert.True(Assert.Single(services.Streams).Disposed);
+
+        services.KeeperFailure = null;
+        await controller.StartAsync();
+        Assert.True(controller.IsRunning);
+        Assert.Null(controller.StartError);
+        Assert.True(services.Streams[1].Started);
+    }
+
+    [Fact]
+    public async Task QueuedFrameRefreshKeepsOnlyNewestFrameAndIgnoresStoppedStreams()
+    {
+        var ui = new ConcurrentQueue<Action>();
+        var (controller, services, _) = Ready(new FakeServices { HasOcr = false }, ui.Enqueue);
+        using var cleanup = controller;
+        await controller.StartAsync();
+        while (ui.TryDequeue(out var initialize)) initialize();
+        var stream = Assert.Single(services.Streams);
+        var first = Frame.Blank(16, 16);
+        var newest = Frame.Blank(24, 24);
+        stream.Emit(first);
+        stream.Emit(newest);
+        Assert.Single(ui);
+        Assert.True(ui.TryDequeue(out var update));
+        update();
+        Assert.Same(newest, controller.LastFrame);
+
+        stream.Emit(first);
+        controller.Stop();
+        stream.Emit(newest);
+        stream.EmitMoved(controller.Console!.WithHost("192.168.1.77"));
+        while (ui.TryDequeue(out var pending)) pending();
+        Assert.Null(controller.LastFrame);
+        Assert.Equal("192.168.1.253", controller.Console!.Host);
     }
 
     [Fact]
@@ -631,6 +710,21 @@ public class AppControllerRunTests
         await controller.StartAsync();
         Assert.True(controller.OcrMissing);
         controller.Dispose();
+    }
+
+    [Fact]
+    public async Task RefreshingOcrKeepsTheCurrentPs5SessionRunning()
+    {
+        var (controller, services, _) = Ready(new FakeServices { HasOcrPack = false });
+        using var cleanup = controller;
+        await controller.StartAsync();
+        Assert.True(controller.OcrMissing);
+
+        services.HasOcrPack = true;
+        controller.RefreshTextRecognition();
+
+        Assert.False(controller.OcrMissing);
+        Assert.True(Assert.Single(services.Streams).Started);
     }
 
     /// Hızlı ses (Windows'un Türkçe sesi) indirme beklemez; doğal ses indirilmemişken de dublaj hazırdır.
