@@ -25,8 +25,8 @@ public static class DubbingComputeBudget
         var available = Math.Max(1, logicalProcessors);
         if (int.TryParse(requested, out var selected) && selected >= 1 && selected <= 8)
             return Math.Clamp(selected, 1, available);
-        // Let existing ONNX defaults decide unless user explicitly opts in.
-        return 0;
+        // Encoder and decoder each own a pool. Keep both bounded during Remote Play.
+        return Math.Clamp(available / 6, 1, 4);
     }
 
     public static bool UseGpu(bool providerPackaged, bool modelValidated,

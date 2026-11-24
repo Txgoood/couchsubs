@@ -81,12 +81,20 @@ internal sealed class OnnxMarianEngine : ISentenceEngine
 
     internal bool GpuEncoderActive => _gpuEncoder;
 
-    private SessionOptions CpuOptions() => new()
+    private SessionOptions CpuOptions()
     {
-        GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-        ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
-        IntraOpNumThreads = _onnxThreads
-    };
+        var options = new SessionOptions
+        {
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+            IntraOpNumThreads = _onnxThreads,
+            InterOpNumThreads = 1
+        };
+        // A real-time game stream needs the CPU even between translation requests.
+        options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
+        options.AddSessionConfigEntry("session.inter_op.allow_spinning", "0");
+        return options;
+    }
 
     private IDisposableReadOnlyCollection<OrtValue> RunEncoder(
         RunOptions options, OrtValue input, OrtValue mask)

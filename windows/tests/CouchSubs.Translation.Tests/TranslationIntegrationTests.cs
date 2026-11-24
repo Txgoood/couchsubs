@@ -104,6 +104,22 @@ public sealed class TranslationIntegrationTests(LoadedTranslator loaded, ITestOu
     }
 
     [ModelFact]
+    public async Task LoadedModelLeavesCpuAvailableBetweenRequests()
+    {
+        // The fixture holds both real ONNX sessions open, just as the live app does.
+        await Translator.TranslateAsync("Let's get moving.");
+        await Task.Delay(500);
+        using var process = Process.GetCurrentProcess();
+        var before = process.TotalProcessorTime;
+        var watch = Stopwatch.StartNew();
+        await Task.Delay(2000);
+        process.Refresh();
+        var cores = (process.TotalProcessorTime - before).TotalMilliseconds / watch.Elapsed.TotalMilliseconds;
+        output.WriteLine($"Idle CPU: {cores:F2} logical-core equivalents");
+        Assert.InRange(cores, 0, 1.0);
+    }
+
+    [ModelFact]
     public async Task ConcurrentCallsMatchSequentialResults()
     {
         string[] lines = ["Run, now!", "Where is the boat?", "Follow me, brother.", "This is not over.", "Hold the line!", "Over here, quickly!"];

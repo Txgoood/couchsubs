@@ -17,11 +17,15 @@ public sealed class DubbingComputeBudgetTests
         Assert.Equal(expected, DubbingComputeBudget.CpuThreads(processors, overrideValue));
 
     [Fact]
-    public void OnnxUsesExistingDefaultUntilExplicitlyTuned()
+    public void OnnxReservesHeadroomForGameStreaming()
     {
-        Assert.Equal(0, DubbingComputeBudget.OnnxThreads(32, null));
+        Assert.Equal(4, DubbingComputeBudget.OnnxThreads(32, null));
+        Assert.Equal(4, DubbingComputeBudget.OnnxThreads(24, null));
+        Assert.Equal(2, DubbingComputeBudget.OnnxThreads(12, null));
+        Assert.Equal(1, DubbingComputeBudget.OnnxThreads(4, null));
+        Assert.Equal(1, DubbingComputeBudget.OnnxThreads(1, null));
         Assert.Equal(2, DubbingComputeBudget.OnnxThreads(32, "2"));
-        Assert.Equal(0, DubbingComputeBudget.OnnxThreads(32, "garbage"));
+        Assert.Equal(4, DubbingComputeBudget.OnnxThreads(32, "garbage"));
     }
 
     [Fact]
