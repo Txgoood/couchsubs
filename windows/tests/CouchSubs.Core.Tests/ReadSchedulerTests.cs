@@ -44,6 +44,20 @@ public class ReadSchedulerTests
     }
 
     [Fact]
+    public void TinyChangesAccumulateAgainstLastOcrRead()
+    {
+        var scheduler = new ReadScheduler();
+        scheduler.Plan(Still());
+        scheduler.Record("old");
+        var subtle = Still();
+        subtle[3] += 10;
+        Assert.True(scheduler.Plan(subtle).Reuse);
+        subtle = Still();
+        subtle[3] += 20;
+        Assert.False(scheduler.Plan(subtle).Reuse);
+    }
+
+    [Fact]
     public void ReusedReadingIsRefreshedAfterALimit()
     {
         var scheduler = new ReadScheduler(maxReuse: 2, deepEvery: 2);

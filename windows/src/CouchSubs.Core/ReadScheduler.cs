@@ -28,12 +28,13 @@ public sealed class ReadScheduler(int changeThreshold = 16, int maxReuse = 20, i
     public ReadPlan Plan(byte[] signature)
     {
         var before = previous;
-        previous = signature;
         if (before is not null && reused < maxReuse && !Changed(before, signature))
         {
             reused++;
             return ReadPlan.Reused(lastText);
         }
+        // Compare against the last actual OCR frame, not each tiny incremental change.
+        previous = signature;
         reused = 0;
         return ReadPlan.Read(emptyReads % deepEvery == 0);
     }

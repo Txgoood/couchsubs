@@ -75,6 +75,7 @@ public partial class SettingsWindow : Window
         controller.SnapshotRequested += OnSnapshot;
         Closed += (_, _) => controller.SnapshotRequested -= OnSnapshot;
         AutoWorldText.IsChecked = settings.AutoWorldText;
+        PcPerformanceProfile.IsChecked = settings.PcPerformanceProfile;
         Dubbing.Attach(controller);
         ShowDeepL();
         if (controller.HasDeepLKey) _ = ShowDeepLUsageAsync();
@@ -206,6 +207,9 @@ public partial class SettingsWindow : Window
 
     private void OnAutoWorldText(object sender, RoutedEventArgs e) =>
         Update(s => s with { AutoWorldText = AutoWorldText.IsChecked == true });
+
+    private void OnPcPerformanceProfile(object sender, RoutedEventArgs e) =>
+        Update(s => s with { PcPerformanceProfile = PcPerformanceProfile.IsChecked == true });
 
     private void OnDeepLToggle(object sender, RoutedEventArgs e) => Update(s => s with { OnlineTranslation = DeepLOn.IsChecked == true });
 

@@ -80,6 +80,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private int worldBusy;
     private DateTime nextWorldScan;
     private DateTime nextDetailedPcScan;
+    private readonly PcScreenScanPolicy pcScanPolicy = new();
+    private int pcFullCaptureInterval = 500;
     private readonly List<CropRegion> changedWorldRegions = [];
     private Frame? latestScreenFrame;
     private ScreenOverlay? worldOverlay;
@@ -219,6 +221,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             }
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage
                               || old.OnlineTranslation != value.OnlineTranslation || old.AutoWorldText != value.AutoWorldText
+                              || old.PcPerformanceProfile != value.PcPerformanceProfile
                               || (gameChanged && HasTranslationMemory)))
             {
                 RefreshTranslatorStatus();
@@ -1113,7 +1116,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                         var inspection = Volatile.Read(ref inspectionCapture) != 0;
                         var manual = Volatile.Read(ref screenWork) is not null || Volatile.Read(ref manualOverlay) is not null;
                         var world = Volatile.Read(ref worldOverlay) is not null || now < Volatile.Read(ref fastCaptureUntil);
-                        var fullInterval = inspection || manual ? 130 : world ? 400 : settings.AutoWorldText ? 1200 : 2500;
+                        var adaptive = settings.PcPerformanceProfile && settings.AutoWorldText;
+                        var fullInterval = inspection || manual ? 130 : adaptive
+                            ? Volatile.Read(ref pcFullCaptureInterval) : world ? 400 : settings.AutoWorldText ? 1200 : 2500;
                         if (lastFullCapture == 0 || now - lastFullCapture >= fullInterval)
                         {
                             HandleFrame(capture.Capture(display), generation);
@@ -1276,6 +1281,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         worldTranslator = settings.AutoWorldText ? MakeScreenTranslator(scope) : null;
         nextWorldScan = default;
         nextDetailedPcScan = default;
+        pcScanPolicy.Reset();
+        Volatile.Write(ref pcFullCaptureInterval, 500);
         changedWorldRegions.Clear();
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage);
@@ -1497,8 +1504,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (!settings.AutoWorldText || worldReader is null || worldTranslator is null) return;
         if (screenWork is not null || DateTime.UtcNow < screenShownUntil) return;
         if (pipeline?.IsTranslating == true) return;
-        if (changedWorldRegions.Count == 0 && DateTime.UtcNow < nextWorldScan) return;
+        var adaptive = IsPcMode && settings.PcPerformanceProfile;
+        var scanTick = Environment.TickCount64;
+        if (adaptive ? !pcScanPolicy.ShouldScan(scanTick, changedWorldRegions.Count > 0)
+            : changedWorldRegions.Count == 0 && DateTime.UtcNow < nextWorldScan) return;
         if (Interlocked.CompareExchange(ref worldBusy, 1, 0) != 0) return;
+        if (adaptive) pcScanPolicy.MarkScan(scanTick);
         // Several changed areas usually signal a new menu. A full read can also discover previously unseen panels.
         var regions = changedWorldRegions.Count is > 0 and <= 4 ? changedWorldRegions.ToArray() : null;
         if (regions is null) nextWorldScan = DateTime.UtcNow.AddMilliseconds(1200);
@@ -1512,8 +1523,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var display = settings.PcDisplayId;
         var pc = settings.Source == GameSource.Pc;
         var now = DateTime.UtcNow;
-        var quickRead = pc && regions is null &&
-            (now < nextDetailedPcScan || previousFrame is null || !ScreenTranslation.SameScreen(previousFrame, frame));
+        var quickRead = pc && regions is null && (adaptive
+            ? pcScanPolicy.Moving || previousFrame is null || now < nextDetailedPcScan
+            : now < nextDetailedPcScan || previousFrame is null || !ScreenTranslation.SameScreen(previousFrame, frame));
         if (pc && regions is null && !quickRead) nextDetailedPcScan = now.AddSeconds(6);
         var englishToTurkish = EnglishToTurkishScreen;
         var revision = Volatile.Read(ref worldRevision);
@@ -1545,7 +1557,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 post(() =>
                 {
-                    if (ReferenceEquals(worldScanWork, scanWork)) worldScanWork = null;
+                    if (ReferenceEquals(worldScanWork, scanWork))
+                    {
+                        worldScanWork = null;
+                        if (adaptive && cancellation.IsCancellationRequested)
+                            pcScanPolicy.RetryAfterCancellation();
+                    }
                     scanWork.Dispose();
                     Volatile.Write(ref worldBusy, 0);
                 });
@@ -1633,6 +1650,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (latest is null) return;
         var previous = LastFrame;
         LastFrame = latest;
+        if (IsPcMode && settings.PcPerformanceProfile && settings.AutoWorldText)
+        {
+            pcScanPolicy.Observe(latest);
+            Volatile.Write(ref pcFullCaptureInterval, pcScanPolicy.FullCaptureInterval);
+        }
         RefreshScreenOverlay();
         ScheduleWorldText(latest, previous);
     }

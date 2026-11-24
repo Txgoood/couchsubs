@@ -12,6 +12,7 @@ public class OcrNoiseTests
                 "Across the deep waters, Pbo went, hoping a boat would carry him home.")]
     [InlineData("Across the deep waters2aljd O went, Hoping a boat.", "Across the deep waters O went, Hoping a boat.")]
     [InlineData("He left 3e, at dawn.", "He left, at dawn.")]
+    [InlineData(".Spanish: My brothers and sisters deserve a better life,", "In Spanish: My brothers and sisters deserve a better life,")]
     public void GarbledWordsAreRemoved(string line, string expected) => Assert.Equal(expected, OcrNoise.Clean(line));
 
     [Theory]

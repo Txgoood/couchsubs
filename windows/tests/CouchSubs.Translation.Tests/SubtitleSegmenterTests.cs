@@ -28,6 +28,7 @@ public class SubtitleSegmenterTests
     [InlineData("Kratos: Stay close.", "Kratos: [Stay close.]")]
     [InlineData("Old Man: Who goes there?", "Old Man: [Who goes there?]")]
     [InlineData("Objective: Find the gate.", "[Objective: Find the gate.]")]
+    [InlineData("In Spanish: We deserve a better life.", "[In Spanish: We deserve a better life.]")]
     public void KeepsSpeakerLabels(string text, string expected) => Assert.Equal(expected, Render(text));
 
     [Fact]

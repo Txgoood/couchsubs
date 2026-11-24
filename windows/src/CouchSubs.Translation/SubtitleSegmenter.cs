@@ -36,6 +36,7 @@ internal static partial class SubtitleSegmenter
         var match = SpeakerLabelPattern().Match(text);
         if (!match.Success) return null;
         var name = match.Groups["name"].Value;
+        if (name.Equals("In Spanish", StringComparison.OrdinalIgnoreCase)) return null;
         return !name.Contains(' ') && NotNames.Contains(name) ? null : match;
     }
 

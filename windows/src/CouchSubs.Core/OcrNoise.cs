@@ -18,6 +18,10 @@ public static partial class OcrNoise
 
     public static string Clean(string line)
     {
+        // GTA captions occasionally lose the leading "In" as a dot in language cues.
+        // Repair only explicit, known cue prefixes; do not guess ordinary dialogue words.
+        if (line.StartsWith(".Spanish:", StringComparison.OrdinalIgnoreCase))
+            line = "In Spanish:" + line[9..];
         var kept = new List<string>();
         foreach (var token in line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
         {

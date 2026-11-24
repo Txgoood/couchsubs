@@ -85,6 +85,11 @@
                                 </CheckBox>
                                 <TextBlock Text="Menü yazıları değiştikçe yenilenir. Oyun altyazısı ve Türkçe dublaj ayrı çalışır."
                                            Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                                <CheckBox x:Name="PcPerformanceProfile" Checked="OnPcPerformanceProfile" Unchecked="OnPcPerformanceProfile"
+                                          Content="PXPlay / PC akıcı oyun profili" Margin="0,12,0,0"
+                                          Foreground="{DynamicResource textPrimaryBrush}" />
+                                <TextBlock Text="Hareket sırasında menü OCR yükünü azaltır; yeni menüleri hızlı algılar. Altyazı ve dublaj önceliği korunur."
+                                           Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,0" />
                             </StackPanel>
                         </c:Card>
                         <c:Card x:Name="LanguageCard" Title="{t:T 'Language'}" Margin="0,16,0,0">
