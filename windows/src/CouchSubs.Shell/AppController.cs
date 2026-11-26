@@ -2140,6 +2140,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             Engine = settings.Dubbing.Engine,
             EmotionMode = settings.Dubbing.EmotionMode,
             ExpressiveSafety = settings.Dubbing.ExpressiveSafety,
+            FinishCurrentLine = settings.Source == GameSource.Pc,
             SmartTiming = settings.Dubbing.SmartTiming,
             Prosody = gameProsody,
             NeuralSpeech = services.NeuralSpeech,

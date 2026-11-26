@@ -176,6 +176,19 @@ public static class ButtonPrompts
         var first = tokens[0];
         var words = tokens.Count(token => !Buttons.Contains(token) && token.Any(char.IsLetter));
 
+        // A round button may be read as '@' or fuse with 'to' in a HUD prompt.
+        // Keep this fallback limited to instructions with a recognizable action.
+        if (!SubtitleStabilizer.EndsSentence(line) && tokens.Count is >= 3 and <= 10)
+        {
+            var actionMarker = tokens[2].TrimEnd(',');
+            if ((Verbs.Contains(first) || first.Equals("pres", StringComparison.OrdinalIgnoreCase)) &&
+                tokens[1] == "@" && (actionMarker.Equals("to", StringComparison.OrdinalIgnoreCase) ||
+                actionMarker.Equals("t", StringComparison.OrdinalIgnoreCase))) return true;
+            if (first.Equals("press", StringComparison.OrdinalIgnoreCase) &&
+                tokens[1].Equals("Ofo", StringComparison.OrdinalIgnoreCase) &&
+                tokens[2].Equals("talk", StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
         // "R2 Swing", "△ Pick up", "L1 R1 Spartan Rage"
         if (Buttons.Contains(first)) return words <= 5;
         // "PHOTO MODE L1 + R1": düğme sonda, önünde kısa ve noktalamasız bir eylem adı.

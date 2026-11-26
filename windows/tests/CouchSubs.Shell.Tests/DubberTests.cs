@@ -70,6 +70,31 @@ public class DubberTests
         Assert.Equal(["ilk.", "son."], synth.Calls.Select(call => call.Text));
     }
 
+    [Fact]
+    public async Task PcPlaybackKeepsTheWholeTurnAndPlaysTheNewestAvailableNextTurn()
+    {
+        var synth = new FakeSynth();
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        await using var dubber = new Dubber(new FakeModel(synth), audio, () => server, () => 8787,
+            action => action()) { Output = DubbingOutput.Computer, FinishCurrentLine = true };
+        audio.OnPlay = () =>
+        {
+            if (audio.Played != 1) return;
+            dubber.Speak([new SpokenLine("Old.", "Eski.")]);
+            dubber.Speak([new SpokenLine("Latest.", "Son.")]);
+        };
+
+        dubber.Speak([
+            new SpokenLine("Hey, soldier.", "Selam, asker.", "Andrew"),
+            new SpokenLine("I still have it.", "Hâlâ bende.", "Andrew"),
+        ]);
+        await WaitUntil(() => audio.Played == 2);
+
+        Assert.Equal(0, audio.Stopped);
+        Assert.Equal(["selam, asker. hâlâ bende.", "son."], synth.Calls.Select(call => call.Text));
+    }
+
     private static async Task WaitUntil(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);

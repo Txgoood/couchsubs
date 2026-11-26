@@ -5,9 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>0.3.21</Version>
-    <AssemblyVersion>0.3.21.165</AssemblyVersion>
-    <FileVersion>0.3.21.165</FileVersion>
-    <InformationalVersion>0.3.21-adaptive-pc-ocr.165</InformationalVersion>
+    <AssemblyVersion>0.3.21.166</AssemblyVersion>
+    <FileVersion>0.3.21.166</FileVersion>
+    <InformationalVersion>0.3.21-pxplay-dialogue.166</InformationalVersion>
     <Company>Enmera</Company>
     <Product>CouchSubs</Product>
     <Copyright>AGPL-3.0. Uses chiaki-ng (AGPL-3.0).</Copyright>

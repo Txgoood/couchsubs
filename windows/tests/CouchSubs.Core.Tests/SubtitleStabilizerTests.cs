@@ -6,6 +6,28 @@ namespace CouchSubs.Core.Tests;
 
 public class SubtitleStabilizerTests
 {
+    [Fact]
+    public void ShopDialogueFragmentsDoNotReplaceTheFullTurn()
+    {
+        var tracker = new SubtitleStabilizer();
+        const string full = "Jason: Heyeman, Just back to take another look.";
+        Assert.Equal(StabilizerAction.Translate(full), tracker.Feed(full));
+        Assert.Equal(StabilizerAction.None, tracker.Feed("Hey, man."));
+        Assert.Equal(StabilizerAction.None, tracker.Feed("•Jason: Hem-man. Just back to take another look."));
+        Assert.Equal(StabilizerAction.None, tracker.Feed("Just baato take another look."));
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Andrew: Hey, soldier.").Kind);
+    }
+
+    [Fact]
+    public void ShortReplyAfterSubtitleClearsIsStillTranslated()
+    {
+        var tracker = new SubtitleStabilizer();
+        tracker.Feed("Jason: Hey, man, I am just looking around.");
+        tracker.Feed("");
+        tracker.Feed("");
+        Assert.Equal(StabilizerKind.Translate, tracker.Feed("Hey, man.").Kind);
+    }
+
     /// Noktalamayla bitmeyen satır yazılmakta olabilir; iki kare aynı okununca gönderilir.
     [Fact]
     public void UnfinishedLineIsSentAfterTwoStableFrames()

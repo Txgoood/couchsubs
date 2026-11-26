@@ -21,6 +21,8 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     private string candidate = "";
     private int candidateCount;
     private string sent = "";
+    private string sentLabel = "";
+    private string sentBody = "";
     private int emptyCount;
     // Keep a short-term identity after OCR briefly loses the English subtitle.
     // Unlike sent, recentSent survives the visual Clear event; a flicker is not
@@ -33,6 +35,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     {
         frameNumber++;
         var text = TextMatch.Normalize(rawText);
+        var labelEnd = rawText.IndexOf(':');
+        var label = labelEnd is > 0 and <= 28 ? TextMatch.Normalize(rawText[..labelEnd]) : "";
+        var body = label.Length > 0 ? TextMatch.Normalize(rawText[(labelEnd + 1)..]) : text;
         // 3 karakterden kısa okumalar (gürültü, tek simge) boş kare sayılır.
         if (text.Length < 3)
         {
@@ -44,6 +49,15 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
                 sent = "";
                 return StabilizerAction.Clear;
             }
+            return StabilizerAction.None;
+        }
+
+        // Missing words at either edge of a named subtitle are common when
+        // the background moves. Let an empty run or another named turn end it.
+        if (emptyCount < emptyFramesToClear && label.Length == 0 && sentLabel.Length > 0 &&
+            IsClippedReading(body, sentBody))
+        {
+            emptyCount = 0;
             return StabilizerAction.None;
         }
 
@@ -72,9 +86,26 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
             return StabilizerAction.None;
         }
         sent = text;
+        sentLabel = label;
+        sentBody = body;
         recentSent = text;
         recentSentFrame = frameNumber;
         return StabilizerAction.Translate(rawText.Trim());
+    }
+
+    private static bool IsClippedReading(string fragment, string full)
+    {
+        if (fragment.Length < 6 || fragment.Length >= full.Length) return false;
+        var part = fragment.Split(' ');
+        var whole = full.Split(' ');
+        if (part.Length < 2 || whole.Length < 4 || part.Length >= whole.Length) return false;
+
+        // Compare only the edges, allowing a space to disappear in OCR.
+        var compact = string.Concat(part);
+        for (var count = Math.Max(1, part.Length - 1); count <= Math.Min(whole.Length, part.Length + 1); count++)
+            if (TextMatch.IsSimilar(compact, string.Concat(whole.Take(count)), 0.84) ||
+                TextMatch.IsSimilar(compact, string.Concat(whole.TakeLast(count)), 0.84)) return true;
+        return false;
     }
 
     /// <summary>Satır nokta, ünlem, soru ya da üç noktayla bitiyor mu (kapanan tırnak ve parantezler yok sayılır).</summary>
@@ -92,6 +123,8 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     public void ForgetSent()
     {
         sent = "";
+        sentLabel = "";
+        sentBody = "";
         recentSent = "";
         candidate = "";
         candidateCount = 0;
@@ -105,6 +138,8 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         recentSent = "";
         recentSentFrame = 0;
         frameNumber = 0;
+        sentLabel = "";
+        sentBody = "";
         if (sent.Length == 0) return StabilizerAction.None;
         sent = "";
         return StabilizerAction.Clear;

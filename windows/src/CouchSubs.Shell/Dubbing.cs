@@ -196,6 +196,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     public INeuralSpeechDetector? NeuralSpeech { get; set; }
     public DubbingEmotionMode EmotionMode { get; set; } = DubbingEmotionMode.Balanced;
     public bool ExpressiveSafety { get; set; } = false;
+    public bool FinishCurrentLine { get; init; }
     public DubbingEngine Engine { get; set; } = DubbingEngine.Natural;
     public VoiceCast Cast { get; set; } = new();
     public DubbingOutput Output { get; set; } = DubbingOutput.Tv;
@@ -217,6 +218,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     public void Speak(IReadOnlyList<SpokenLine> lines, Func<bool>? canStart = null)
     {
         if (lines.Count == 0) return;
+        if (FinishCurrentLine && lines.Count > 1) lines = JoinSameSpeaker(lines);
         if (canStart?.Invoke() == false)
         {
             Interlocked.Add(ref lateLines, lines.Count);
@@ -235,8 +237,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             var submittedMs = Environment.TickCount64;
             foreach (var line in lines) queue.Enqueue((line, null, submittedMs, canStart));
             while (queue.Count > Backlog) { queue.Dequeue(); droppedLines++; }
-            // In expressive mode, keep the current audible line and only queue
-            // the latest subtitle for when it finishes.
+            // Keep the audible line and queue the latest subtitle for when it finishes.
             if (finishingExpressiveLine) return;
             activeLineCancellation?.Cancel();
             interrupt = working;
@@ -251,6 +252,25 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             server().StopSpeech();
         }
         _ = Task.Run(() => RunAsync(number));
+    }
+
+    private static IReadOnlyList<SpokenLine> JoinSameSpeaker(IReadOnlyList<SpokenLine> lines)
+    {
+        var turns = new List<SpokenLine> { lines[0] };
+        for (var i = 1; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            var current = turns[^1];
+            if (line.NewTurn || !string.Equals(line.Speaker, current.Speaker, StringComparison.OrdinalIgnoreCase))
+                turns.Add(line);
+            else
+                turns[^1] = current with
+                {
+                    English = $"{current.English} {line.English}",
+                    Turkish = $"{current.Turkish} {line.Turkish}",
+                };
+        }
+        return turns;
     }
 
     /// <summary>Ayarlardaki "Dinle": deneme her zaman bilgisayardan çalar, kullanıcı o an bilgisayarın başında.</summary>
@@ -385,8 +405,8 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
                 next = Next(number);
                 continue;
             }
-            var finishCurrent = !ready.Preview && ExpressiveSafety &&
-                Engine != DubbingEngine.Fast && EmotionMode != DubbingEmotionMode.Off;
+            var finishCurrent = !ready.Preview && (FinishCurrentLine ||
+                ExpressiveSafety && Engine != DubbingEngine.Fast && EmotionMode != DubbingEmotionMode.Off);
             lock (gate)
             {
                 if (number != generation) return;

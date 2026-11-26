@@ -142,6 +142,23 @@ public class SubtitlePipelineTests
         Assert.Equal(["TR: Hold the gate"], sender.Sent);
     }
 
+    [Fact]
+    public async Task ShopPromptOcrErrorsDoNotReachTranslationOrSpeech()
+    {
+        const string dialogue = "Press on.";
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader("Press Ofo talk", "Press Ofo talk",
+            "Pres @ t, browse the shop menu", "Pres @ t, browse the shop menu", dialogue),
+            new FakeTranslator(), sender);
+        var speechCount = 0;
+        pipeline.SpeechReady += (_, _) => speechCount++;
+
+        await Run(pipeline, 5);
+
+        Assert.Equal([$"TR: {dialogue}"], sender.Sent);
+        Assert.Equal(1, speechCount);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
