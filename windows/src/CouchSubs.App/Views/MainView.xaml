@@ -133,13 +133,13 @@
             <c:Card Margin="0,16,0,0">
                 <Expander Header="Çeviri inceleme kaydı" Foreground="{DynamicResource textPrimaryBrush}">
                   <StackPanel Margin="0,10,0,0">
-                    <CheckBox x:Name="InspectionEnabled" Content="Son 20 saniyeyi bellekte tut"
+                    <CheckBox x:Name="InspectionEnabled" Content="Son 20 saniyeyi sesli olarak bellekte tut"
                               Foreground="{DynamicResource textPrimaryBrush}"
                               Checked="OnInspectionToggle" Unchecked="OnInspectionToggle" />
                     <Button x:Name="SaveInspectionButton" Content="Son 20 saniyeyi kaydet · Ctrl+Shift+F9"
                             Click="OnSaveInspection" IsEnabled="False" HorizontalAlignment="Left" Margin="0,8,0,0" />
                     <TextBlock x:Name="InspectionStatus" Style="{StaticResource HintText}" TextWrapping="Wrap"
-                               Margin="0,6,0,0" Text="Kaydedince seçilen ekranın sessiz görüntüsü ve çeviri dökümü bu bilgisayara yazılır." />
+                               Margin="0,6,0,0" Text="Klip seçilen ekranı ve varsayılan Windows ses çıkışında çalan sesleri içerir. Mikrofon kullanılmaz. Kaydettiğinizde klip ve çeviri dökümü bu bilgisayara yazılır." />
                   </StackPanel>
                 </Expander>
             </c:Card>

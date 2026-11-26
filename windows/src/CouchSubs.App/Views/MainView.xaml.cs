@@ -145,6 +145,9 @@ public partial class MainView : UserControl
         inspection.Arm(enabled);
         controller.SetInspectionCapture(enabled);
         SaveInspectionButton.IsEnabled = enabled;
+        InspectionStatus.Text = enabled && !inspection.AudioRunning
+            ? "Windows ses çıkışı açılamadı. İnceleme klibi sessiz kaydedilebilir."
+            : "Klip seçilen ekranı ve varsayılan Windows ses çıkışında çalan sesleri içerir. Mikrofon kullanılmaz. Kaydettiğinizde klip ve çeviri dökümü bu bilgisayara yazılır.";
         if (enabled) inspectionTimer.Start();
         else inspectionTimer.Stop();
     }
@@ -183,9 +186,9 @@ public partial class MainView : UserControl
             var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "CouchSubs İnceleme Kayıtları");
             var directory = await inspection.SaveAsync(root);
-            InspectionStatus.Text = directory is null
-                ? "Henüz görüntü yok. Çeviriyi başlatıp birkaç saniye bekle."
-                : $"Kaydedildi: {directory}";
+            InspectionStatus.Text = directory is { } saved
+                ? $"{(saved.HasAudio ? "Sesli" : "Sessiz")} klip kaydedildi: {saved.Directory}"
+                : "Henüz görüntü yok. Çeviriyi başlatıp birkaç saniye bekle.";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

@@ -19,6 +19,7 @@ internal sealed class TranslationClip
     private readonly object gate = new();
     private readonly Queue<(long At, byte[] Image)> frames = new();
     private readonly Queue<Entry> entries = new();
+    private readonly TranslationClipAudio audio = new();
     private sealed record Entry(long At, string Kind, string English, string Turkish, string? Speaker);
     private int generation;
     private bool armed;
@@ -33,7 +34,10 @@ internal sealed class TranslationClip
             frames.Clear();
             entries.Clear();
         }
+        audio.Arm(value);
     }
+
+    public bool AudioRunning => audio.IsRunning;
 
     public void Add(string kind, string english, string turkish, string? speaker = null)
     {
@@ -72,7 +76,7 @@ internal sealed class TranslationClip
         }
     }
 
-    public async Task<string?> SaveAsync(string root)
+    public async Task<(string Directory, bool HasAudio)?> SaveAsync(string root)
     {
         (long At, byte[] Image)[] samples;
         Entry[] text;
@@ -82,6 +86,7 @@ internal sealed class TranslationClip
             text = entries.ToArray();
         }
         if (samples.Length == 0) return null;
+        var soundtrack = audio.Snapshot();
         return await Task.Run(() =>
         {
             var start = samples[0].At;
@@ -96,7 +101,8 @@ internal sealed class TranslationClip
                 while (index + 1 < samples.Length && samples[index + 1].At <= time) index++;
                 video.Add(samples[index].Image);
             }
-            WriteAvi(Path.Combine(directory, "oyun.avi"), video);
+            var pcm = soundtrack?.Align(start, video.Count * (1000 / Fps));
+            WriteAvi(Path.Combine(directory, "oyun.avi"), video, pcm, soundtrack?.Format);
             var report = text.Where(e => e.At >= start && e.At < end).ToArray();
             File.WriteAllLines(Path.Combine(directory, "ceviri.jsonl"),
                 report.Select(e => JsonSerializer.Serialize(new
@@ -108,7 +114,7 @@ internal sealed class TranslationClip
                 (e.Kind == "subtitle" ? "Altyazı" : "Dublaj başlangıcı") +
                 (e.Speaker is { Length: > 0 } speaker ? $" · {speaker}" : "") +
                 $"{Environment.NewLine}EN: {e.English}{Environment.NewLine}TR: {e.Turkish}{Environment.NewLine}"));
-            return directory;
+            return ((string Directory, bool HasAudio)?)(directory, pcm is not null);
         }).ConfigureAwait(false);
     }
 
@@ -134,7 +140,8 @@ internal sealed class TranslationClip
         return output.ToArray();
     }
 
-    private static void WriteAvi(string path, IReadOnlyList<byte[]> images)
+    private static void WriteAvi(string path, IReadOnlyList<byte[]> images, byte[]? pcm,
+        TranslationClipAudio.PcmFormat? audioFormat)
     {
         using var stream = File.Create(path);
         using var writer = new BinaryWriter(stream);
@@ -165,8 +172,11 @@ internal sealed class TranslationClip
         Tag("hdrl");
         var main = Begin("avih");
         var largest = images.Max(image => image.Length);
-        Numbers(1_000_000 / Fps, largest * Fps, 0, 0x10, images.Count, 0, 1,
-            largest, Width, Height, 0, 0, 0, 0);
+        var hasAudio = pcm is not null && audioFormat.HasValue;
+        var sound = audioFormat.GetValueOrDefault();
+        var audioRate = hasAudio ? sound.SampleRate * sound.BlockAlign : 0;
+        Numbers(1_000_000 / Fps, largest * Fps + audioRate, 0, hasAudio ? 0x110 : 0x10,
+            images.Count, 0, hasAudio ? 2 : 1, largest, Width, Height, 0, 0, 0, 0);
         End(main);
         var streamList = Begin("LIST");
         Tag("strl");
@@ -187,24 +197,50 @@ internal sealed class TranslationClip
         Numbers(Width * Height * 3, 0, 0, 0, 0);
         End(format);
         End(streamList);
+        if (hasAudio)
+        {
+            var audioList = Begin("LIST");
+            Tag("strl");
+            var audioHeader = Begin("strh");
+            Tag("auds");
+            Numbers(0, 0, 0, 0, sound.BlockAlign, audioRate, 0,
+                pcm!.Length / sound.BlockAlign, (audioRate + Fps - 1) / Fps, -1, sound.BlockAlign, 0, 0);
+            End(audioHeader);
+            var pcmFormat = Begin("strf");
+            writer.Write((short)1); // WAVE_FORMAT_PCM
+            writer.Write((short)sound.Channels);
+            Numbers(sound.SampleRate, audioRate);
+            writer.Write((short)sound.BlockAlign);
+            writer.Write((short)16);
+            End(pcmFormat);
+            End(audioList);
+        }
         End(header);
         var movie = Begin("LIST");
         var movieStart = stream.Position;
         Tag("movi");
-        var offsets = new List<int>();
-        foreach (var image in images)
+        var indexEntries = new List<(string Tag, int Flags, int Offset, int Length)>();
+        void WriteChunk(string tag, byte[] data, int offset, int length, int flags)
         {
-            offsets.Add(checked((int)(stream.Position - movieStart)));
-            var chunk = Begin("00dc");
-            writer.Write(image);
+            indexEntries.Add((tag, flags, checked((int)(stream.Position - movieStart)), length));
+            var chunk = Begin(tag);
+            writer.Write(data, offset, length);
             End(chunk);
+        }
+        for (var i = 0; i < images.Count; i++)
+        {
+            WriteChunk("00dc", images[i], 0, images[i].Length, 0x10);
+            if (!hasAudio) continue;
+            var first = i * sound.SampleRate / Fps * sound.BlockAlign;
+            var next = (i + 1) * sound.SampleRate / Fps * sound.BlockAlign;
+            WriteChunk("01wb", pcm!, first, next - first, 0);
         }
         End(movie);
         var index = Begin("idx1");
-        for (var i = 0; i < images.Count; i++)
+        foreach (var entry in indexEntries)
         {
-            Tag("00dc");
-            Numbers(0x10, offsets[i], images[i].Length);
+            Tag(entry.Tag);
+            Numbers(entry.Flags, entry.Offset, entry.Length);
         }
         End(index);
         End(riff);
