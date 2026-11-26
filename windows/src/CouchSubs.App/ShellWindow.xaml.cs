@@ -34,6 +34,7 @@ public partial class ShellWindow : Window
         // Bilgisayarda gösterilecek çeviriler küçük, üstte duran bir kutuda çıkar.
         controller.PcResultReady += PcResultWindow.Display;
         controller.PcSubtitleReady += PcResultWindow.DisplayOnMonitor;
+        controller.PcSubtitleClear += PcResultWindow.ClearSubtitle;
         controller.PcWorldTextReady += PcWorldTextWindow.Display;
         controller.PcWorldTextClear += PcWorldTextWindow.Clear;
         Closed += (_, _) =>
@@ -41,6 +42,7 @@ public partial class ShellWindow : Window
             controller.PropertyChanged -= OnChanged;
             controller.PcResultReady -= PcResultWindow.Display;
             controller.PcSubtitleReady -= PcResultWindow.DisplayOnMonitor;
+            controller.PcSubtitleClear -= PcResultWindow.ClearSubtitle;
             controller.PcWorldTextReady -= PcWorldTextWindow.Display;
             controller.PcWorldTextClear -= PcWorldTextWindow.Clear;
             PcWorldTextWindow.Clear();

@@ -233,6 +233,37 @@ public class SubtitlePipelineTests
         public Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default) => Task.FromResult(Target);
     }
 
+    [Fact]
+    public async Task OldWorkerTailDoesNotReplaceJasonsNewTurn()
+    {
+        var pipeline = new SubtitlePipeline(new FakeReader(
+            "Worker: Shit wow... not gonna lie,\nwasn't expecting an apology but...sure. Good!",
+            "wasn't expecting an apology but...sure. Good!\n'Jason: Well that was pathetic."),
+            new DistinctTranslator(), new FakeSender());
+        var spoken = new List<CouchSubs.Core.Dubbing.SpokenLine>();
+        pipeline.SpeechReady += (lines, _) => spoken.AddRange(lines);
+
+        await Run(pipeline, 2);
+
+        Assert.Equal(["Worker", "Jason"], spoken.Select(line => line.Speaker));
+        Assert.Equal("Well that was pathetic.", spoken[^1].English);
+    }
+
+    [Theory]
+    [InlineData("'Jason: Just relax.", "Jason", "Just relax.")]
+    [InlineData("Jason:.Uh, was that out of line?", "Jason", "Uh, was that out of line?")]
+    [InlineData("Localr Humility! What a concept!", "Local", "Humility! What a concept!")]
+    public async Task DamagedSpeakerLabelStillSelectsTheCorrectSpeaker(string raw, string name, string body)
+    {
+        var pipeline = new SubtitlePipeline(new FakeReader(raw), new DistinctTranslator(), new FakeSender());
+        var spoken = new List<CouchSubs.Core.Dubbing.SpokenLine>();
+        pipeline.SpeechReady += (lines, _) => spoken.AddRange(lines);
+        await Run(pipeline, 1);
+        var line = Assert.Single(spoken);
+        Assert.Equal(name, line.Speaker);
+        Assert.Equal(body, line.English);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

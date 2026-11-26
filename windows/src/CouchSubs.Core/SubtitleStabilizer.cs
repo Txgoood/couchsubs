@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using CouchSubs.Core.Dubbing;
+
 namespace CouchSubs.Core;
 
 public enum StabilizerKind { None, Translate, Clear }
@@ -54,8 +56,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
 
         // Missing words at either edge of a named subtitle are common when
         // the background moves. Let an empty run or another named turn end it.
-        if (emptyCount < emptyFramesToClear && label.Length == 0 && sentLabel.Length > 0 &&
-            IsClippedReading(body, sentBody))
+        if (emptyCount < emptyFramesToClear && sentLabel.Length > 0 &&
+            (label.Length == 0 || label == sentLabel) &&
+            (IsClippedReading(body, sentBody) || TextMatch.IsSimilar(body, sentBody, similarity)))
         {
             emptyCount = 0;
             return StabilizerAction.None;
@@ -91,6 +94,18 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         recentSent = text;
         recentSentFrame = frameNumber;
         return StabilizerAction.Translate(rawText.Trim());
+    }
+
+    internal Reading RemoveOldLeadIn(Reading reading)
+    {
+        if (sentLabel.Length == 0 || emptyCount >= emptyFramesToClear || reading.Lines.Count < 2)
+            return reading;
+        var first = reading.Lines[0].Text;
+        if (DialogueOcr.IsNamedTurn(first) || !DialogueOcr.IsNamedTurn(reading.Lines[1].Text))
+            return reading;
+        var body = TextMatch.Normalize(first);
+        return IsClippedReading(body, sentBody) || TextMatch.IsSimilar(body, sentBody, similarity)
+            ? new Reading(reading.Lines.Skip(1)) : reading;
     }
 
     private static bool IsClippedReading(string fragment, string full)

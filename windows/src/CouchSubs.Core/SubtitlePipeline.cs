@@ -89,15 +89,17 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         // Yazı tanımanın uydurduğu sözcük çöpleri ("ou$3e") de çevirmene gitmez.
         // Alandaki menü ve köşe göstergeleri de altyazı değildir; yalnız altyazı bloğu çevrilir ve kutusu ona göre olur.
         var area = new TextBox(region.Left, region.Top, region.Right, region.Bottom);
-        var cleaned = raw.WithoutButtonPrompts().WithoutOcrNoise();
+        var cleanRead = raw.WithoutButtonPrompts().WithoutOcrNoise();
+        var cleaned = new Reading(cleanRead.Lines.Select(line => line with { Text = DialogueOcr.CleanLabel(line.Text) }));
         // Prefer a real subtitle when gameplay instructions share the crop.
         // An isolated instruction may still be shown visually.
         var dialogue = new Reading(cleaned.Lines.Where(line => !DialogueTextFilter.IsInterface(line.Text))).SubtitleBlock(area);
-        var reading = dialogue.Lines.Count > 0 ? dialogue : cleaned.SubtitleBlock(area);
 
         lock (gate)
         {
             if (readSession != session) return;
+            dialogue = stabilizer.RemoveOldLeadIn(dialogue);
+            var reading = dialogue.Lines.Count > 0 ? dialogue : cleaned.SubtitleBlock(area);
             var detected = dialogue.Box?.PlacedIn(area);
             Volatile.Write(ref currentSubtitle, detected is { } position
                 ? new TextLine(dialogue.Text, position)

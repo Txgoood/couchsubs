@@ -167,6 +167,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     private int activeSynthOperations;
     private TaskCompletionSource? synthIdle;
     private CancellationTokenSource? activeLineCancellation;
+    private Task<ReadySpeech?>? preparedDuringPlayback;
     private bool disposed;
     private bool working;
     private int generation;
@@ -238,7 +239,15 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             foreach (var line in lines) queue.Enqueue((line, null, submittedMs, canStart));
             while (queue.Count > Backlog) { queue.Dequeue(); droppedLines++; }
             // Keep the audible line and queue the latest subtitle for when it finishes.
-            if (finishingExpressiveLine) return;
+            if (finishingExpressiveLine)
+            {
+                if (FinishCurrentLine)
+                {
+                    if (preparedDuringPlayback is not null) activeLineCancellation?.Cancel();
+                    preparedDuringPlayback = Next(generation);
+                }
+                return;
+            }
             activeLineCancellation?.Cancel();
             interrupt = working;
             if (interrupt) interruptedGenerations++;
@@ -296,6 +305,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             activeLineCancellation?.Cancel();
             droppedLines += queue.Count;
             queue.Clear();
+            preparedDuringPlayback = null;
             working = false;
             finishingExpressiveLine = false;
             generation++;
@@ -411,6 +421,8 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             {
                 if (number != generation) return;
                 finishingExpressiveLine = finishCurrent;
+                if (finishCurrent && FinishCurrentLine)
+                    preparedDuringPlayback ??= Next(number);
             }
             // The ordinary path still prepares the next line during playback.
             next = finishCurrent ? null : Next(number);
@@ -422,10 +434,17 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             finally
             {
                 lock (gate)
-                    if (number == generation) finishingExpressiveLine = false;
+                {
+                    if (number == generation)
+                    {
+                        finishingExpressiveLine = false;
+                        if (finishCurrent) next = preparedDuringPlayback;
+                        preparedDuringPlayback = null;
+                    }
+                }
             }
             if (number != Generation) return;
-            if (finishCurrent) next = Next(number);
+            if (finishCurrent) next ??= Next(number);
         }
         lock (gate)
         {

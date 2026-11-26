@@ -161,6 +161,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public string? PcCaptureError { get => pcCaptureError; private set => Set(ref pcCaptureError, value); }
     public string? StartError { get => startError; private set => Set(ref startError, value); }
     public event Action<string, int, string>? PcSubtitleReady;
+    public event Action? PcSubtitleClear;
     public event Action<string, string>? InspectionSubtitle;
     public event Action<SpokenLine>? InspectionPlayback;
     /// <summary>PC üzerinde diyalogdan ayrı envanter/menü/nesne çevirileri.</summary>
@@ -761,6 +762,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private DateTime screenShownUntil;
     private Frame? screenSource;
     private ScreenOverlay? manualOverlay;
+    private sealed record PcCaption(TextLine Source, string Translation, string Display, long Until);
+    private sealed record PcOverlay(IReadOnlyList<ScreenTranslation.Item> Items, string Display, long Until);
+    private PcCaption? pcCaption;
+    private PcOverlay? pcOverlay;
+    private bool pcOverlayOwnedCaption;
     private bool EnglishToTurkishScreen => settings.SourceLanguage == "en" && settings.TargetLanguage == "tr";
 
     /// <summary>
@@ -858,6 +864,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         screenSource = null;
         manualOverlay = null;
         screenShownUntil = default;
+        pcOverlay = null;
         PcWorldTextClear?.Invoke();
         server.ClearScreen(obsOnly: IsPcMode);
         if (!IsPcMode && clearSubtitle) server.Clear();
@@ -866,6 +873,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private void ClearWorldOverlay()
     {
         worldOverlay = null;
+        pcOverlay = null;
         server.ClearScreen(obsOnly: IsPcMode);
         if (IsPcMode) PcWorldTextClear?.Invoke();
     }
@@ -886,8 +894,39 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     private void PublishOverlay(IReadOnlyList<ScreenTranslation.Item> items, int duration, bool pc, string display)
     {
-        server.SendScreen(items, duration, obsOnly: pc);
-        if (pc) PcWorldTextReady?.Invoke(items, display, duration);
+        if (!pc)
+        {
+            server.SendScreen(items, duration);
+            return;
+        }
+        pcOverlay = new PcOverlay(items, display, Environment.TickCount64 + duration);
+        DrawPcOverlay(pcOverlay);
+    }
+
+    private bool DrawPcOverlay(PcOverlay overlay, bool captionChanged = false)
+    {
+        var now = Environment.TickCount64;
+        if (overlay.Until <= now) return false;
+        var items = overlay.Items;
+        var ownsCaption = false;
+        if (pcCaption is { } caption && caption.Until > now && caption.Display == overlay.Display)
+            items = ScreenCaptionOwnership.PreferPositioned(items, caption.Source, caption.Translation, out ownsCaption);
+        if (captionChanged && !ownsCaption && !pcOverlayOwnedCaption) return false;
+        pcOverlayOwnedCaption = ownsCaption;
+        if (ownsCaption) PcSubtitleClear?.Invoke();
+        var duration = (int)(overlay.Until - now);
+        server.SendScreen(items, duration, obsOnly: true);
+        PcWorldTextReady?.Invoke(items, overlay.Display, duration);
+        return ownsCaption;
+    }
+
+    private void ShowPcCaption(string source, string translation, TextBox? box)
+    {
+        var duration = SubtitlePipeline.ReadingTime(translation);
+        var display = settings.PcDisplayId;
+        pcCaption = new PcCaption(new TextLine(source, box), translation, display, Environment.TickCount64 + duration);
+        if (pcOverlay is { } overlay && overlay.Display == display && DrawPcOverlay(overlay, captionChanged: true)) return;
+        PcSubtitleReady?.Invoke(translation, duration, display);
     }
 
     private void RefreshScreenOverlay()
@@ -1183,7 +1222,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         changedWorldRegions.Clear();
         Volatile.Write(ref fastCaptureUntil, 0);
         server.ClearScreen();
-        post(() => PcWorldTextClear?.Invoke());
+        post(() =>
+        {
+            pcCaption = null;
+            pcOverlay = null;
+            PcSubtitleClear?.Invoke();
+            PcWorldTextClear?.Invoke();
+        });
         session?.Stop();
         session?.Dispose();
         session = null;
@@ -1310,7 +1355,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 DiscoverDialogueNames(source);
                 if (box is not null) lastSubtitleBox = box;
                 if (settings.Source == GameSource.Pc)
-                    PcSubtitleReady?.Invoke(translation, SubtitlePipeline.ReadingTime(translation), settings.PcDisplayId);
+                    ShowPcCaption(source, translation, box);
             });
         };
         // Model bu arada inmiş olabilir; her çeviri sonucu durumu günceller.

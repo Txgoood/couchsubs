@@ -12,16 +12,19 @@ public class DubberTests
     {
         public List<(string Text, Uri Voice)> Calls { get; } = [];
         public TimeSpan Delay { get; init; }
+        public int SampleCount { get; init; } = 1200;
+        public Action<string>? SynthesisStarted { get; init; }
         /// <summary>Verilirse her seslendirme bu açılana kadar bekler: testler süreye değil sıraya dayanır.</summary>
         public TaskCompletionSource? Gate { get; set; }
         public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public async Task<SpeechAudio> SynthesizeAsync(string text, Uri voice, CancellationToken cancellationToken = default)
         {
             lock (Calls) Calls.Add((text, voice));
+            SynthesisStarted?.Invoke(text);
             if (Gate is { } gate) await gate.Task;
             if (Delay > TimeSpan.Zero) await Task.Delay(Delay, cancellationToken);
             // 0,05 sn ses: testler hızlı biter.
-            return new SpeechAudio([.. Enumerable.Range(0, 1200).Select(i => MathF.Sin(i * 0.1f) * 0.5f)], 24000);
+            return new SpeechAudio([.. Enumerable.Range(0, SampleCount).Select(i => MathF.Sin(i * 0.1f) * 0.5f)], 24000);
         }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
@@ -78,6 +81,8 @@ public class DubberTests
         using var server = new SubtitleServer(0);
         await using var dubber = new Dubber(new FakeModel(synth), audio, () => server, () => 8787,
             action => action()) { Output = DubbingOutput.Computer, FinishCurrentLine = true };
+        var played = new List<string>();
+        dubber.PlaybackStarted += line => played.Add(line.English);
         audio.OnPlay = () =>
         {
             if (audio.Played != 1) return;
@@ -92,7 +97,32 @@ public class DubberTests
         await WaitUntil(() => audio.Played == 2);
 
         Assert.Equal(0, audio.Stopped);
-        Assert.Equal(["selam, asker. hâlâ bende.", "son."], synth.Calls.Select(call => call.Text));
+        Assert.Equal(["Hey, soldier. I still have it.", "Latest."], played);
+    }
+
+    [Fact]
+    public async Task PcPreparesLatestTurnWhileAudioIsStillPlaying()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var synth = new FakeSynth { SampleCount = 24000, SynthesisStarted = text =>
+        {
+            if (text == "ikinci.") started.TrySetResult();
+        } };
+        var audio = new FakeAudio();
+        using var server = new SubtitleServer(0);
+        await using var dubber = new Dubber(new FakeModel(synth), audio, () => server, () => 8787,
+            action => action()) { Output = DubbingOutput.Computer, FinishCurrentLine = true };
+        audio.OnPlay = () =>
+        {
+            if (audio.Played == 1) dubber.Speak([new SpokenLine("Second.", "İkinci.")]);
+        };
+
+        dubber.Speak([new SpokenLine("First.", "İlk.")]);
+
+        await started.Task.WaitAsync(TimeSpan.FromMilliseconds(850));
+        Assert.Equal(1, audio.Played);
+        await WaitUntil(() => audio.Played == 2);
+        Assert.Equal(0, audio.Stopped);
     }
 
     private static async Task WaitUntil(Func<bool> condition)

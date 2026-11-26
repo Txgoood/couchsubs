@@ -20,6 +20,7 @@ public sealed class PcResultWindow : Window
     private static PcResultWindow? current;
     private readonly DispatcherTimer timer;
     private readonly System.Drawing.Rectangle? monitorBounds;
+    private readonly bool isSubtitle;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -50,12 +51,18 @@ public sealed class PcResultWindow : Window
         System.Drawing.Rectangle? bounds;
         try { bounds = WindowsGameScreenCapture.BoundsFor(displayId); }
         catch (InvalidOperationException) { bounds = null; }
-        current = new PcResultWindow(text, milliseconds, bounds);
+        current = new PcResultWindow(text, milliseconds, bounds, isSubtitle: true);
         current.Show();
     }
 
-    private PcResultWindow(string text, int milliseconds, System.Drawing.Rectangle? screen = null)
+    public static void ClearSubtitle()
     {
+        if (current is { isSubtitle: true } window) window.Close();
+    }
+
+    private PcResultWindow(string text, int milliseconds, System.Drawing.Rectangle? screen = null, bool isSubtitle = false)
+    {
+        this.isSubtitle = isSubtitle;
         monitorBounds = screen;
         var work = SystemParameters.WorkArea;
         WindowStyle = WindowStyle.None;
