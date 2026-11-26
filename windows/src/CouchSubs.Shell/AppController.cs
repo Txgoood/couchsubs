@@ -1554,9 +1554,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (adaptive ? !pcScanPolicy.ShouldScan(scanTick, changedWorldRegions.Count > 0)
             : changedWorldRegions.Count == 0 && DateTime.UtcNow < nextWorldScan) return;
         if (Interlocked.CompareExchange(ref worldBusy, 1, 0) != 0) return;
+        var priorityScan = adaptive && pcScanPolicy.PriorityScanPending;
         if (adaptive) pcScanPolicy.MarkScan(scanTick);
         // Several changed areas usually signal a new menu. A full read can also discover previously unseen panels.
-        var regions = changedWorldRegions.Count is > 0 and <= 4 ? changedWorldRegions.ToArray() : null;
+        var regions = !priorityScan && changedWorldRegions.Count is > 0 and <= 4 ? changedWorldRegions.ToArray() : null;
         if (regions is null) nextWorldScan = DateTime.UtcNow.AddMilliseconds(1200);
         var scanWork = CancellationTokenSource.CreateLinkedTokenSource(worldWork.Token);
         worldScanWork = scanWork;
@@ -1568,9 +1569,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var display = settings.PcDisplayId;
         var pc = settings.Source == GameSource.Pc;
         var now = DateTime.UtcNow;
-        var quickRead = pc && regions is null && (adaptive
+        var quickRead = pc && regions is null && (priorityScan || (adaptive
             ? pcScanPolicy.Moving || previousFrame is null || now < nextDetailedPcScan
-            : now < nextDetailedPcScan || previousFrame is null || !ScreenTranslation.SameScreen(previousFrame, frame));
+            : now < nextDetailedPcScan || previousFrame is null || !ScreenTranslation.SameScreen(previousFrame, frame)));
         if (pc && regions is null && !quickRead) nextDetailedPcScan = now.AddSeconds(6);
         var englishToTurkish = EnglishToTurkishScreen;
         var revision = Volatile.Read(ref worldRevision);
@@ -1697,7 +1698,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         LastFrame = latest;
         if (IsPcMode && settings.PcPerformanceProfile && settings.AutoWorldText)
         {
-            pcScanPolicy.Observe(latest);
+            if (pcScanPolicy.Observe(latest, Environment.TickCount64)) worldScanWork?.Cancel();
             Volatile.Write(ref pcFullCaptureInterval, pcScanPolicy.FullCaptureInterval);
         }
         RefreshScreenOverlay();
