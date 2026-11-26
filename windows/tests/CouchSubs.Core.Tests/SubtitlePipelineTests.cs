@@ -160,6 +160,80 @@ public class SubtitlePipelineTests
     }
 
     [Theory]
+    [InlineData("Pres @ o browse-the-Shop menu")]
+    [InlineData("Pre S) Oht browse the shop menu")]
+    [InlineData("Hol o interact with")]
+    [InlineData("Ho(d interact with")]
+    [InlineData("Hold to interact with")]
+    [InlineData("Purchase a longarm")]
+    [InlineData("Return to Andrew")]
+    [InlineData("Press E to open inventory")]
+    public async Task GameplayInstructionsCanBeShownButNeverSpoken(string prompt)
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader(prompt, prompt), new DistinctTranslator(), sender);
+        var spoken = 0;
+        pipeline.SpeechReady += (_, _) => spoken++;
+
+        await Run(pipeline, 2);
+
+        Assert.Equal([DistinctTranslator.Target], sender.Sent);
+        Assert.Equal(0, spoken);
+    }
+
+    [Fact]
+    public async Task CaptionWinsWhenInterfaceTextAndDialogueAreTogether()
+    {
+        var reading = Reading.FromText("Andrew: Do you need anything?\nPres @ o browse-the-Shop menu");
+        var pipeline = new SubtitlePipeline(new LinesReader(reading), new DistinctTranslator(), new FakeSender());
+        var spoken = new List<string>();
+        pipeline.SpeechReady += (lines, _) => spoken.AddRange(lines.Select(line => line.English));
+
+        await Run(pipeline, 2);
+
+        Assert.Equal("Andrew: Do you need anything?", pipeline.LastPair?.Source);
+        Assert.Equal(["Do you need anything?"], spoken);
+    }
+
+    [Theory]
+    [InlineData(0.38, 0.62, true)]
+    [InlineData(0.04, 0.28, false)]
+    public async Task UnlabelledTextNeedsRepeatedReadingInTheSubtitlePosition(double left, double right, bool expectedSpeech)
+    {
+        var reading = new Reading([new TextLine("Leave it with me", new TextBox(left, .75, right, .84))]);
+        var pipeline = new SubtitlePipeline(new LinesReader(reading), new DistinctTranslator(), new FakeSender());
+        var count = 0;
+        pipeline.SpeechReady += (_, _) => count++;
+
+        await Run(pipeline, 1);
+        Assert.Equal(0, count);
+        await Run(pipeline, 1);
+
+        Assert.NotNull(pipeline.LastPair);
+        Assert.Equal(expectedSpeech ? 1 : 0, count);
+    }
+
+    [Fact]
+    public async Task OpeningAPromptDoesNotInvalidateDialogueAlreadyReadyToPlay()
+    {
+        var pipeline = new SubtitlePipeline(new FakeReader("Need anything?", "Purchase a longarm", "Purchase a longarm"),
+            new DistinctTranslator(), new FakeSender());
+        var readiness = new List<Func<bool>>();
+        pipeline.SpeechReady += (_, canStart) => readiness.Add(canStart);
+
+        await Run(pipeline, 3);
+
+        Assert.True(Assert.Single(readiness)());
+        Assert.Equal("Purchase a longarm", pipeline.LastPair?.Source);
+    }
+
+    private sealed class DistinctTranslator : ITextTranslator
+    {
+        public const string Target = "Türkçe deneme çıktısı.";
+        public Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default) => Task.FromResult(Target);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task SubtitleBoxIsSentInFrameCoordinates(bool alreadyCropped)

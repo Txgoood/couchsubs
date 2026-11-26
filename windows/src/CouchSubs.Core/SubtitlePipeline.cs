@@ -22,6 +22,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// </summary>
     private int lastRequested;
     private int lastShown;
+    private int lastSpeechRequested;
+    private string previousSpeechReading = "";
     /// <summary>Şu an oyun ekranında duran satırın numarası (bölge boşalınca null).</summary>
     private int? lineOnScreen;
     private long? sourceMissingSince;
@@ -43,7 +45,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
     /// <summary>Yeni çeviri gösterilince çağrılır (kaynak, çeviri).</summary>
     public event Action<string, string>? PairShown;
-    /// <summary>TV'ye giden her yeni altyazının seslendirilecek cümleleri (dublaj).</summary>
+    /// <summary>Türkçe altyazılardan konuşma olarak değerlendirilen satırlar.</summary>
     public event Action<IReadOnlyList<SpokenLine>, Func<bool>>? SpeechReady;
     public event Action? TranslationStarting;
     public bool IsTranslating => Volatile.Read(ref latestTranslation) is not null;
@@ -87,15 +89,24 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         // Yazı tanımanın uydurduğu sözcük çöpleri ("ou$3e") de çevirmene gitmez.
         // Alandaki menü ve köşe göstergeleri de altyazı değildir; yalnız altyazı bloğu çevrilir ve kutusu ona göre olur.
         var area = new TextBox(region.Left, region.Top, region.Right, region.Bottom);
-        var reading = raw.WithoutButtonPrompts().WithoutOcrNoise().SubtitleBlock(area);
+        var cleaned = raw.WithoutButtonPrompts().WithoutOcrNoise();
+        // Prefer a real subtitle when gameplay instructions share the crop.
+        // An isolated instruction may still be shown visually.
+        var dialogue = new Reading(cleaned.Lines.Where(line => !DialogueTextFilter.IsInterface(line.Text))).SubtitleBlock(area);
+        var reading = dialogue.Lines.Count > 0 ? dialogue : cleaned.SubtitleBlock(area);
 
         lock (gate)
         {
             if (readSession != session) return;
-            Volatile.Write(ref currentSubtitle, reading.Box is { } detected
-                ? new TextLine(reading.Text, detected.PlacedIn(area))
+            var detected = dialogue.Box?.PlacedIn(area);
+            Volatile.Write(ref currentSubtitle, detected is { } position
+                ? new TextLine(dialogue.Text, position)
                 : null);
-            sourceMissingSince = reading.Text.Length == 0 ? sourceMissingSince ?? Environment.TickCount64 : null;
+            var observed = TextMatch.Normalize(dialogue.Text);
+            var speechEligible = DialogueTextFilter.CanSpeak(dialogue.Text, detected,
+                TextMatch.IsSimilar(observed, previousSpeechReading));
+            previousSpeechReading = observed;
+            sourceMissingSince = speechEligible ? null : sourceMissingSince ?? Environment.TickCount64;
             var action = stabilizer.Feed(reading.Text);
             switch (action.Kind)
             {
@@ -111,13 +122,14 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     var tokenSource = new CancellationTokenSource();
                     latestTranslation = tokenSource;
                     var number = ++lastRequested;
+                    if (speechEligible) lastSpeechRequested = number;
                     var current = session;
                     lineOnScreen = number;
                     TranslationStarting?.Invoke();
                     // Çevirmen burada, istek sırasıyla çağrılır (ayrı görevle başlatılsa sıra karışabilirdi).
                     // Çeviri hemen bittiyse kendini zaten listeden çıkarmıştır; yeniden eklenmez.
                     var box = reading.Box?.PlacedIn(area).CenteredOnScreen();
-                    var task = TranslateAndForget(action.Text!, box, number, current, tokenSource);
+                    var task = TranslateAndForget(action.Text!, box, number, current, speechEligible, tokenSource);
                     if (!task.IsCompleted) translations[number] = task;
                     break;
             }
@@ -145,10 +157,10 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         _ => ReadingTime(text)
     };
 
-    private async Task TranslateAndForget(string source, TextBox? box, int number, int current,
+    private async Task TranslateAndForget(string source, TextBox? box, int number, int current, bool speechEligible,
         CancellationTokenSource tokenSource)
     {
-        try { await Translate(source, box, number, current, tokenSource.Token); }
+        try { await Translate(source, box, number, current, speechEligible, tokenSource.Token); }
         finally
         {
             lock (gate)
@@ -160,7 +172,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         }
     }
 
-    private async Task Translate(string source, TextBox? box, int number, int current,
+    private async Task Translate(string source, TextBox? box, int number, int current, bool speechEligible,
         CancellationToken token)
     {
         string translated;
@@ -207,7 +219,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             LastPair = (source, translated);
             LastBox = box;
         }
-        var speech = SpeechReady;
+        var speech = speechEligible ? SpeechReady : null;
         var lines = speech is null ? null : translator.SpokenLines(source, translated);
         PairShown?.Invoke(source, translated);
         if (speech is not null)
@@ -222,7 +234,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private bool CanStartSpeech(int current, int number)
     {
         lock (gate)
-            return current == session && number == lastRequested &&
+            return current == session && number == lastSpeechRequested &&
                 (sourceMissingSince is not { } missing || Environment.TickCount64 - missing <= SpeechGraceMilliseconds);
     }
 
@@ -236,6 +248,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             latestTranslation = null;
             lineOnScreen = null;
             sourceMissingSince = null;
+            previousSpeechReading = "";
             lastReading = Reading.Empty;
             Volatile.Write(ref currentSubtitle, null);
             schedule.Reset();
