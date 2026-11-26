@@ -11,7 +11,7 @@ namespace CouchSubs.Core.Dubbing;
 /// </summary>
 public static partial class SubtitleDialogue
 {
-    [GeneratedRegex(@"^\s*(?<name>[\p{L}][\p{L}\p{M}0-9 ._'-]{0,27})\s*:\s+(?<text>.+)$")]
+    [GeneratedRegex(@"^[\s.•]*(?<name>[\p{L}][\p{L}\p{M}0-9 ._'-]{0,27})\s*:\s+(?<text>.+)$")]
     private static partial Regex NamePrefix();
 
     [GeneratedRegex(@"^\s*[-–—]\s*(?<text>.+)$")]
@@ -23,7 +23,14 @@ public static partial class SubtitleDialogue
         var sourceLines = Lines(original);
         var trLines = Lines(translated);
         if (sourceLines.Length != trLines.Length || trLines.Length == 0)
-            return [new SpokenLine(original, translated.Trim())];
+        {
+            // A translation can flatten a wrapped caption. A single labelled
+            // turn keeps its speaker even when the sides wrap differently.
+            if (sourceLines.Length == 0 || sourceLines.Skip(1).Any(IsTurn) || trLines.Skip(1).Any(IsTurn))
+                return [new SpokenLine(original, translated.Trim())];
+            sourceLines = [string.Join(' ', sourceLines)];
+            trLines = [string.Join(' ', trLines)];
+        }
 
         var output = new List<SpokenLine>(trLines.Length);
         for (var i = 0; i < sourceLines.Length; i++)
@@ -58,11 +65,13 @@ public static partial class SubtitleDialogue
         var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length > 3 || words.Length == 0) return false;
         // Bilinen karakter isimlerini normal yazımla da tanı.
-        if (NameGender.Guess(name) is not null) return true;
+        if (NameGender.Guess(name) is not null || VoiceCast.GenericSpeakerGroup(name) is not null) return true;
         // Oyunların etiket biçimi: tamamı büyük harf (örn. "UNKNOWN SOLDIER:").
         return name.Length > 1 && name.Any(char.IsLetter) &&
                name.Where(char.IsLetter).All(char.IsUpper);
     }
+
+    private static bool IsTurn(string text) => NamePrefix().IsMatch(text) || DialogueDash().IsMatch(text);
 
     private static string[] Lines(string text) =>
         text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

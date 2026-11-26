@@ -12,6 +12,22 @@ public sealed class SpeechAudio(float[] samples, int sampleRate)
     public int SampleRate { get; } = sampleRate;
     public double Duration => (double)Samples.Length / SampleRate;
 
+    public SpeechAudio WithVoiceRate(double rate)
+    {
+        if (rate == 1 || Samples.Length < 2) return this;
+        if (!double.IsFinite(rate) || rate is < 0.85 or > 1.15)
+            throw new ArgumentOutOfRangeException(nameof(rate));
+        var result = new float[(int)Math.Round(Samples.Length / rate)];
+        for (var i = 0; i < result.Length; i++)
+        {
+            var position = i * rate;
+            var left = Math.Min((int)position, Samples.Length - 2);
+            var fraction = (float)Math.Clamp(position - left, 0, 1);
+            result[i] = Samples[left] + (Samples[left + 1] - Samples[left]) * fraction;
+        }
+        return new SpeechAudio(result, SampleRate);
+    }
+
     /// <summary>
     /// 16 bit tam sayı ya da 32 bit kayan noktalı PCM WAV okur. Akış hâlinde yazılmış dosyada (boyut alanları 0 ya da
     /// en büyük değer) veri dosyanın sonuna kadar sürer. Çok kanallıysa ilk kanal alınır.

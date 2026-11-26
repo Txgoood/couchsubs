@@ -8,7 +8,7 @@ namespace CouchSubs.Core.Dubbing;
 
 /// <summary>Dublaj sesleri: Pocket TTS Turkish'in hazır sesleri (yapay, gerçek kişi değil).</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<DubbingVoice>))]
-public enum DubbingVoice { Female1, Female2, Female3, Male1, Male2, Male3 }
+public enum DubbingVoice { Female1, Female2, Female3, Male1, Male2, Male3, Female4, Female5, Female6, Male4, Male5, Male6 }
 
 public enum VoiceGender { Female, Male }
 
@@ -19,9 +19,31 @@ public enum CharacterGroup { Unknown, Male, Female, Child, Creature, Narrator }
 public static class DubbingVoices
 {
     public static readonly DubbingVoice[] All = Enum.GetValues<DubbingVoice>();
+    public static readonly DubbingVoice[] References = [DubbingVoice.Female1, DubbingVoice.Female2, DubbingVoice.Female3,
+        DubbingVoice.Male1, DubbingVoice.Male2, DubbingVoice.Male3];
+
+    // Variants reuse the installed references and gently change the generated voice.
+    public static DubbingVoice Reference(this DubbingVoice voice) => voice switch
+    {
+        DubbingVoice.Female4 => DubbingVoice.Female1,
+        DubbingVoice.Female5 => DubbingVoice.Female2,
+        DubbingVoice.Female6 => DubbingVoice.Female3,
+        DubbingVoice.Male4 => DubbingVoice.Male1,
+        DubbingVoice.Male5 => DubbingVoice.Male2,
+        DubbingVoice.Male6 => DubbingVoice.Male3,
+        _ => voice,
+    };
+
+    public static double PlaybackRate(this DubbingVoice voice) => voice switch
+    {
+        DubbingVoice.Female4 or DubbingVoice.Male4 => 1.09,
+        DubbingVoice.Female5 or DubbingVoice.Male5 => 0.91,
+        DubbingVoice.Female6 or DubbingVoice.Male6 => 0.94,
+        _ => 1,
+    };
 
     /// <summary>Modeldeki dosya adı ("female_1").</summary>
-    public static string FileName(this DubbingVoice voice) => voice switch
+    public static string FileName(this DubbingVoice voice) => voice.Reference() switch
     {
         DubbingVoice.Female1 => "female_1",
         DubbingVoice.Female2 => "female_2",
@@ -32,7 +54,7 @@ public static class DubbingVoices
     };
 
     public static VoiceGender Gender(this DubbingVoice voice) =>
-        voice is DubbingVoice.Female1 or DubbingVoice.Female2 or DubbingVoice.Female3 ? VoiceGender.Female : VoiceGender.Male;
+        voice.Reference() is DubbingVoice.Female1 or DubbingVoice.Female2 or DubbingVoice.Female3 ? VoiceGender.Female : VoiceGender.Male;
 }
 
 /// <summary>
@@ -53,6 +75,7 @@ public sealed class VoiceCast
     public DubbingVoice? MaleNpcVoice { get; set; }
     public DubbingVoice? FemaleNpcVoice { get; set; }
     public DubbingVoice? UnknownNpcVoice { get; set; }
+    [JsonIgnore] public bool ReserveGtaLeadVoices { get; init; }
 
     // Etiketsiz repliklerde sadece açık diyalog tiresi varsa dönüşümlü ses verilir.
     // İlk tireli konuşma anlatıcıdan başlar.
@@ -79,46 +102,60 @@ public sealed class VoiceCast
         };
     }
 
-    public DubbingVoice NpcVoice(CharacterGroup group) => group switch
+    private DubbingVoice? NpcOverride(CharacterGroup group) => group switch
     {
-        CharacterGroup.Male => MaleNpcVoice ?? Narrator,
-        CharacterGroup.Female => FemaleNpcVoice ?? Partner,
-        _ => UnknownNpcVoice ?? Narrator
+        CharacterGroup.Male => MaleNpcVoice,
+        CharacterGroup.Female => FemaleNpcVoice,
+        _ => UnknownNpcVoice,
     };
 
+    private DubbingVoice? LeadVoice(string key) => ReserveGtaLeadVoices ? key switch
+    {
+        "JASON" => Assignments.GetValueOrDefault("JASON", Assignments.GetValueOrDefault("JASON DUVAL", DubbingVoice.Male1)),
+        "LUCIA" => Assignments.GetValueOrDefault("LUCIA", Assignments.GetValueOrDefault("LUCIA CAMINOS", DubbingVoice.Female1)),
+        _ => null,
+    } : null;
+
+    private string SpeakerKey(string name) => (ReserveGtaLeadVoices ? Key(name) : "") switch
+    {
+        "JASON DUVAL" => "JASON",
+        "LUCIA CAMINOS" => "LUCIA",
+        _ => Key(name),
+    };
+
+    private DubbingVoice ChooseVoice(CharacterGroup group, bool balance = true)
+    {
+        var reserved = ReserveGtaLeadVoices
+            ? new[] { LeadVoice("JASON")!.Value.Reference(), LeadVoice("LUCIA")!.Value.Reference() }
+            : new[] { Narrator.Reference(), Partner.Reference() };
+        // Two primary voices may be manually set to the same gender; that still leaves alternatives.
+        var ordered = DubbingVoices.All.Where(voice => group switch
+        {
+            CharacterGroup.Male => voice.Gender() == VoiceGender.Male,
+            CharacterGroup.Female or CharacterGroup.Child => voice.Gender() == VoiceGender.Female,
+            _ => true,
+        });
+        var available = ordered.Where(voice => !reserved.Contains(voice.Reference()));
+        return balance ? available.OrderBy(voice => Assignments.Values.Count(used => used == voice)).First() : available.First();
+    }
+
+    public DubbingVoice NpcVoice(CharacterGroup group) => NpcOverride(group) ?? ChooseVoice(group, balance: false);
+
     /// <summary>
-    /// İki sesli mod: bilinen erkek isimleri anlatıcı, bilinen kadın isimleri partner.
-    /// Cinsiyeti bilinmeyen iki farklı isim sırayla iki role sabitlenir.
-    /// Bu atamalar oyun boyunca ve ayarlarda kalıcıdır.
+    /// Persistent character voices use their group and the least-used unreserved profile.
     /// </summary>
     public DubbingVoice VoiceFor(SpokenLine line, out bool assigned)
     {
         assigned = false;
         if (!string.IsNullOrWhiteSpace(line.Speaker))
         {
-            if (GenericSpeakerGroup(line.Speaker) is { } group) return NpcVoice(group);
-            var key = Key(line.Speaker);
+            var group = GenericSpeakerGroup(line.Speaker);
+            var key = SpeakerKey(line.Speaker);
+            // Labels like WOMAN 1 and WOMAN 2 are distinct. A bare WOMAN label
+            // cannot identify a different person in each scene.
+            if (group is { } generic && !key.Any(char.IsDigit)) return NpcVoice(generic);
             if (Assignments.TryGetValue(key, out var known)) return known;
-            // Anonymous voices come from the acoustic embedding model, not a gender guess.
-            // Distribute across the six licensed preset voices instead of collapsing
-            // every new unnamed GTA character to narrator/partner.
-            if (key.StartsWith("SES ", StringComparison.Ordinal))
-            {
-                var index = Assignments.Keys.Count(x => x.StartsWith("SES ", StringComparison.Ordinal)) %
-                    DubbingVoices.All.Length;
-                var acousticVoice = DubbingVoices.All[index];
-                Assignments[key] = acousticVoice;
-                assigned = true;
-                return acousticVoice;
-            }
-            var gender = NameGender.Guess(line.Speaker);
-            var voice = gender switch
-            {
-                VoiceGender.Female => Partner,
-                VoiceGender.Male => Narrator,
-                _ => Assignments.Values.Count(v => v == Narrator) <= Assignments.Values.Count(v => v == Partner)
-                    ? Narrator : Partner,
-            };
+            var voice = LeadVoice(key) ?? ChooseVoice(group ?? GroupFor(key));
             Assignments[key] = voice;
             assigned = true;
             return voice;
@@ -133,19 +170,19 @@ public sealed class VoiceCast
         name = name.Trim();
         if (name.Length is < 2 or > 32 || SuggestedNames.Count > 250 || GenericSpeakerGroup(name) is not null)
             return false;
-        var key = Key(name);
+        var key = SpeakerKey(name);
         if (Assignments.ContainsKey(key) || SuggestedNames.GetValueOrDefault(key) >= 3) return false;
         SuggestedNames[key] = SuggestedNames.GetValueOrDefault(key) + 1;
         return true;
     }
 
-    public void DismissSuggestion(string name) => SuggestedNames.Remove(Key(name));
+    public void DismissSuggestion(string name) => SuggestedNames.Remove(SpeakerKey(name));
 
     /// <summary>Manually correct a character name without changing its chosen Turkish voice.</summary>
     public void Rename(string oldName, string newName)
     {
-        var oldKey = Key(oldName);
-        var newKey = Key(newName);
+        var oldKey = SpeakerKey(oldName);
+        var newKey = SpeakerKey(newName);
         if (newKey == oldKey && Assignments.ContainsKey(oldKey)) return;
         if (newKey.Length is 0 or > 64 ||
             !Assignments.TryGetValue(oldKey, out var voice))
@@ -161,16 +198,15 @@ public sealed class VoiceCast
 
     public void AcceptSuggestion(string name, CharacterGroup group = CharacterGroup.Unknown)
     {
-        if (!SuggestedNames.ContainsKey(Key(name))) return;
-        SuggestedNames.Remove(Key(name));
+        if (!SuggestedNames.Remove(SpeakerKey(name))) return;
         SetGroup(name, group == CharacterGroup.Unknown ? GroupFor(name) : group);
     }
 
-    public void Assign(DubbingVoice voice, string name) => Assignments[Key(name)] = voice;
+    public void Assign(DubbingVoice voice, string name) => Assignments[SpeakerKey(name)] = voice;
 
     public CharacterGroup GroupFor(string name)
     {
-        var key = Key(name);
+        var key = SpeakerKey(name);
         if (Groups.TryGetValue(key, out var group)) return group;
         return NameGender.Guess(name) switch
         {
@@ -182,26 +218,29 @@ public sealed class VoiceCast
 
     public void SetGroup(string name, CharacterGroup group)
     {
-        var key = Key(name);
+        var key = SpeakerKey(name);
         Groups[key] = group;
-        if (!Assignments.ContainsKey(key))
-            Assignments[key] = group switch
-            {
-                CharacterGroup.Female => Partner,
-                CharacterGroup.Child => Partner,
-                _ => Narrator,
-            };
+        if (!Assignments.ContainsKey(key)) Assignments[key] = LeadVoice(key) ?? ChooseVoice(group);
+    }
+
+    public void ReassignAutomatically(string name)
+    {
+        var key = SpeakerKey(name);
+        Assignments.Remove(key);
+        if (ReserveGtaLeadVoices && key == "JASON") Assignments.Remove("JASON DUVAL");
+        if (ReserveGtaLeadVoices && key == "LUCIA") Assignments.Remove("LUCIA CAMINOS");
+        VoiceFor(new SpokenLine("", "", key), out _);
     }
 
     public void Remove(string name)
     {
-        var key = Key(name);
+        var key = SpeakerKey(name);
         Assignments.Remove(key);
         Groups.Remove(key);
         SuggestedNames.Remove(key);
     }
 
-    public VoiceCast Copy() => new()
+    public VoiceCast Copy(bool? reserveGtaLeadVoices = null) => new()
     {
         Assignments = new Dictionary<string, DubbingVoice>(Assignments, StringComparer.Ordinal),
         Groups = new Dictionary<string, CharacterGroup>(Groups, StringComparer.Ordinal),
@@ -211,6 +250,7 @@ public sealed class VoiceCast
         MaleNpcVoice = MaleNpcVoice,
         FemaleNpcVoice = FemaleNpcVoice,
         UnknownNpcVoice = UnknownNpcVoice,
+        ReserveGtaLeadVoices = reserveGtaLeadVoices ?? ReserveGtaLeadVoices,
     };
 }
 

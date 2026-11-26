@@ -49,7 +49,18 @@ public partial class DubbingCard : UserControl
         Refresh();
     }
 
-    private static string Label(DubbingVoice voice) => Localizer.Current[voice switch
+    private static string Label(DubbingVoice voice) => voice switch
+    {
+        DubbingVoice.Female4 => "Kadın 4 (daha canlı)",
+        DubbingVoice.Female5 => "Kadın 5 (daha tok)",
+        DubbingVoice.Female6 => "Kadın 6 (daha sakin)",
+        DubbingVoice.Male4 => "Erkek 4 (daha canlı)",
+        DubbingVoice.Male5 => "Erkek 5 (daha tok)",
+        DubbingVoice.Male6 => "Erkek 6 (daha sakin)",
+        _ => ReferenceLabel(voice),
+    };
+
+    private static string ReferenceLabel(DubbingVoice voice) => Localizer.Current[voice switch
     {
         DubbingVoice.Female1 => "Woman 1 (bright)",
         DubbingVoice.Female2 => "Woman 2 (warm)",
@@ -325,6 +336,10 @@ public partial class DubbingCard : UserControl
                 controller?.AssignVoice(voice, name);
         };
         row.Children.Add(voicePicker);
+        var automatic = new Button { Content = "Oto", ToolTip = "Bu karaktere havuzdan yeniden otomatik ses ata",
+            Margin = new Thickness(0, 0, 6, 0) };
+        automatic.Click += (_, _) => controller?.ReassignCharacterVoice(name);
+        row.Children.Add(automatic);
         var remove = new Button { Content = "Sil", ToolTip = "Bu oyundan karakter kaydını sil" };
         remove.Click += (_, _) => controller?.RemoveCharacter(name);
         row.Children.Add(remove);
@@ -350,7 +365,7 @@ public partial class DubbingCard : UserControl
         if (controller is null) return;
         var query = CharacterSearch.Text.Trim();
         var total = controller.Settings.Dubbing.Cast.Assignments.Keys.Count(name =>
-            VoiceCast.GenericSpeakerGroup(name) is null && name.Contains(query, StringComparison.OrdinalIgnoreCase));
+            IsIndividualCharacter(name) && name.Contains(query, StringComparison.OrdinalIgnoreCase));
         characterPage = Math.Min(Math.Max(0, (total - 1) / PageSize), characterPage + 1);
         BuildVoices(controller.Settings.Dubbing.Cast);
     }
@@ -359,6 +374,8 @@ public partial class DubbingCard : UserControl
     {
         RefreshSuggestedNames(cast);
         Voices.Children.Clear();
+        Voices.Children.Add(new TextBlock { Text = "12 yerel ses profili · 6 temel ses ve 6 ton varyasyonu",
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 8) });
         Voices.Children.Add(VoiceRow(Localizer.Current["Narrator and unnamed lines"], cast.Narrator,
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, narrator: voice) } })));
         Voices.Children.Add(VoiceRow(Localizer.Current["Second speaker in dialogue"], cast.Partner,
@@ -371,7 +388,7 @@ public partial class DubbingCard : UserControl
             voice => ChangeNpcVoice(CharacterGroup.Unknown, voice)));
         var filter = CharacterSearch.Text.Trim();
         var names = cast.Assignments.Keys.Where(name =>
-            VoiceCast.GenericSpeakerGroup(name) is null && name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            IsIndividualCharacter(name) && name.Contains(filter, StringComparison.OrdinalIgnoreCase))
             .OrderBy(name => name, StringComparer.Ordinal).ToArray();
         characterPage = Math.Min(characterPage, Math.Max(0, (names.Length - 1) / PageSize));
         CharacterPageInfo.Text = names.Length == 0 ? "0 karakter" :
@@ -385,6 +402,9 @@ public partial class DubbingCard : UserControl
         foreach (var name in names.Skip(characterPage * PageSize).Take(PageSize))
             Voices.Children.Add(CharacterRow(name, cast));
     }
+
+    private static bool IsIndividualCharacter(string name) =>
+        VoiceCast.GenericSpeakerGroup(name) is null || name.Any(char.IsDigit);
 
     private void ChangeNpcVoice(CharacterGroup group, DubbingVoice voice) =>
         Update(s =>

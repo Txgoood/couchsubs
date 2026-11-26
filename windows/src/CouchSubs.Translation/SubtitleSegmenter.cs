@@ -18,7 +18,7 @@ internal static partial class SubtitleSegmenter
 
     // Etiket: satır ya da cümle başında, en çok üç sözcüklü ad ve iki nokta. Ya tümü büyük harf ("ATREUS:", "OLD MAN:")
     // ya da her sözcüğü büyük harfle başlayan ("Kratos:", "Mimir Head:").
-    [GeneratedRegex(@"^(?<label>(?<name>\p{Lu}[\p{Lu}\d'’.\-]+(?:[ ]\p{Lu}[\p{Lu}\d'’.\-]*){0,2}|\p{Lu}\p{Ll}[\p{L}'’.\-]*(?:[ ]\p{Lu}[\p{L}'’.\-]*){0,2}):)\s+")]
+    [GeneratedRegex(@"^[.• ]*(?<label>(?<name>(?:\p{Lu}[\p{Lu}\d'’.\-]+(?:[ ]\p{Lu}[\p{Lu}\d'’.\-]*){0,2}|\p{Lu}\p{Ll}[\p{L}'’.\-]*(?:[ ]\p{Lu}[\p{L}'’.\-]*){0,2})(?: \d{1,3})?):)\s+")]
     private static partial Regex SpeakerLabelPattern();
 
     /// <summary>Büyük harfle başlayıp iki noktayla biten ama ad olmayan oyun başlıkları; bunlar çevrilir.</summary>

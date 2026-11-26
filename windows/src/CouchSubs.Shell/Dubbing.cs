@@ -497,7 +497,8 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
             {
                 var token = operationCancellation.Token;
                 var timer = Stopwatch.StartNew();
-                var result = (await engine.SynthesizeAsync(text, url, token)).Tightened().SoftEdges();
+                var result = (await engine.SynthesizeAsync(text, url, token)).Tightened()
+                    .WithVoiceRate(voice.PlaybackRate()).SoftEdges();
                 timer.Stop();
                 lock (gate)
                 {
@@ -565,7 +566,7 @@ public sealed class Dubber(IDubbingModel model, IAudioOutput audio, Func<Subtitl
     {
         var current = server();
         if (ReferenceEquals(publishedOn, current) || !model.IsInstalled) return;
-        foreach (var voice in DubbingVoices.All)
+        foreach (var voice in DubbingVoices.References)
         {
             // Windows sesinin örnek dosyası yok; ses türü adresin adından anlaşılır.
             var file = model.VoiceFile(voice);

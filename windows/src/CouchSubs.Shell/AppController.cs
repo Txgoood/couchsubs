@@ -2058,7 +2058,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private void DiscoverDialogueNames(string english)
     {
         if (string.IsNullOrWhiteSpace(english)) return;
-        var cast = settings.Dubbing.Cast.Copy();
+        var cast = ActiveVoiceCast(settings.Dubbing);
         var changed = false;
         var speaker = DialogueNameCandidates.ExplicitSpeaker(english);
         if (speaker is not null && !cast.Assignments.ContainsKey(VoiceCast.Key(speaker)))
@@ -2101,14 +2101,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         name = name.Trim();
         if (name.Length is 0 or > 64) return;
-        var cast = settings.Dubbing.Cast.Copy();
+        var cast = ActiveVoiceCast(settings.Dubbing);
         cast.SetGroup(name, group);
         Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
     }
 
     public void SetCharacterGroup(string name, CharacterGroup group)
     {
-        var cast = settings.Dubbing.Cast.Copy();
+        var cast = ActiveVoiceCast(settings.Dubbing);
         cast.SetGroup(name, group);
         Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
     }
@@ -2123,10 +2123,20 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void AssignVoice(DubbingVoice voice, string name)
     {
-        var cast = settings.Dubbing.Cast.Copy();
+        var cast = ActiveVoiceCast(settings.Dubbing);
         cast.Assign(voice, name);
         Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
     }
+
+    public void ReassignCharacterVoice(string name)
+    {
+        var cast = ActiveVoiceCast(settings.Dubbing);
+        cast.ReassignAutomatically(name);
+        Settings = settings with { Dubbing = GameCastLibrary.SaveCurrent(settings.Dubbing with { Cast = cast }) };
+    }
+
+    private static VoiceCast ActiveVoiceCast(DubbingSettings settings) =>
+        settings.Cast.Copy(GameTitleDetector.Detect(settings.ActiveGame) == "GTA 6");
 
     private Dubber? MakeDubber()
     {
@@ -2136,7 +2146,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             ? (IAudioOutput)game : fallbackAudio;
         var made = new Dubber(model, audio, () => server, () => ServerPort, post)
         {
-            Cast = settings.Dubbing.Cast.Copy(),
+            Cast = ActiveVoiceCast(settings.Dubbing),
             Engine = settings.Dubbing.Engine,
             EmotionMode = settings.Dubbing.EmotionMode,
             ExpressiveSafety = settings.Dubbing.ExpressiveSafety,
@@ -2148,6 +2158,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         };
         made.CastChanged += cast =>
         {
+            if (!ReferenceEquals(dubber, made)) return;
             // A concurrently discovered dialogue-name hint belongs to the
             // game library, not to the Dubber snapshot; never wipe it out.
             foreach (var (name, observations) in settings.Dubbing.Cast.SuggestedNames)
@@ -2301,7 +2312,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             return;
         }
         // Dublajın kendi atadığı ses (CastChanged) zaten dublajda; kullanıcının seçimi kopyalanır.
-        if (!ReferenceEquals(now.Cast, old.Cast)) dubber.Cast = now.Cast.Copy();
+        if (!ReferenceEquals(now.Cast, old.Cast) || now.ActiveGame != old.ActiveGame) dubber.Cast = ActiveVoiceCast(now);
         if (now.GameAtmospherePercent != old.GameAtmospherePercent ||
             now.TurkishVoicePercent != old.TurkishVoicePercent)
             services.GameAudio?.SetAtmosphereMix(now.GameAtmospherePercent, now.TurkishVoicePercent);

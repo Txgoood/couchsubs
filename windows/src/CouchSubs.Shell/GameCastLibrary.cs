@@ -7,7 +7,7 @@ namespace CouchSubs.Shell;
 
 /// <summary>
 /// Oyun değişiminde eski karakterleri korur. Ses dosyaları çoğaltılmaz:
-/// her karakter yalnızca mevcut 6 temel sesten birine işaret eder.
+/// her karakter yerel havuzdaki bir ses profiline işaret eder.
 /// </summary>
 public static class GameCastLibrary
 {

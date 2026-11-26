@@ -54,7 +54,7 @@ public class VoiceCastTests
             Assert.False(assigned);
         }
         Assert.Equal(DubbingVoice.Female3, cast.VoiceFor(new SpokenLine("Hello.", "Merhaba.", "Jason"), out _));
-        Assert.Equal(DubbingVoice.Female1, cast.VoiceFor(new SpokenLine("Hello.", "Merhaba.", "Woman"), out _));
+        Assert.Equal(VoiceGender.Female, cast.VoiceFor(new SpokenLine("Hello.", "Merhaba.", "Woman"), out _).Gender());
         Assert.Equal(2, cast.Assignments.Count);
         Assert.Equal(DubbingVoice.Male3, cast.Copy().UnknownNpcVoice);
     }
@@ -69,9 +69,7 @@ public class VoiceCastTests
         Assert.Equal(VoiceGender.Male, kratos.Gender());
         Assert.Equal(VoiceGender.Female, freya.Gender());
         Assert.Equal(VoiceGender.Male, atreus.Gender());
-        Assert.Equal(cast.Narrator, kratos);
-        Assert.Equal(cast.Narrator, atreus);
-        Assert.Equal(cast.Partner, freya);
+        Assert.NotEqual(kratos, atreus);
         Assert.Equal(kratos, cast.VoiceFor(new SpokenLine("", "", "Kratos"), out assigned));
         Assert.False(assigned);
     }
@@ -80,11 +78,12 @@ public class VoiceCastTests
     public void TwoDistinctUnknownSpeakersGetTwoPersistentVoices()
     {
         var cast = new VoiceCast();
-        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "MYSTERY ONE"), out _));
-        Assert.Equal(cast.Partner, cast.VoiceFor(new SpokenLine("", "", "MYSTERY TWO"), out _));
-        Assert.Equal(cast.Narrator, cast.VoiceFor(new SpokenLine("", "", "MYSTERY ONE"), out _));
+        var first = cast.VoiceFor(new SpokenLine("", "", "MYSTERY ONE"), out _);
+        var second = cast.VoiceFor(new SpokenLine("", "", "MYSTERY TWO"), out _);
+        Assert.NotEqual(first, second);
+        Assert.Equal(first, cast.VoiceFor(new SpokenLine("", "", "MYSTERY ONE"), out _));
         var saved = JsonSerializer.Deserialize<VoiceCast>(JsonSerializer.Serialize(cast))!;
-        Assert.Equal(saved.Partner, saved.VoiceFor(new SpokenLine("", "", "MYSTERY TWO"), out _));
+        Assert.Equal(second, saved.VoiceFor(new SpokenLine("", "", "MYSTERY TWO"), out _));
     }
 
     [Theory]
@@ -154,7 +153,15 @@ public class VoiceCastTests
         Assert.Equal(500, restored.Groups.Count);
         Assert.Equal(CharacterGroup.Creature, restored.GroupFor("GTA NPC 002"));
         Assert.Equal(cast.Assignments["GTA NPC 499"], restored.Assignments["GTA NPC 499"]);
-        Assert.Equal(6, restored.Assignments.Values.Distinct().Count());
+        Assert.Equal(12, restored.Assignments.Values.Distinct().Count());
+    }
+
+    [Fact]
+    public void WrappedNpcSubtitleKeepsItsSpeakerWhenTranslationUsesOneLine()
+    {
+        var line = Assert.Single(SubtitleDialogue.Parse(". •Tourists: Yes,\nwe saw him.", "Evet, onu gördük."));
+        Assert.Equal("Tourists", line.Speaker);
+        Assert.Equal("Yes, we saw him.", line.English);
     }
 
     [Fact]
@@ -183,6 +190,16 @@ public class VoiceCastTests
 
 public class SpeechAudioTests
 {
+    [Fact]
+    public void ProfileChangesPlaybackRateWhileKeepingPcmSampleFormat()
+    {
+        var original = new SpeechAudio(Tone(1), 24000);
+        var result = original.WithVoiceRate(DubbingVoice.Female5.PlaybackRate());
+        Assert.Equal(24000, result.SampleRate);
+        Assert.InRange(result.Duration, 1.09, 1.11);
+        Assert.Equal(24000, original.Samples.Length);
+        Assert.Equal(DubbingVoice.Female2.FileName(), DubbingVoice.Female5.FileName());
+    }
     private static float[] Tone(double seconds) =>
         Enumerable.Range(0, (int)(seconds * 24000)).Select(i => MathF.Sin(i * 0.1f) * 0.5f).ToArray();
 
