@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using CouchSubs.Core.Dubbing;
+
 namespace CouchSubs.Core;
 
 /// <summary>
@@ -47,6 +49,43 @@ public static class ScreenTranslation
             ["on"] = "Açık",
             ["off"] = "Kapalı",
         };
+
+    private static readonly IReadOnlyDictionary<string, string> TurkishGameLabels =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["chuck's tackle & shot"] = "Chuck's Tackle & Shot",
+            ["chuck's tackle &"] = "Chuck's Tackle &",
+            ["fortune & son"] = "Fortune & Son",
+            ["fortune & son moreland 850"] = "Fortune & Son Moreland 850",
+            ["hawk & little"] = "Hawk & Little",
+            ["hawk & little mediator"] = "Hawk & Little Mediator",
+            ["marbles"] = "Marbles",
+            ["sidearms"] = "Tabancalar",
+            ["longarms"] = "Uzun namlulu silahlar",
+            ["purchase a longarm"] = "Uzun namlulu bir silah satın al",
+            ["ammo & equipment"] = "Cephane ve ekipman",
+            ["firearm ammo"] = "Ateşli silah cephanesi",
+            ["pistols"] = "Tabancalar",
+            ["shotguns"] = "Av tüfekleri",
+            ["pump action shotgun"] = "Pompalı av tüfeği",
+            ["pump-action shotgun"] = "Pompalı av tüfeği",
+            ["melee weapons"] = "Yakın dövüş silahları",
+            ["attachments"] = "Eklentiler",
+            ["iron sights"] = "Mekanik nişangâhlar",
+            ["magazines"] = "Şarjörler",
+            ["customize"] = "Özelleştir",
+            ["customise"] = "Özelleştir",
+            ["withdraw"] = "Para çek",
+            ["deposit"] = "Para yatır",
+            ["amount"] = "Tutar",
+            ["gear up"] = "Hazırlan",
+            ["leave when ready"] = "Hazır olduğunda ayrıl",
+            ["return to andrew"] = "Andrew’a geri dön",
+        };
+
+    internal static bool IsGameInterfaceText(string text) =>
+        TurkishGameLabels.ContainsKey(text.Trim()) ||
+        TrimCurrencySuffix(text) is not null;
 
     public static bool SameScreen(Frame first, Frame second)
     {
@@ -110,7 +149,7 @@ public static class ScreenTranslation
     {
         var reading = await Task.Run(() => ReadScreen(frame, reader, regions, cancellationToken, quickRead), cancellationToken)
             .ConfigureAwait(false);
-        var lines = OverlayLines(reading).Where(line => !ExcludeOverlayLine(line));
+        var lines = OverlayLines(reading, englishToTurkish).Where(line => !ExcludeOverlayLine(line));
         var items = new List<Item>();
         var pending = new List<(string Text, TextBox Box, double Height)>();
         foreach (var group in OverlayParagraphs(lines))
@@ -118,7 +157,13 @@ public static class ScreenTranslation
             cancellationToken.ThrowIfCancellationRequested();
             if (isCurrent?.Invoke() == false) return items;
             if (!CanShow(group.Text, group.Box)) continue;
-            if (translator.TryGetSavedTranslation(group.Text, out var saved))
+            if (englishToTurkish && TurkishGameLabels.TryGetValue(group.Text.Replace('’', '\''), out var gameLabel))
+            {
+                if (translator.TryGetManualTranslation(group.Text, out var manual)) Add(group, manual);
+                else if (!string.Equals(gameLabel, group.Text, StringComparison.OrdinalIgnoreCase))
+                    Add(group, IsUppercase(group.Text) ? gameLabel.ToUpper(System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) : gameLabel);
+            }
+            else if (translator.TryGetSavedTranslation(group.Text, out var saved))
                 Add(group, saved);
             else if (englishToTurkish && TurkishMenuLabels.TryGetValue(group.Text, out var label))
                 Add(group, IsUppercase(group.Text) ? label.ToUpper(System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) : label);
@@ -192,8 +237,13 @@ public static class ScreenTranslation
         var width = Math.Min(box.Right, other.Right) - Math.Max(box.Left, other.Left);
         var height = Math.Min(box.Bottom, other.Bottom) - Math.Max(box.Top, other.Top);
         if (width < (box.Right - box.Left) * .3 || height < (box.Bottom - box.Top) * .45) return false;
-        return IsSubtitleLine(line.Text, active.Text) ||
-            TextMatch.IsSameSubtitle(TextMatch.Normalize(line.Text), TextMatch.Normalize(active.Text));
+        if (DialogueTextFilter.IsInterface(line.Text)) return false;
+        return IsSubtitleLine(line.Text, active.Text) || DialogueOcr.IsSameTurn(DialogueOcr.CleanLabel(line.Text), active.Text) ||
+            TextMatch.IsSameSubtitle(TextMatch.Normalize(line.Text), TextMatch.Normalize(active.Text)) ||
+            // Two OCR passes can disagree completely on a clipped word inside
+            // the active dialogue line. Reserve that space for the subtitle.
+            width >= (box.Right - box.Left) * .85 && height >= (box.Bottom - box.Top) * .8 &&
+            (DialogueOcr.IsNamedTurn(active.Text) || SubtitleStabilizer.EndsSentence(active.Text));
     }
 
     private static bool LooksLikeUnconfirmedDialogue(TextLine line)
@@ -238,12 +288,14 @@ public static class ScreenTranslation
         });
     }
 
-    internal static IEnumerable<TextLine> OverlayLines(Reading reading)
+    internal static IEnumerable<TextLine> OverlayLines(Reading reading, bool englishToTurkish = false)
     {
-        foreach (var line in reading.Lines.SelectMany(SplitColumns).OrderBy(line => line.Box?.Top))
+        foreach (var raw in reading.Lines.OrderBy(line => line.Box?.Top))
+        foreach (var line in englishToTurkish && TrimCurrencySuffix(raw.Text) is { } action
+            ? CurrencyLabel(raw, action) : SplitColumns(raw))
         {
             if (line.Box is not { } box || box.Right <= box.Left || box.Bottom <= box.Top) continue;
-            var prompt = ButtonPrompts.IsPrompt(line.Text) || IsShortAction(line.Text) ||
+            var prompt = line.IsControllerHint || ButtonPrompts.IsPrompt(line.Text) || IsShortAction(line.Text) ||
                 line.Words.Any(w => IsShortAction(w.Text));
             var words = line.Words;
             if (!words.Any(word => ButtonPrompts.IsMenuButton(word.Text, prompt)) &&
@@ -271,6 +323,27 @@ public static class ScreenTranslation
                 part.Clear();
                 if (startsAction) part.Add(words[i]);
             }
+        }
+    }
+
+    private static string? TrimCurrencySuffix(string text)
+    {
+        var start = text.IndexOf('(');
+        if (start <= 0 || !text.AsSpan(start).Contains('$') || !text.Skip(start).Any(char.IsAsciiDigit)) return null;
+        var label = text[..start].Trim();
+        return label.Equals("withdraw", StringComparison.OrdinalIgnoreCase) || label.Equals("deposit", StringComparison.OrdinalIgnoreCase)
+            ? label : null;
+    }
+
+    private static IEnumerable<TextLine> CurrencyLabel(TextLine line, string action)
+    {
+        // Use the action word's actual bounds. If OCR combined it with the amount,
+        // leave the original visible until separate word bounds are available.
+        foreach (var word in line.Words)
+        {
+            if (word.Box is null || !word.Text.Equals(action, StringComparison.OrdinalIgnoreCase)) continue;
+            yield return word with { IsControllerHint = true };
+            yield break;
         }
     }
 

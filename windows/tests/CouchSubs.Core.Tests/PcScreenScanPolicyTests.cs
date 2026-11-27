@@ -27,6 +27,18 @@ public sealed class PcScreenScanPolicyTests
     }
 
     [Fact]
+    public void DetailedStaticMenuSkipsPeriodicOcrUntilARegionChanges()
+    {
+        var policy = new PcScreenScanPolicy();
+        var menu = Filled(20);
+        policy.Observe(menu, 0);
+        policy.MarkScan(0);
+        policy.Observe(menu, 7000);
+        Assert.False(policy.ShouldScan(7000, false, detailedOverlayVisible: true));
+        Assert.True(policy.ShouldScan(7000, true, detailedOverlayVisible: true));
+    }
+
+    [Fact]
     public void MotionThrottlesScreenOcrButSettledMenuScansImmediately()
     {
         var policy = new PcScreenScanPolicy();

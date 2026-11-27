@@ -89,7 +89,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private long nextOverlayCheck;
     private long fastCaptureUntil;
     private int inspectionCapture;
-    private sealed record ScreenOverlay(Frame Frame, IReadOnlyList<ScreenTranslation.Item> Items);
+    private sealed record ScreenOverlay(Frame Frame, IReadOnlyList<ScreenTranslation.Item> Items, bool Detailed = false);
     private Dubber? dubber;
     private CancellationTokenSource? pcCaptureCancellation;
     private bool pulseAudioActive;
@@ -764,6 +764,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private ScreenOverlay? manualOverlay;
     private sealed record PcCaption(TextLine Source, string Translation, string Display, long Until);
     private sealed record PcOverlay(IReadOnlyList<ScreenTranslation.Item> Items, string Display, long Until);
+    private const int WorldOverlayDuration = 9000;
+    private const int WorldOverlayRenewalMargin = 2000;
     private PcCaption? pcCaption;
     private PcOverlay? pcOverlay;
     private bool pcOverlayOwnedCaption;
@@ -966,7 +968,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         if (worldOverlay is not { } automatic) return;
         var remainingItems = KeepCurrentItems(automatic.Frame, automatic.Items, pipeline?.CurrentSubtitle);
-        if (remainingItems.Count == automatic.Items.Count) return;
+        if (remainingItems.Count == automatic.Items.Count)
+        {
+            // The current full frame still contains these labels. Renew their display
+            // lifetime without scheduling OCR or asking the translator again.
+            if (IsPcMode && pcOverlay is { } displayed && displayed.Until - now <= WorldOverlayRenewalMargin)
+                PublishOverlay(remainingItems, WorldOverlayDuration, true, displayed.Display);
+            return;
+        }
         foreach (var removed in automatic.Items.Except(remainingItems))
         {
             if (IsCurrentTextRegion(automatic.Frame, removed.Box)) continue;
@@ -980,7 +989,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         else
         {
             worldOverlay = automatic with { Items = remainingItems };
-            PublishOverlay(remainingItems, 9000, IsPcMode, settings.PcDisplayId);
+            PublishOverlay(remainingItems, WorldOverlayDuration, IsPcMode, settings.PcDisplayId);
         }
         Interlocked.Increment(ref worldRevision);
         worldScanWork?.Cancel();
@@ -1339,7 +1348,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var built = new SubtitlePipeline(reader, WithMemory(MakeTranslator(), scope), server,
             IsPcMode ? new ReadScheduler(deepEvery: 6) : new ReadScheduler())
         {
-            TimingMode = settings.Style.Timing
+            TimingMode = settings.Style.Timing,
+            ShowInterfaceFallback = !(IsPcMode && worldReader is not null)
         };
         built.PairShown += (source, translation) =>
         {
@@ -1551,7 +1561,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (pipeline?.IsTranslating == true) return;
         var adaptive = IsPcMode && settings.PcPerformanceProfile;
         var scanTick = Environment.TickCount64;
-        if (adaptive ? !pcScanPolicy.ShouldScan(scanTick, changedWorldRegions.Count > 0)
+        if (adaptive ? !pcScanPolicy.ShouldScan(scanTick, changedWorldRegions.Count > 0, worldOverlay?.Detailed == true)
             : changedWorldRegions.Count == 0 && DateTime.UtcNow < nextWorldScan) return;
         if (Interlocked.CompareExchange(ref worldBusy, 1, 0) != 0) return;
         var priorityScan = adaptive && pcScanPolicy.PriorityScanPending;
@@ -1632,8 +1642,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     if (complete && worldOverlay is not null) ClearWorldOverlay();
                     return;
                 }
-                worldOverlay = new ScreenOverlay(frame, visible);
-                PublishOverlay(visible, 9000, pc, display);
+                var sameOverlay = worldOverlay?.Items.SequenceEqual(visible) == true;
+                worldOverlay = new ScreenOverlay(frame, visible, complete && regions is null && !quickRead);
+                if (sameOverlay && pc && pcOverlay is { } displayed &&
+                    displayed.Until - Environment.TickCount64 > WorldOverlayRenewalMargin) return;
+                PublishOverlay(visible, WorldOverlayDuration, pc, display);
             }
         });
     }

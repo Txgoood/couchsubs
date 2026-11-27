@@ -195,6 +195,32 @@ public class SubtitlePipelineTests
         Assert.Equal(["Do you need anything?"], spoken);
     }
 
+    [Fact]
+    public async Task CorrectedSpeakerLabelCanUpdateCaptionWithoutSubmittingSpeechAgain()
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader("Oh, Lootin' Jason.", "Afygrew.• Oh, Lootin' Jason.",
+            "Jason: Just looking."), new DistinctTranslator(), sender);
+        var spoken = new List<string>();
+        pipeline.SpeechReady += (lines, _) => spoken.AddRange(lines.Select(line => line.English));
+
+        await Run(pipeline, 2);
+        Assert.Equal("Andrew: Oh, Lootin' Jason.", pipeline.LastPair?.Source);
+        await Run(pipeline, 1);
+        Assert.Equal(["Oh, Lootin' Jason.", "Just looking."], spoken);
+    }
+
+    [Fact]
+    public async Task PositionedInterfaceModeDoesNotSendObjectivesAsSubtitles()
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader("Purchase a longarm", "Purchase a longarm",
+            "Andrew: Ready to pick something?"), new DistinctTranslator(), sender) { ShowInterfaceFallback = false };
+        await Run(pipeline, 3);
+        Assert.Equal([DistinctTranslator.Target], sender.Sent);
+        Assert.Equal("Andrew: Ready to pick something?", pipeline.LastPair?.Source);
+    }
+
     [Theory]
     [InlineData(0.38, 0.62, true)]
     [InlineData(0.04, 0.28, false)]

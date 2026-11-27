@@ -12,6 +12,22 @@ public class ScreenTranslationTests
         new(text, new TextBox(left, top, right, top + height));
 
     [Fact]
+    public async Task GameLabelsKeepNamesAndDoNotCoverChangingAmounts()
+    {
+        var action = Line("WITHDRAW", .72, .91, .80);
+        var amount = Line("($10)", .81, .91, .86);
+        var reading = new Reading([
+            Line("Fortune & Son Moreland 850", .05, .10, .30),
+            Line("Purchase a longarm", .41, .84, .61),
+            Line("WITHDRAW ($10)", .72, .91, .86) with { Words = [action, amount] },
+        ]);
+        var items = await ScreenTranslation.TranslateOverlayAsync(Image, new LinesReader(reading),
+            new FakeTranslator(), englishToTurkish: true);
+        Assert.Equal(["Uzun namlulu bir silah satın al", "PARA ÇEK"], items.Select(item => item.Translation));
+        Assert.Equal(action.Box, items[1].Box);
+    }
+
+    [Fact]
     public async Task PreviewScanAndManualScanUseTheirOwnReaders()
     {
         var reader = new PreviewReader();

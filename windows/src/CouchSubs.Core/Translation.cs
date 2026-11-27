@@ -15,6 +15,12 @@ public interface ITextTranslator
         return false;
     }
 
+    bool TryGetManualTranslation(string source, out string translation)
+    {
+        translation = "";
+        return false;
+    }
+
     /// <summary>Son çevrilen altyazının seslendirilecek cümleleri (konuşmacısıyla); dublaj için.</summary>
     IReadOnlyList<SpokenLine> SpokenLines(string text) => [];
     IReadOnlyList<SpokenLine> SpokenLines(string source, string translation) => SpokenLines(source);

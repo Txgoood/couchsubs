@@ -39,14 +39,16 @@ public sealed class PcScreenScanPolicy
         return confirmed;
     }
 
-    public bool ShouldScan(long now, bool changedRegions)
+    public bool ShouldScan(long now, bool changedRegions, bool detailedOverlayVisible = false)
     {
         if (previous is null) return false;
         if (lastScan < 0) return true;
         if (PriorityScanPending) return true;
         var elapsed = now - lastScan;
-        // Keep a periodic discovery/refresh even if sparse sampling missed tiny text.
-        if (elapsed >= 6500) return true;
+        // A completed detailed scan can be reused while the screen sample is
+        // identical and none of the drawn text regions changed.
+        if (elapsed >= 6500)
+            return !detailedOverlayVisible || changedRegions || settled || scanned is null || !previous.AsSpan().SequenceEqual(scanned);
         if (Moving) return elapsed >= 2600;
         if (settled || changedRegions) return true;
         return elapsed >= 250 && (scanned is null || Difference(scanned, previous, 14) >= .006);

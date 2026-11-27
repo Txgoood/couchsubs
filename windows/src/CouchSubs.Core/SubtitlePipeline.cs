@@ -24,6 +24,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private int lastShown;
     private int lastSpeechRequested;
     private string previousSpeechReading = "";
+    private string lastDispatchedSpeech = "";
+    private long lastDispatchedSpeechSeen;
     /// <summary>Şu an oyun ekranında duran satırın numarası (bölge boşalınca null).</summary>
     private int? lineOnScreen;
     private long? sourceMissingSince;
@@ -36,6 +38,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
     /// <summary>Read timing setting without rebuilding translator or PS5 stream.</summary>
     public SubtitleTimingMode TimingMode { get; set; } = SubtitleTimingMode.Adaptive;
+    public bool ShowInterfaceFallback { get; init; } = true;
 
     public (string Source, string Translation)? LastPair { get; private set; }
     /// <summary>Son gösterilen çevirinin oyundaki altyazısının karedeki yeri.</summary>
@@ -99,7 +102,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             if (readSession != session) return;
             dialogue = stabilizer.RemoveOldLeadIn(dialogue);
-            var reading = dialogue.Lines.Count > 0 ? dialogue : cleaned.SubtitleBlock(area);
+            var reading = dialogue.Lines.Count > 0 || !ShowInterfaceFallback ? dialogue : cleaned.SubtitleBlock(area);
             var detected = dialogue.Box?.PlacedIn(area);
             Volatile.Write(ref currentSubtitle, detected is { } position
                 ? new TextLine(dialogue.Text, position)
@@ -108,7 +111,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             var speechEligible = DialogueTextFilter.CanSpeak(dialogue.Text, detected,
                 TextMatch.IsSimilar(observed, previousSpeechReading));
             previousSpeechReading = observed;
-            sourceMissingSince = speechEligible ? null : sourceMissingSince ?? Environment.TickCount64;
+            var now = Environment.TickCount64;
+            sourceMissingSince = speechEligible ? null : sourceMissingSince ?? now;
+            var alreadyDispatched = speechEligible && now - lastDispatchedSpeechSeen <= ReadingTime(lastDispatchedSpeech) &&
+                DialogueOcr.IsSameTurn(lastDispatchedSpeech, dialogue.Text);
+            if (alreadyDispatched) lastDispatchedSpeechSeen = now;
             var action = stabilizer.Feed(reading.Text);
             switch (action.Kind)
             {
@@ -124,14 +131,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     var tokenSource = new CancellationTokenSource();
                     latestTranslation = tokenSource;
                     var number = ++lastRequested;
-                    if (speechEligible) lastSpeechRequested = number;
+                    var requestSpeech = speechEligible && !alreadyDispatched;
+                    if (requestSpeech) lastSpeechRequested = number;
                     var current = session;
                     lineOnScreen = number;
                     TranslationStarting?.Invoke();
                     // Çevirmen burada, istek sırasıyla çağrılır (ayrı görevle başlatılsa sıra karışabilirdi).
                     // Çeviri hemen bittiyse kendini zaten listeden çıkarmıştır; yeniden eklenmez.
                     var box = reading.Box?.PlacedIn(area).CenteredOnScreen();
-                    var task = TranslateAndForget(action.Text!, box, number, current, speechEligible, tokenSource);
+                    var task = TranslateAndForget(action.Text!, box, number, current, requestSpeech, tokenSource);
                     if (!task.IsCompleted) translations[number] = task;
                     break;
             }
@@ -201,6 +209,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             return;
         }
 
+        Action<IReadOnlyList<SpokenLine>, Func<bool>>? speech;
         lock (gate)
         {
             if (current != session || token.IsCancellationRequested) return;
@@ -220,8 +229,13 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             sender.SendSubtitle(translated, duration, box);
             LastPair = (source, translated);
             LastBox = box;
+            speech = speechEligible && number == lastSpeechRequested ? SpeechReady : null;
+            if (speech is not null)
+            {
+                lastDispatchedSpeech = source;
+                lastDispatchedSpeechSeen = Environment.TickCount64;
+            }
         }
-        var speech = speechEligible ? SpeechReady : null;
         var lines = speech is null ? null : translator.SpokenLines(source, translated);
         PairShown?.Invoke(source, translated);
         if (speech is not null)
@@ -251,6 +265,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             lineOnScreen = null;
             sourceMissingSince = null;
             previousSpeechReading = "";
+            lastDispatchedSpeech = "";
+            lastDispatchedSpeechSeen = 0;
             lastReading = Reading.Empty;
             Volatile.Write(ref currentSubtitle, null);
             schedule.Reset();

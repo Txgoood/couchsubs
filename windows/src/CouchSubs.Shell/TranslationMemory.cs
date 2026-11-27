@@ -17,6 +17,11 @@ public sealed record TranslationMemoryLine(TranslationMemoryScope Scope, string 
 public interface ITranslationMemory
 {
     bool TryGet(TranslationMemoryScope scope, string source, out string translation);
+    bool TryGetManual(TranslationMemoryScope scope, string source, out string translation)
+    {
+        translation = "";
+        return false;
+    }
     IReadOnlyList<TranslationMemoryLine> Saved(TranslationMemoryScope scope);
     Task SaveAsync(TranslationMemoryLine line);
     Task RemoveAsync(TranslationMemoryScope scope, string source);
@@ -47,11 +52,18 @@ public sealed partial class FileTranslationMemory : ITranslationMemory
         }
     }
 
-    public bool TryGet(TranslationMemoryScope scope, string source, out string translation)
+    public bool TryGet(TranslationMemoryScope scope, string source, out string translation) =>
+        TryGet(scope, source, out translation, manualOnly: false);
+
+    public bool TryGetManual(TranslationMemoryScope scope, string source, out string translation) =>
+        TryGet(scope, source, out translation, manualOnly: true);
+
+    private bool TryGet(TranslationMemoryScope scope, string source, out string translation, bool manualOnly)
     {
         var current = Volatile.Read(ref snapshot);
         var key = Key.For(scope, source);
-        if ((current.Lines.TryGetValue(key, out var line) || current.Equivalent.TryGetValue(key.Equivalent(), out line)) && !line.Excluded)
+        if ((current.Lines.TryGetValue(key, out var line) || current.Equivalent.TryGetValue(key.Equivalent(), out line)) &&
+            !line.Excluded && (!manualOnly || line.AutomaticallySavedAt is null))
         {
             translation = line.Translation;
             return true;
@@ -248,6 +260,7 @@ internal sealed class MemoryTranslator(ITextTranslator inner, ITranslationMemory
     : ITextTranslator
 {
     public bool TryGetSavedTranslation(string source, out string translation) => memory.TryGet(scope, source, out translation);
+    public bool TryGetManualTranslation(string source, out string translation) => memory.TryGetManual(scope, source, out translation);
 
     public Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default)
     {
