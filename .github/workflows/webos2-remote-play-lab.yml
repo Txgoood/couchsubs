@@ -1,0 +1,28 @@
+name: webOS 2 Remote Play Lab
+on:
+  push:
+    branches: [feat/webos2-remote-play-lab]
+    paths:
+      - 'remote-play-legacy/**'
+      - '.github/workflows/webos2-remote-play-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install -g @webos-tools/cli
+      - run: |
+          mkdir -p dist
+          ares-package remote-play-legacy/probe -o dist
+          ls -l dist/*.ipk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-play-legacy-probe-v0.0.1-build1
+          path: dist/*.ipk
+          if-no-files-found: error
