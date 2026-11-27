@@ -1,0 +1,8 @@
+{
+  "id": "com.couchsubs.remoteplaylegacy.probe",
+  "version": "0.0.1",
+  "vendor": "CouchSubs",
+  "type": "web",
+  "main": "index.html",
+  "title": "Remote Play Legacy Lab"
+}
