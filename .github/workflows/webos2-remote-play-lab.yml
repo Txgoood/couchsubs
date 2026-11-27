@@ -19,10 +19,31 @@ jobs:
       - run: npm install -g @webos-tools/cli
       - run: |
           mkdir -p dist
+          python3 - <<'PY'
+          import json, struct, zlib
+          from pathlib import Path
+          p = Path('remote-play-legacy/probe')
+          f = p / 'appinfo.json'
+          app = json.loads(f.read_text())
+          app.update(version='0.0.2', icon='icon.png', requiredACG=[])
+          f.write_text(json.dumps(app))
+          html = p / 'index.html'
+          html.write_text(html.read_text().replace('v0.0.1', 'v0.0.2').replace('Build #1', 'Build #2'))
+          def chunk(t, d):
+              return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t+d)&0xffffffff)
+          rows = []
+          for y in range(80):
+              row = bytearray()
+              for x in range(80):
+                  play = 28 <= x <= 56 and abs(y-40) <= (56-x)*0.75
+                  row.extend((255,255,255) if play else (25,64,110))
+              rows.append(b'\x00'+row)
+          (p/'icon.png').write_bytes(b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',80,80,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(b''.join(rows)))+chunk(b'IEND',b''))
+          PY
           ares-package remote-play-legacy/probe -o dist
           ls -l dist/*.ipk
       - uses: actions/upload-artifact@v4
         with:
-          name: remote-play-legacy-probe-v0.0.1-build1
+          name: remote-play-legacy-probe-v0.0.2-build2
           path: dist/*.ipk
           if-no-files-found: error
