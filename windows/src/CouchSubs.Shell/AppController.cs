@@ -1585,6 +1585,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (pc && regions is null && !quickRead) nextDetailedPcScan = now.AddSeconds(6);
         var englishToTurkish = EnglishToTurkishScreen;
         var revision = Volatile.Read(ref worldRevision);
+        var previousOverlay = worldOverlay;
         bool IsCurrentScan() => revision == Volatile.Read(ref worldRevision);
         TextLine? CurrentSubtitle() => pipeline?.CurrentSubtitle;
         _ = Task.Run(async () =>
@@ -1631,11 +1632,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 if (complete) changedWorldRegions.Clear();
                 var visible = KeepCurrentItems(frame, items, CurrentSubtitle());
                 RecordScreenTranslations(scope, visible);
-                if ((!complete || regions is not null || quickRead) && worldOverlay is { } previous)
+                if ((!complete || regions is not null || quickRead) && previousOverlay is { } previous)
                 {
-                    var unchanged = KeepCurrentItems(previous.Frame, previous.Items, CurrentSubtitle());
-                    visible = [.. visible, .. unchanged.Where(old =>
-                        !visible.Any(item => ScreenTranslation.SameOverlayPosition(old.Box, item.Box)))];
+                    var unchanged = KeepCurrentItems(previous.Frame, previous.Items, CurrentSubtitle())
+                        .Where(item => ScreenTranslation.SameTextRegion(previous.Frame, frame, item.Box)).ToArray();
+                    visible = ScreenTranslation.MergeOverlayItems(visible, unchanged);
                 }
                 if (visible.Count == 0)
                 {

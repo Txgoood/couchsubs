@@ -139,6 +139,28 @@ public static class ScreenTranslation
             height > Math.Min(a.Bottom - a.Top, b.Bottom - b.Top) * .6;
     }
 
+    public static IReadOnlyList<Item> MergeOverlayItems(IReadOnlyList<Item> current, IReadOnlyList<Item> previous)
+    {
+        // Cropped and full reads can find a menu row at slightly different positions.
+        // Replace the carried entry with the new reading, keeping genuine repeated
+        // labels when both were detected in the current scan.
+        return [.. current, .. previous.Where(old => !current.Any(item =>
+            SameOverlayPosition(old.Box, item.Box) || IsShiftedReading(old, item)))];
+    }
+
+    private static bool IsShiftedReading(Item old, Item current)
+    {
+        var a = old.Box;
+        var b = current.Box;
+        var lineHeight = Math.Max(old.LineHeight, current.LineHeight);
+        var overlap = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
+        if (Math.Abs(a.Left - b.Left) > lineHeight * .65 ||
+            Math.Abs((a.Top + a.Bottom) - (b.Top + b.Bottom)) > lineHeight * 4 ||
+            overlap < Math.Min(a.Right - a.Left, b.Right - b.Left) * .75) return false;
+        return TextMatch.Normalize(old.Source) == TextMatch.Normalize(current.Source) ||
+            TextMatch.Normalize(old.Translation) == TextMatch.Normalize(current.Translation);
+    }
+
     public static async Task<IReadOnlyList<Item>> TranslateOverlayAsync(
         Frame frame, ITextReader reader, ITextTranslator translator,
         CropRegion? exclude = null, Action<IReadOnlyList<Item>>? progress = null,
@@ -191,6 +213,8 @@ public static class ScreenTranslation
         {
             if (target.Length == 0 || TextMatch.Normalize(group.Text) == TextMatch.Normalize(target))
                 return false;
+            if (items.Any(item => SameOverlayPosition(item.Box, group.Box) &&
+                TextMatch.Normalize(item.Translation) == TextMatch.Normalize(target))) return false;
             items.Add(new Item(group.Text, target, group.Box, group.Height)
                 { Paint = PaintFor(frame, new TextLine(group.Text, group.Box)) });
             return true;

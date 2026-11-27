@@ -12,6 +12,19 @@ public class ScreenTranslationTests
         new(text, new TextBox(left, top, right, top + height));
 
     [Fact]
+    public void AShiftedMenuLabelReplacesItsOldCopyWithoutHidingOtherRows()
+    {
+        var old = new ScreenTranslation.Item("Save Game", "Oyunu Kaydet", new TextBox(.08, .34, .21, .36), .02);
+        var current = old with { Box = new TextBox(.079, .369, .215, .391) };
+        var load = old with { Source = "Load Game", Translation = "Oyunu Yükle", Box = new TextBox(.08, .414, .23, .434) };
+        var separate = old with { Box = new TextBox(.68, .34, .81, .36) };
+
+        Assert.False(ScreenTranslation.SameOverlayPosition(old.Box, current.Box));
+        Assert.Equal([current, load, separate], ScreenTranslation.MergeOverlayItems([current], [old, load, separate]));
+        Assert.Equal([old, current], ScreenTranslation.MergeOverlayItems([old, current], []));
+    }
+
+    [Fact]
     public async Task GameLabelsKeepNamesAndDoNotCoverChangingAmounts()
     {
         var action = Line("WITHDRAW", .72, .91, .80);
